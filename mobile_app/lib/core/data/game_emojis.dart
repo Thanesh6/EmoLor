@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 
 /// Central data source for all 48 emojis used across the 6 games.
@@ -95,6 +96,15 @@ class GameEmojis {
   /// Helper: get emojis for a specific category
   static List<GameEmoji> byCategory(String category) =>
       all.where((e) => e.category == category).toList();
+
+  /// Returns all 48 emojis ordered: Feelings first, then the rest shuffled.
+  /// Within each group, items are shuffled. This ensures games start with
+  /// core facial/emotion emojis before moving to needs, actions, responses.
+  static List<GameEmoji> shuffledFeeingsFirst(Random rng) {
+    final feelings = byCategory('feelings')..shuffle(rng);
+    final rest = all.where((e) => e.category != 'feelings').toList()..shuffle(rng);
+    return [...feelings, ...rest];
+  }
 }
 
 /// Immutable data class for a single game emoji.

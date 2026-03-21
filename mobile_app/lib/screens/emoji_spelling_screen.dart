@@ -6,7 +6,6 @@ import '../core/services/star_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
-import '../features/child/presentation/completion_feedback_overlay.dart';
 import '../features/child/services/activity_progress_service.dart';
 
 /// Emoji Spell — A spelling game where children see an emoji and
@@ -21,12 +20,20 @@ class EmojiSpellingScreen extends StatefulWidget {
 class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     with TickerProviderStateMixin {
   static final List<Map<String, String>> _allEmojis =
-      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word}).toList();
+      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word, 'category': e.category}).toList();
 
   static const String _activityId = 'game_emoji_spell';
   final ActivityProgressService _progressService = ActivityProgressService();
 
   final Random _rng = Random();
+
+  /// Returns emojis ordered: feelings first (shuffled), then rest (shuffled).
+  List<Map<String, String>> _buildFeelingsFirst() {
+    final feelings = _allEmojis.where((e) => e['category'] == 'feelings').toList()..shuffle(_rng);
+    final rest = _allEmojis.where((e) => e['category'] != 'feelings').toList()..shuffle(_rng);
+    return [...feelings, ...rest];
+  }
+
   late List<Map<String, String>> _shuffledEmojis;
 
   int _currentIndex = 0;
@@ -53,7 +60,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
-    _shuffledEmojis = List.from(_allEmojis)..shuffle(_rng);
+    _shuffledEmojis = _buildFeelingsFirst();
     _loadWord();
     _restoreProgress();
   }
@@ -196,30 +203,17 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
 
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
+      StarRewardWidget.show(context);
       if (_currentIndex + 1 >= _shuffledEmojis.length) {
-        // All done!
-        CompletionFeedbackOverlay.show(
-          context: context,
-          activityId: 'game_emoji_spell',
-          activityName: 'Emoji Spell',
-          starGameKey: StarService.safeOrNot,
-          starsEarned: 3,
-          scoreValue: _stars,
-          scoreMax: _shuffledEmojis.length,
-          onPlayAgain: () {
-            setState(() {
-              _currentIndex = 0;
-              _stars = 0;
-              _shuffledEmojis.shuffle(_rng);
-            });
-            _loadWord();
-          },
-        );
+        // All 48 done — reshuffle feelings-first and start over
+        setState(() {
+          _currentIndex = 0;
+          _shuffledEmojis = _buildFeelingsFirst();
+        });
       } else {
-        StarRewardWidget.show(context);
         setState(() => _currentIndex++);
-        _loadWord();
       }
+      _loadWord();
     });
   }
 
@@ -362,13 +356,11 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('🔤 Spell it!  ',
+                          Text('🔤 Spell it!',
                               style: _cute(
                                   sz: 31,
                                   fw: FontWeight.w900,
                                   c: Colors.black87)),
-                          Text('${_currentIndex + 1}/${_shuffledEmojis.length}',
-                              style: _cute(sz: 28, c: const Color(0xFF6366F1))),
                         ],
                       ),
                     ),

@@ -6,8 +6,6 @@ import '../core/data/game_emojis.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
-import '../features/child/presentation/completion_feedback_overlay.dart';
-import '../core/services/star_service.dart';
 import '../features/child/services/activity_progress_service.dart';
 
 /// Emotion Slash — Fruit-Ninja-style game where emotion faces fly across
@@ -66,7 +64,7 @@ class _Particle {
 class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     with TickerProviderStateMixin {
   static const String _activityId = 'game_emotion_slash';
-  static const int _maxRounds = 10;
+  // No max rounds — endless mode cycling through all 48 emojis
   static const double _gravity = 0.18;
 
   final ActivityProgressService _progressService = ActivityProgressService();
@@ -79,6 +77,22 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
   // All 48 emojis from shared data
   late final List<Map<String, dynamic>> _emotions =
       GameEmojis.all.map((e) => e.toMap()).toList();
+
+  /// Builds target order: feelings indices first (shuffled), then rest (shuffled).
+  List<int> _buildFeelingsFirstOrder() {
+    final feelingsIdx = <int>[];
+    final restIdx = <int>[];
+    for (int i = 0; i < _emotions.length; i++) {
+      if (_emotions[i]['category'] == 'feelings') {
+        feelingsIdx.add(i);
+      } else {
+        restIdx.add(i);
+      }
+    }
+    feelingsIdx.shuffle(_rng);
+    restIdx.shuffle(_rng);
+    return [...feelingsIdx, ...restIdx];
+  }
 
   // Shuffled order to ensure all 48 get cycled through as targets
   late List<int> _targetOrder;
@@ -120,7 +134,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     _targetEmotion = _emotions[_targetOrder[0]];
     _gameTicker =
@@ -130,17 +144,21 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
 
   Future<void> _restoreProgress() async {
     final saved = await _progressService.loadProgress(_activityId);
-    if (!mounted || saved == null) return;
+    if (!mounted || saved == null) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _startRound();
+      });
+      return;
+    }
     final data = saved.progressData;
     if (data['round'] is int && data['score'] is int && data['lives'] is int) {
       setState(() {
-        _round = (data['round'] as int).clamp(0, _maxRounds - 1);
+        _round = data['round'] as int;
         _score = data['score'] as int;
         _lives = (data['lives'] as int).clamp(1, 3);
         _totalMistakes = (data['totalMistakes'] as int?) ?? 0;
       });
     }
-    // Start the round after a brief delay for layout
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) _startRound();
     });
@@ -239,46 +257,27 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     _spawnTimer?.cancel();
     _roundTimer?.cancel();
 
-    if (_lives <= 0 || _round + 1 >= _maxRounds) {
-      _endGame();
-    } else {
-      _round++;
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted && !_gameEnded) _startRound();
-      });
-    }
-  }
-
-  void _endGame() {
-    _gameEnded = true;
-    _gameTicker?.cancel();
-    _spawnTimer?.cancel();
-    _roundTimer?.cancel();
-
-    int stars;
-    if (_totalMistakes == 0) {
-      stars = 3;
-    } else if (_totalMistakes <= 2) {
-      stars = 2;
-    } else {
-      stars = 1;
+    if (_lives <= 0) {
+      // Out of lives — reshuffle and reset lives, keep score going
+      _lives = 3;
+      _totalMistakes = 0;
     }
 
-    CompletionFeedbackOverlay.show(
-      context: context,
-      activityId: _activityId,
-      activityName: 'Emotion Slash',
-      starGameKey: StarService.emotionPath,
-      starsEarned: stars,
-      scoreValue: _score,
-      scoreMax: _maxRounds * 4,
-      onPlayAgain: _restart,
-    );
+    _round++;
+    // When all 48 emojis have been shown, reshuffle and start over
+    if (_targetIndex >= _emotions.length) {
+      _targetOrder = _buildFeelingsFirstOrder();
+      _targetIndex = 0;
+    }
+
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted && !_gameEnded) _startRound();
+    });
   }
 
   void _restart() {
     _engine.reset();
-    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     setState(() {
       _round = 0;
@@ -467,7 +466,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFE8DEF8), Color(0xFFD0BCFF), Color(0xFFB8C0E8)],
+              colors: [Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFF90CAF9)],
             ),
           ),
           child: SafeArea(
@@ -555,18 +554,6 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                                 weight: FontWeight.w900,
                                 color: const Color(0xFF1F2937),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text('${_round + 1}/$_maxRounds',
-                                  style:
-                                      _cute(size: 22, color: Colors.black54)),
                             ),
                           ],
                         ),
@@ -683,15 +670,6 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(
-                                        'Round ${_round + 1}',
-                                        style: _cute(
-                                          size: 52,
-                                          weight: FontWeight.w900,
-                                          color: const Color(0xFF1F2937),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -754,9 +732,9 @@ class _SlashPainter extends CustomPainter {
     for (final trail in trails) {
       if (trail.points.length < 2) continue;
       final paint = Paint()
-        ..color = Colors.white
-            .withValues(alpha: (trail.opacity * 0.8).clamp(0.0, 1.0))
-        ..strokeWidth = 4
+        ..color = const Color(0xFF1565C0)
+            .withValues(alpha: (trail.opacity * 0.6).clamp(0.0, 1.0))
+        ..strokeWidth = 3
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
       final path = Path()..moveTo(trail.points.first.dx, trail.points.first.dy);
@@ -769,13 +747,12 @@ class _SlashPainter extends CustomPainter {
     // Draw current active slash
     if (currentSlash.length >= 2) {
       final glowPaint = Paint()
-        ..color = const Color(0xFFFFE066).withValues(alpha: 0.5)
-        ..strokeWidth = 8
+        ..color = const Color(0xFFFF6B6B).withValues(alpha: 0.7)
+        ..strokeWidth = 6
         ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+        ..style = PaintingStyle.stroke;
       final slashPaint = Paint()
-        ..color = const Color(0xFFFFE066)
+        ..color = const Color(0xFFFF6B6B)
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;

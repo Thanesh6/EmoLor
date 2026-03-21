@@ -77,15 +77,25 @@ class ChildReward {
 const List<ChildReward> _catalogue = [
   // ── 1 Star ─────────────────────────────────────────────────────
   ChildReward(
+    id: 'first_steps',
+    title: 'First Steps',
+    emoji: '👣',
+    description: 'You took your first steps on the adventure!',
+    type: RewardType.badge,
+    colorValue: 0xFF4ECDC4,
+    milestoneStars: 1,
+  ),
+  // ── 2 Stars ────────────────────────────────────────────────────
+  ChildReward(
     id: 'tiny_spark',
     title: 'Tiny Spark',
     emoji: '✨',
     description: 'Your very first spark of light!',
     type: RewardType.badge,
     colorValue: 0xFFFFD700,
-    milestoneStars: 1,
+    milestoneStars: 2,
   ),
-  // ── 2 Stars ────────────────────────────────────────────────────
+  // ── 3 Stars ────────────────────────────────────────────────────
   ChildReward(
     id: 'happy_smile',
     title: 'Happy Smile',
@@ -93,9 +103,9 @@ const List<ChildReward> _catalogue = [
     description: 'You made your first happy smile!',
     type: RewardType.badge,
     colorValue: 0xFFFF9F43,
-    milestoneStars: 2,
+    milestoneStars: 3,
   ),
-  // ── 3 Stars ────────────────────────────────────────────────────
+  // ── 5 Stars ────────────────────────────────────────────────────
   ChildReward(
     id: 'little_star',
     title: 'Little Star',
@@ -103,16 +113,6 @@ const List<ChildReward> _catalogue = [
     description: 'You are becoming a little star!',
     type: RewardType.badge,
     colorValue: 0xFFFFE66D,
-    milestoneStars: 3,
-  ),
-  // ── 5 Stars ────────────────────────────────────────────────────
-  ChildReward(
-    id: 'first_steps',
-    title: 'First Steps',
-    emoji: '👣',
-    description: 'You took your first steps on the adventure!',
-    type: RewardType.badge,
-    colorValue: 0xFF4ECDC4,
     milestoneStars: 5,
   ),
   // ── 10 Stars ───────────────────────────────────────────────────

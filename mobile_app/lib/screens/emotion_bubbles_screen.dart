@@ -54,6 +54,22 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   late final List<Map<String, dynamic>> _emotions =
       GameEmojis.all.map((e) => e.toMap()).toList();
 
+  /// Builds target order: feelings indices first (shuffled), then rest (shuffled).
+  List<int> _buildFeelingsFirstOrder() {
+    final feelingsIdx = <int>[];
+    final restIdx = <int>[];
+    for (int i = 0; i < _emotions.length; i++) {
+      if (_emotions[i]['category'] == 'feelings') {
+        feelingsIdx.add(i);
+      } else {
+        restIdx.add(i);
+      }
+    }
+    feelingsIdx.shuffle(_rng);
+    restIdx.shuffle(_rng);
+    return [...feelingsIdx, ...restIdx];
+  }
+
   // Shuffled order to ensure all 48 get shown as targets
   late List<int> _targetOrder;
   int _targetIndex = 0;
@@ -75,7 +91,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   @override
   void initState() {
     super.initState();
-    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     _pickTarget();
     _spawnBubbles();
@@ -276,7 +292,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     _showFeedback = false;
     _numBubbles = 4;
     _baseSpeed = 0.003;
-    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     _pickTarget();
     _spawnBubbles();

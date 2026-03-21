@@ -27,8 +27,7 @@ class _RewardsScreenState extends State<RewardsScreen>
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     )..repeat(reverse: true);
-    StarService.setGameStars(StarService.emotionPath, 3)
-        .then((_) => _loadData());
+    _loadData();
   }
 
   Future<void> _loadData() async {

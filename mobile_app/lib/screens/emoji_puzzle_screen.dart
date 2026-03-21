@@ -21,8 +21,11 @@ class EmojiPuzzleScreen extends StatefulWidget {
 
 class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   static const String _activityId = 'game_emoji_puzzle';
-  static final List<Map<String, dynamic>> _puzzles =
-      GameEmojis.all.map((e) => e.toMap()).toList();
+  // Feelings first, then the rest — so puzzles start with core facial emojis
+  static final List<Map<String, dynamic>> _puzzles = [
+    ...GameEmojis.byCategory('feelings').map((e) => e.toMap()),
+    ...GameEmojis.all.where((e) => e.category != 'feelings').map((e) => e.toMap()),
+  ];
 
   static const int _gridSize = 3; // 3x3 puzzle
   static const int _totalPieces = _gridSize * _gridSize;

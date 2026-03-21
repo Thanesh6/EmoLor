@@ -280,7 +280,7 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
                 child: GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(13),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -295,7 +295,7 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
                     child: const Icon(
                       Icons.arrow_back_rounded,
                       color: Color(0xFF6B21A8),
-                      size: 28,
+                      size: 34,
                     ),
                   ),
                 ),

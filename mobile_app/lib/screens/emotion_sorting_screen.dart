@@ -6,7 +6,6 @@ import '../core/services/star_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
-import '../features/child/presentation/completion_feedback_overlay.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
 
@@ -47,7 +46,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
 
   // Current round: pick a subset of items to sort
   static const int _itemsPerRound = 6;
-  static const int _totalRounds = 8;
+  // No max rounds — endless mode cycling through emojis
   int _currentRound = 0;
   int _stars = 0;
   int _sortedCorrectly = 0;
@@ -161,14 +160,24 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
     _showWrongFeedback = false;
     _hoveredCategory = null;
 
-    // Pick _itemsPerRound random items ensuring at least 2 categories
-    final shuffled = List<Map<String, String>>.from(_allItems)..shuffle(_rng);
-    _currentItems = shuffled.take(_itemsPerRound).toList();
+    // Pick items: early rounds favour Feelings, later rounds mix all.
+    // First 4 rounds: at least half feelings. After that: fully random.
+    final feelings = _allItems.where((e) => e['category'] == 'Feelings').toList()..shuffle(_rng);
+    final rest = _allItems.where((e) => e['category'] != 'Feelings').toList()..shuffle(_rng);
+
+    if (_currentRound < 4) {
+      // 4 feelings + 2 others
+      final feelPick = feelings.take(4).toList();
+      final restPick = rest.take(2).toList();
+      _currentItems = [...feelPick, ...restPick];
+    } else {
+      final shuffled = List<Map<String, String>>.from(_allItems)..shuffle(_rng);
+      _currentItems = shuffled.take(_itemsPerRound).toList();
+    }
 
     // Ensure at least 2 different categories
     final cats = _currentItems.map((e) => e['category']).toSet();
     if (cats.length < 2) {
-      // Replace last item with one from a different category
       final otherCat = _categories.firstWhere((c) => c['name'] != cats.first);
       final replacement =
           _allItems.firstWhere((e) => e['category'] == otherCat['name']);
@@ -214,33 +223,10 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
 
     Future.delayed(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;
-      if (_currentRound + 1 >= _totalRounds) {
-        await _progressService.deleteProgress(_activityId);
-        if (!mounted) return;
-        CompletionFeedbackOverlay.show(
-          context: context,
-          activityId: _activityId,
-          activityName: 'Emotion Sorting',
-          starGameKey: StarService.colorMemory,
-          starsEarned: 3,
-          scoreValue: _stars,
-          scoreMax: _totalRounds,
-          onPlayAgain: () {
-            setState(() {
-              _currentRound = 0;
-              _stars = 0;
-              _sortedCorrectly = 0;
-            });
-            _setupRound();
-          },
-        );
-      } else {
-        if (!mounted) return;
-        StarRewardWidget.show(context);
-        setState(() => _currentRound++);
-        _setupRound();
-        await _saveProgress();
-      }
+      StarRewardWidget.show(context);
+      setState(() => _currentRound++);
+      _setupRound();
+      await _saveProgress();
     });
   }
 
@@ -329,13 +315,11 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('📋 Sort: ',
+                          Text('📋 Sort the Emojis!',
                               style: _cute(
                                   sz: 29,
                                   fw: FontWeight.w900,
                                   c: Colors.black87)),
-                          Text('${_currentRound + 1}/$_totalRounds',
-                              style: _cute(sz: 38, c: const Color(0xFFBB6BD9))),
                         ],
                       ),
                     ),
