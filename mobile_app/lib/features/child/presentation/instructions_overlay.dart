@@ -82,6 +82,9 @@ class _InstructionsOverlayState extends State<InstructionsOverlay>
       _ttsService.speak(widget.instructionText);
     } else {
       _ttsService.stop();
+      // Immediately remove highlight when sound is turned off
+      _ttsService.wordStart.value = -1;
+      _ttsService.wordEnd.value = -1;
     }
   }
 
@@ -207,12 +210,17 @@ class _InstructionsOverlayState extends State<InstructionsOverlay>
   }
 
   Widget _buildHighlightedText(String text, int start, int end) {
-    if (start < 0 || end < 0 || start >= text.length || end > text.length || start >= end) {
+    if (start < 0 ||
+        end < 0 ||
+        start >= text.length ||
+        end > text.length ||
+        start >= end) {
       // Default: no active word, render normally but centered
       return Text(
         text,
         textAlign: TextAlign.center,
-        style: GoogleFonts.baloo2(fontSize: 20, height: 1.5, color: Colors.black87),
+        style: GoogleFonts.baloo2(
+            fontSize: 20, height: 1.5, color: Colors.black87),
       );
     }
 
@@ -223,7 +231,8 @@ class _InstructionsOverlayState extends State<InstructionsOverlay>
     return RichText(
       textAlign: TextAlign.center,
       text: TextSpan(
-        style: GoogleFonts.baloo2(fontSize: 20, height: 1.5, color: Colors.black87),
+        style: GoogleFonts.baloo2(
+            fontSize: 20, height: 1.5, color: Colors.black87),
         children: [
           TextSpan(text: before),
           TextSpan(

@@ -253,8 +253,8 @@ class _FeedbackScreenState extends State<_FeedbackScreen>
 
   Widget _buildCard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+      width: 320,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(36),
@@ -268,30 +268,28 @@ class _FeedbackScreenState extends State<_FeedbackScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Trophy emoji
-          const Text('🏆', style: TextStyle(fontSize: 72)),
-          const SizedBox(height: 12),
-
           // Title
-          Text('Great Job!', style: _cute(sz: 38, c: const Color(0xFF6B21A8))),
+          Text('Great Job!', style: _cute(sz: 36, c: const Color(0xFF6B21A8))),
+          const SizedBox(height: 4),
+          Text('Level Complete',
+              style:
+                  _cute(sz: 18, fw: FontWeight.w600, c: Colors.grey.shade500)),
           const SizedBox(height: 6),
           Text(widget.activityName,
               style:
-                  _cute(sz: 18, fw: FontWeight.w500, c: Colors.grey.shade600)),
+                  _cute(sz: 16, fw: FontWeight.w500, c: Colors.grey.shade600)),
           const SizedBox(height: 20),
 
           // Stars row
           _buildStarsRow(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          // Score (if any)
-          if (widget.scoreMax > 0) ...[
-            Text(
-              'Score: ${widget.scoreValue} / ${widget.scoreMax}',
-              style: _cute(sz: 22, c: Colors.black54),
-            ),
-            const SizedBox(height: 20),
-          ],
+          // Stars earned count
+          Text(
+            '${widget.starsEarned} / 3 Stars Earned',
+            style: _cute(sz: 20, c: const Color(0xFFFFAA00)),
+          ),
+          const SizedBox(height: 20),
 
           // Buttons
           _buildButtons(),

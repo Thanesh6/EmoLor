@@ -74,6 +74,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         user.userMetadata?['full_name'] ??
         user.userMetadata?['name'] ??
         'Adventurer';
+    final displayAvatar = _profileData?['avatar_url'] as String? ?? '😊';
     // profiles table has no email column; always use auth email
     final displayEmail = user.email ?? 'No Email';
     final displayRole =
@@ -155,10 +156,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   blurRadius: 10),
                             ],
                           ),
-                          child: const CircleAvatar(
+                          child: CircleAvatar(
                             radius: 60,
-                            backgroundColor: Color(0xFFC4B5FD),
-                            child: Text('🦄', style: TextStyle(fontSize: 50)),
+                            backgroundColor: const Color(0xFFC4B5FD),
+                            child: Text(displayAvatar,
+                                style: const TextStyle(fontSize: 50)),
                           ),
                         ),
 
@@ -271,14 +273,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }) {
     return SizedBox(
       width: double.infinity,
-      height: 55,
+      height: 92,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: isOutlined ? Colors.transparent : color,
           foregroundColor: isOutlined ? color : Colors.white,
           elevation: isOutlined ? 0 : 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(25),
             side: isOutlined
                 ? BorderSide(color: color, width: 2)
                 : BorderSide.none,
@@ -288,12 +290,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon),
-            const SizedBox(width: 10),
+            Icon(icon, size: 41),
+            const SizedBox(width: 14),
             Text(
               label,
               style: GoogleFonts.fredoka(
-                  fontSize: 18, fontWeight: FontWeight.w600),
+                  fontSize: 31, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -312,29 +314,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        contentPadding: const EdgeInsets.fromLTRB(32, 20, 32, 12),
+        actionsPadding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+        titlePadding: const EdgeInsets.fromLTRB(32, 28, 32, 0),
         title: Text('Log Out?',
-            style: GoogleFonts.fredoka(fontWeight: FontWeight.bold)),
+            style:
+                GoogleFonts.fredoka(fontSize: 30, fontWeight: FontWeight.bold)),
         content: Text(
           'Are you sure you want to log out?',
-          style: GoogleFonts.fredoka(fontSize: 16),
+          style: GoogleFonts.fredoka(fontSize: 21),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child:
-                Text('Cancel', style: GoogleFonts.fredoka(color: Colors.grey)),
+            child: Text('Cancel',
+                style: GoogleFonts.fredoka(fontSize: 20, color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await ref.read(authProvider.notifier).signOut();
             },
             child: Text('Log Out',
-                style: GoogleFonts.fredoka(color: Colors.white)),
+                style: GoogleFonts.fredoka(fontSize: 20, color: Colors.white)),
           ),
         ],
       ),

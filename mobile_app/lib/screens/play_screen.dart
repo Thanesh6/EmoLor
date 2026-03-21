@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'emotion_path_screen.dart';
+import 'emotion_slash_screen.dart';
 import 'emoji_spelling_screen.dart';
 import 'emotion_sorting_screen.dart';
 import 'emotion_bubbles_screen.dart';
 import 'emoji_puzzle_screen.dart';
-import 'empathy_choice_screen.dart';
+import 'emotion_catcher_screen.dart';
 
 class PlayScreen extends StatefulWidget {
   const PlayScreen({super.key});
@@ -47,18 +47,18 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       'screen': const EmotionSortingScreen()
     },
     {
-      'name': 'Emotion Path',
-      'emoji': '🧭',
+      'name': 'Emotion Slash',
+      'emoji': '⚔️',
       'color': const Color(0xFF4ECDC4),
-      'desc': 'Find the path!',
-      'screen': const EmotionPathScreen()
+      'desc': 'Slash the feelings!',
+      'screen': const EmotionSlashScreen()
     },
     {
-      'name': 'Empathy Quest',
-      'emoji': '💛',
+      'name': 'Emotion Catcher',
+      'emoji': '🧺',
       'color': const Color(0xFF5D9CEC),
-      'desc': 'What would you do?',
-      'screen': const EmpathyChoiceScreen()
+      'desc': 'Catch the feelings!',
+      'screen': const EmotionCatcherScreen()
     },
   ];
 

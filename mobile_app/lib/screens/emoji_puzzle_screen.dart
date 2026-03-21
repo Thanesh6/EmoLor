@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../core/data/game_emojis.dart';
 import '../core/services/star_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
@@ -20,13 +21,8 @@ class EmojiPuzzleScreen extends StatefulWidget {
 
 class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   static const String _activityId = 'game_emoji_puzzle';
-  static const List<Map<String, dynamic>> _puzzles = [
-    {'emoji': '😊', 'name': 'Happy', 'color': Color(0xFFFBBF24)},
-    {'emoji': '😢', 'name': 'Sad', 'color': Color(0xFF60A5FA)},
-    {'emoji': '😡', 'name': 'Angry', 'color': Color(0xFFF87171)},
-    {'emoji': '🥰', 'name': 'Love', 'color': Color(0xFFF472B6)},
-    {'emoji': '😎', 'name': 'Cool', 'color': Color(0xFF6366F1)},
-  ];
+  static final List<Map<String, dynamic>> _puzzles =
+      GameEmojis.all.map((e) => e.toMap()).toList();
 
   static const int _gridSize = 3; // 3x3 puzzle
   static const int _totalPieces = _gridSize * _gridSize;
@@ -311,7 +307,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 19, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1B6B3A),
+                          color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
                         child: Text('⭐ $_stars', style: _cute(sz: 26)),

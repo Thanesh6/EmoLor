@@ -13,6 +13,35 @@ class CaregiverDashboard extends StatefulWidget {
 
 class _CaregiverDashboardState extends State<CaregiverDashboard> {
   int _selectedNavIndex = 0;
+  String _caregiverName = 'Caregiver';
+  String _caregiverAvatar = '😊';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCaregiverProfile();
+  }
+
+  Future<void> _loadCaregiverProfile() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+      final profile = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('user_id', userId)
+          .maybeSingle();
+      if (mounted && profile != null) {
+        setState(() {
+          final name = profile['full_name'] as String?;
+          if (name != null && name.isNotEmpty) _caregiverName = name;
+          final av = profile['avatar_url'] as String?;
+          if (av != null && av.isNotEmpty) _caregiverAvatar = av;
+        });
+      }
+    } catch (_) {}
+  }
+
   TextStyle _textStyle({
     double fontSize = 18,
     FontWeight fontWeight = FontWeight.w600,
@@ -150,9 +179,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Center(
-                                child:
-                                    Text('👨', style: TextStyle(fontSize: 25)),
+                              child: Center(
+                                child: Text(_caregiverAvatar,
+                                    style: const TextStyle(fontSize: 25)),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -161,7 +190,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Caregiver',
+                                    _caregiverName,
                                     style: _textStyle(
                                         fontSize: 16, color: Colors.white),
                                   ),

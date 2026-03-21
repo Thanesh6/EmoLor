@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../core/data/game_emojis.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/presentation/completion_feedback_overlay.dart';
-import '../core/services/emotion_colour_mapping.dart';
 import '../core/services/star_service.dart';
 import '../features/child/services/activity_progress_service.dart';
 
@@ -50,68 +50,20 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     overloadTapsPerSecond: 6.0,
   );
 
-  // Emotion–color mapping (reads user's personalised colours)
-  late final List<Map<String, dynamic>> _emotions = [
-    {
-      'name': 'Happy',
-      'emoji': '😊',
-      'color': EmotionColourMapping.colorFor('Happy')
-    },
-    {
-      'name': 'Sad',
-      'emoji': '😢',
-      'color': EmotionColourMapping.colorFor('Sad')
-    },
-    {
-      'name': 'Angry',
-      'emoji': '😡',
-      'color': EmotionColourMapping.colorFor('Angry')
-    },
-    {
-      'name': 'Calm',
-      'emoji': '😌',
-      'color': EmotionColourMapping.colorFor('Calm')
-    },
-    {
-      'name': 'Scared',
-      'emoji': '😨',
-      'color': EmotionColourMapping.colorFor('Scared')
-    },
-    {
-      'name': 'Excited',
-      'emoji': '🤩',
-      'color': EmotionColourMapping.colorFor('Excited')
-    },
-    {
-      'name': 'Love',
-      'emoji': '🥰',
-      'color': EmotionColourMapping.colorFor('Love')
-    },
-    {
-      'name': 'Surprised',
-      'emoji': '😲',
-      'color': EmotionColourMapping.colorFor('Surprised')
-    },
-    {'name': 'Shy', 'emoji': '😳', 'color': const Color(0xFFFFB7C5)},
-    {'name': 'Proud', 'emoji': '😎', 'color': const Color(0xFF6366F1)},
-    {'name': 'Silly', 'emoji': '🤪', 'color': const Color(0xFFFBBF24)},
-    {'name': 'Grateful', 'emoji': '☺️', 'color': const Color(0xFF34D399)},
-    {'name': 'Tired', 'emoji': '😴', 'color': const Color(0xFF94A3B8)},
-    {'name': 'Bored', 'emoji': '🥱', 'color': const Color(0xFFD4D4D8)},
-    {'name': 'Confused', 'emoji': '🤔', 'color': const Color(0xFFA78BFA)},
-    {'name': 'Hopeful', 'emoji': '🤗', 'color': const Color(0xFFFCD34D)},
-    {'name': 'Nervous', 'emoji': '😬', 'color': const Color(0xFFFB923C)},
-    {'name': 'Lonely', 'emoji': '🥺', 'color': const Color(0xFF7DD3FC)},
-    {'name': 'Playful', 'emoji': '😜', 'color': const Color(0xFFF472B6)},
-    {'name': 'Peaceful', 'emoji': '😇', 'color': const Color(0xFFA7F3D0)},
-  ];
+  // All 48 emojis from shared data
+  late final List<Map<String, dynamic>> _emotions =
+      GameEmojis.all.map((e) => e.toMap()).toList();
+
+  // Shuffled order to ensure all 48 get shown as targets
+  late List<int> _targetOrder;
+  int _targetIndex = 0;
 
   late Map<String, dynamic> _targetEmotion;
   final List<_Bubble> _bubbles = [];
   Timer? _ticker;
   int _score = 0;
   int _round = 0;
-  final int _maxRounds = 20;
+  final int _maxRounds = 48;
   bool _showFeedback = false;
   bool _feedbackCorrect = false;
   bool _gameOver = false;
@@ -123,6 +75,8 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   @override
   void initState() {
     super.initState();
+    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetIndex = 0;
     _pickTarget();
     _spawnBubbles();
     _ticker = Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
@@ -138,9 +92,13 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     final savedNumBubbles = data['numBubbles'];
     final savedBaseSpeed = data['baseSpeed'];
     final savedTargetName = data['targetEmotionName'];
-    if (savedScore is! int || savedRound is! int ||
-        savedNumBubbles is! int || savedBaseSpeed is! double ||
-        savedTargetName is! String) { return; }
+    if (savedScore is! int ||
+        savedRound is! int ||
+        savedNumBubbles is! int ||
+        savedBaseSpeed is! double ||
+        savedTargetName is! String) {
+      return;
+    }
     // Find matching emotion
     final matchedEmotion = _emotions.firstWhere(
       (e) => e['name'] == savedTargetName,
@@ -157,12 +115,12 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   }
 
   Map<String, dynamic> _buildProgressData() => {
-    'score': _score,
-    'round': _round,
-    'numBubbles': _numBubbles,
-    'baseSpeed': _baseSpeed,
-    'targetEmotionName': _targetEmotion['name'] as String,
-  };
+        'score': _score,
+        'round': _round,
+        'numBubbles': _numBubbles,
+        'baseSpeed': _baseSpeed,
+        'targetEmotionName': _targetEmotion['name'] as String,
+      };
 
   Future<void> _handleReturnPressed() async {
     // Pause the ticker while dialog is shown
@@ -176,7 +134,8 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     );
     // If still mounted, user chose Keep Playing — restart ticker
     if (mounted) {
-      _ticker = Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
+      _ticker =
+          Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
     }
   }
 
@@ -187,7 +146,8 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   }
 
   void _pickTarget() {
-    _targetEmotion = _emotions[_rng.nextInt(_emotions.length)];
+    _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
+    _targetIndex++;
     _engine.markPromptShown();
   }
 
@@ -316,6 +276,8 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     _showFeedback = false;
     _numBubbles = 4;
     _baseSpeed = 0.003;
+    _targetOrder = List.generate(_emotions.length, (i) => i)..shuffle(_rng);
+    _targetIndex = 0;
     _pickTarget();
     _spawnBubbles();
     setState(() {});
@@ -339,216 +301,217 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
         if (!didPop) await _handleReturnPressed();
       },
       child: Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFE0F7FA), Color(0xFFB2EBF2), Color(0xFF80DEEA)],
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFE0F7FA), Color(0xFFB2EBF2), Color(0xFF80DEEA)],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // Floating bubbles
-              ..._bubbles.where((b) => !b.popped).map((b) {
-                return Positioned(
-                  left: b.x * w - b.size / 2,
-                  top: b.y * h - b.size / 2,
-                  child: GestureDetector(
-                    onTap: () => _onBubbleTap(b),
-                    child: AnimatedOpacity(
-                      opacity: 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        width: b.size,
-                        height: b.size,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            center: const Alignment(-0.3, -0.3),
-                            colors: [
-                              b.color.withValues(alpha: 0.9),
-                              b.color,
-                              b.color.withValues(alpha: 0.6),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: b.color.withValues(alpha: 0.4),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
+          child: SafeArea(
+            child: Stack(
+              children: [
+                // Floating bubbles
+                ..._bubbles.where((b) => !b.popped).map((b) {
+                  return Positioned(
+                    left: b.x * w - b.size / 2,
+                    top: b.y * h - b.size / 2,
+                    child: GestureDetector(
+                      onTap: () => _onBubbleTap(b),
+                      child: AnimatedOpacity(
+                        opacity: 1.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: Container(
+                          width: b.size,
+                          height: b.size,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              center: const Alignment(-0.3, -0.3),
+                              colors: [
+                                b.color.withValues(alpha: 0.9),
+                                b.color,
+                                b.color.withValues(alpha: 0.6),
+                              ],
                             ),
-                          ],
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              width: 3),
-                        ),
-                        child: Center(
-                          child: Text(b.emoji,
-                              style: TextStyle(fontSize: b.size * 0.54)),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-
-              // Header: target prompt (compact single row like Emotion Path)
-              Positioned(
-                top: 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 30),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF7E6).withValues(alpha: 0.96),
-                      borderRadius: BorderRadius.circular(34),
-                      border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.8),
-                        width: 3,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Pop: ',
-                            style: _cute(size: 24, color: Colors.black87)),
-                        Text(_targetEmotion['emoji'],
-                            style: const TextStyle(fontSize: 42)),
-                        const SizedBox(width: 8),
-                        Text(
-                          _targetEmotion['name'],
-                          style: _cute(
-                              size: 31,
-                              weight: FontWeight.w900,
-                              color: const Color(0xFF1F2937)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Score + Hint side by side
-              Positioned(
-                top: 20,
-                right: 20,
-                child: Row(
-                  children: [
-                    const HelpButton(
-                      activityId: 'game_bubble_pop',
-                      activityEmoji: '🫧',
-                      activityName: 'Bubble Pop',
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6B21A8),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text('⭐ $_score / $_maxRounds',
-                          style: _cute(size: 22)),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Feedback overlay
-              if (_showFeedback)
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(30),
-                    decoration: BoxDecoration(
-                      color: _feedbackCorrect
-                          ? const Color(0xFF4ECDC4)
-                          : const Color(0xFFFF6B6B),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 20)
-                      ],
-                    ),
-                    child: Text(
-                      _feedbackCorrect ? '✨ Great Job! ✨' : '🤔 Try Again!',
-                      style: _cute(size: 36, weight: FontWeight.w900),
-                    ),
-                  ),
-                ),
-
-              // Game over
-              if (_gameOver)
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(40),
-                    margin: const EdgeInsets.all(30),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 20)
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🎉', style: TextStyle(fontSize: 70)),
-                        const SizedBox(height: 16),
-                        Text('Amazing!',
-                            style: _cute(
-                                size: 40,
-                                weight: FontWeight.w900,
-                                color: const Color(0xFF6B21A8))),
-                        const SizedBox(height: 10),
-                        Text('You got $_score / $_maxRounds',
-                            style: _cute(size: 28, color: Colors.black54)),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: _restart,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4ECDC4),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 40, vertical: 16),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: b.color.withValues(alpha: 0.4),
+                                blurRadius: 15,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                width: 3),
                           ),
-                          child: Text('Play Again! 🔄', style: _cute(size: 24)),
+                          child: Center(
+                            child: Text(b.emoji,
+                                style: TextStyle(fontSize: b.size * 0.54)),
+                          ),
                         ),
-                      ],
+                      ),
+                    ),
+                  );
+                }),
+
+                // Header: target prompt (compact single row like Emotion Path)
+                Positioned(
+                  top: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16, horizontal: 30),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7E6).withValues(alpha: 0.96),
+                        borderRadius: BorderRadius.circular(34),
+                        border: Border.all(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.8),
+                          width: 3,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Pop: ',
+                              style: _cute(size: 24, color: Colors.black87)),
+                          Text(_targetEmotion['emoji'],
+                              style: const TextStyle(fontSize: 42)),
+                          const SizedBox(width: 8),
+                          Text(
+                            _targetEmotion['name'],
+                            style: _cute(
+                                size: 31,
+                                weight: FontWeight.w900,
+                                color: const Color(0xFF1F2937)),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
 
-              // Back button (UCD016: exit with save prompt)
-              Positioned(
-                top: 20,
-                left: 20,
-                child: GestureDetector(
-                  onTap: _handleReturnPressed,
-                  child: Container(
-                    width: 62,
-                    height: 62,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    child: const Icon(Icons.arrow_back_rounded,
-                        color: Colors.white, size: 34),
+                // Hint + Star (matched to Emoji Puzzle)
+                Positioned(
+                  top: 14,
+                  right: 16,
+                  child: Row(
+                    children: [
+                      const HelpButton(
+                        activityId: 'game_bubble_pop',
+                        activityEmoji: '🫧',
+                        activityName: 'Bubble Pop',
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 19, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6B21A8),
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                        child: Text('⭐ $_score / $_maxRounds',
+                            style: _cute(size: 26)),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+
+                // Feedback overlay
+                if (_showFeedback)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(30),
+                      decoration: BoxDecoration(
+                        color: _feedbackCorrect
+                            ? const Color(0xFF4ECDC4)
+                            : const Color(0xFFFF6B6B),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black26, blurRadius: 20)
+                        ],
+                      ),
+                      child: Text(
+                        _feedbackCorrect ? '✨ Great Job! ✨' : '🤔 Try Again!',
+                        style: _cute(size: 36, weight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+
+                // Game over
+                if (_gameOver)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(40),
+                      margin: const EdgeInsets.all(30),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black26, blurRadius: 20)
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🎉', style: TextStyle(fontSize: 70)),
+                          const SizedBox(height: 16),
+                          Text('Amazing!',
+                              style: _cute(
+                                  size: 40,
+                                  weight: FontWeight.w900,
+                                  color: const Color(0xFF6B21A8))),
+                          const SizedBox(height: 10),
+                          Text('You got $_score / $_maxRounds',
+                              style: _cute(size: 28, color: Colors.black54)),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: _restart,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4ECDC4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 40, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25)),
+                            ),
+                            child:
+                                Text('Play Again! 🔄', style: _cute(size: 24)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Back button (UCD016: exit with save prompt)
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: GestureDetector(
+                    onTap: _handleReturnPressed,
+                    child: Container(
+                      width: 62,
+                      height: 62,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white, size: 34),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );

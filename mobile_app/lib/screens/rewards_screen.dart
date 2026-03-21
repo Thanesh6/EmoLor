@@ -286,7 +286,7 @@ class _RewardsScreenState extends State<RewardsScreen>
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const tileGap = 12.0;
+          const tileGap = 18.0;
 
           return Column(
             children: [
@@ -306,28 +306,25 @@ class _RewardsScreenState extends State<RewardsScreen>
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       SizedBox(
-                        width: showReturn ? 70 : 84,
+                        width: showReturn ? 70 : 16,
                         child: showReturn
                             ? _buildReturnArrowTile()
                             : const SizedBox(),
                       ),
                       Expanded(
-                        child: Align(
-                          alignment: showReturn
-                              ? Alignment.center
-                              : const Alignment(-0.2, 0),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (int i = 0;
-                                  i < visibleRewards.length;
-                                  i++) ...[
-                                _buildUpcomingHorizontalTile(visibleRewards[i]),
-                                if (i != visibleRewards.length - 1)
-                                  const SizedBox(width: tileGap),
-                              ],
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (int i = 0;
+                                i < visibleRewards.length;
+                                i++) ...[
+                              Flexible(
+                                child: _buildUpcomingHorizontalTile(visibleRewards[i]),
+                              ),
+                              if (i != visibleRewards.length - 1)
+                                const SizedBox(width: tileGap),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                       SizedBox(
@@ -812,7 +809,7 @@ class _RewardsScreenState extends State<RewardsScreen>
     return GestureDetector(
       onTap: () => _showRewardDetail(reward),
       child: Container(
-        width: 150,
+        constraints: const BoxConstraints(maxWidth: 150),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFFFCFAFF),

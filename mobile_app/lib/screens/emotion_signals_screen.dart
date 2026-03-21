@@ -350,14 +350,28 @@ class _EmotionSignalsScreenState extends State<EmotionSignalsScreen>
             ),
           // Back
           Positioned(top: 10, left: 10, child: _backButton()),
-          // UCD015: Help button
-          const Positioned(
-            top: 10,
-            right: 10,
-            child: HelpButton(
-              activityId: 'game_emotion_signals',
-              activityEmoji: '🔮',
-              activityName: 'Emotion Signals',
+          // Hint + Star (matched to Emoji Puzzle)
+          Positioned(
+            top: 14,
+            right: 16,
+            child: Row(
+              children: [
+                const HelpButton(
+                  activityId: 'game_emotion_signals',
+                  activityEmoji: '🔮',
+                  activityName: 'Emotion Signals',
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B21A8),
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  child: Text('⭐ $_correctTaps', style: _cute(sz: 26)),
+                ),
+              ],
             ),
           ),
         ],

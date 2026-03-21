@@ -21,7 +21,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   bool _isLoadingProfile = true;
   String? _userRole;
 
-  // Placeholder avatars
+  // Avatars — same list as registration
   final List<String> _avatars = [
     '🐱',
     '🐶',
@@ -33,6 +33,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     '🦁',
     '🐮',
     '🐷',
+    '🐸',
+    '🐵',
+    '🦄',
+    '🐲',
+    '🧚',
+    '🦸',
+    '🧜',
+    '🤖',
+    '👽',
+    '👻',
   ];
   String _selectedAvatar = '🐱';
 
@@ -50,6 +60,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           _nameController.text = profile['full_name'] ?? '';
           _phoneController.text = profile['phone_number'] ?? '';
           _userRole = profile['role'] as String?;
+          final av = profile['avatar_url'] as String?;
+          if (av != null && av.isNotEmpty) _selectedAvatar = av;
           _isLoadingProfile = false;
         });
       } else {
@@ -99,6 +111,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       await ref.read(authProvider.notifier).updateProfile(
             name: name,
             phone: phone.isNotEmpty ? phone : null,
+            avatar: _selectedAvatar,
           );
 
       if (mounted) {

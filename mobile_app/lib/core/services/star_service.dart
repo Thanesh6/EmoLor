@@ -1,12 +1,16 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Lightweight local star‑persistence layer.
 ///
-/// Stars are stored per‑game and summed on the rewards screen.
+/// Stars are stored per‑game per‑user and summed on the rewards screen.
 /// A simple SharedPreferences backend avoids an extra Supabase table
 /// while keeping data across hot‑restarts.
 class StarService {
-  static const _prefix = 'stars_';
+  static String get _prefix {
+    final uid = Supabase.instance.client.auth.currentUser?.id ?? 'anon';
+    return 'stars_${uid}_';
+  }
 
   // Game keys
   static const emotionPath = 'emotion_path';
@@ -51,6 +55,7 @@ class StarService {
   /// Get grand total across all games.
   static Future<int> getTotalStars() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     int total = 0;
     for (final g in allGames) {
       total += prefs.getInt('$_prefix$g') ?? 0;

@@ -268,7 +268,9 @@ class _ParentGateDialogState extends ConsumerState<ParentGateDialog> {
                   child: Text(
                     'Cancel',
                     style: GoogleFonts.fredoka(
-                        color: Colors.grey, fontWeight: FontWeight.bold),
+                        fontSize: 19,
+                        color: const Color(0xFF6B21A8),
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ],

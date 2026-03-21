@@ -83,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState.isLoading;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false, // Prevent resize when keyboard opens
+      resizeToAvoidBottomInset: true,
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -151,7 +151,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Text(
                               'WELCOME TO EMOLOR !',
                               style: GoogleFonts.fredoka(
-                                fontSize: 32,
+                                fontSize: 35,
                                 fontWeight:
                                     FontWeight.bold, // Bold as requested
                                 color: const Color(0xFF6D28D9), // Deep Purple
@@ -224,10 +224,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: Text(
                               'Forgot Password?',
                               style: GoogleFonts.fredoka(
-                                fontSize: 18,
+                                fontSize: 21,
                                 fontWeight:
                                     FontWeight.w500, // Medium legibility
                                 color: const Color(0xFF8B5CF6),
+                                decoration: TextDecoration.underline,
+                                decorationColor: const Color(0xFF8B5CF6),
                               ),
                             ),
                           ),
@@ -278,7 +280,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             Text(
                               "Don't have an account? ",
                               style: GoogleFonts.fredoka(
-                                fontSize: 18,
+                                fontSize: 21,
                                 fontWeight: FontWeight.normal,
                                 color: Colors.black87,
                               ),
@@ -292,10 +294,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               child: Text(
                                 'Register',
                                 style: GoogleFonts.fredoka(
-                                  fontSize: 18,
+                                  fontSize: 21,
                                   color:
                                       const Color(0xFF059669), // Emerald Green
                                   fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: const Color(0xFF059669),
                                 ),
                               ),
                             ),

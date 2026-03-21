@@ -8,50 +8,43 @@ import '../models/child_profile.dart';
 class ChildProfileService {
   final SupabaseClient _client = SupabaseService.client;
 
-  /// Get all child profiles linked to the current caregiver via family_links
+  /// Get all child profiles linked to the current caregiver via RPC
   Future<List<ChildProfile>> getMyChildProfiles() async {
     final userId = SupabaseService.currentUserId;
 
-    // DEV MODE: If no user is logged in, return dummy profiles
     if (userId == null) {
-      return [
-        ChildProfile(
-          profileId: 'dummy-1',
-          userId: 'dummy-child-1',
-          name: 'Emma',
-          dateOfBirth: DateTime(2018, 5, 15),
-          avatarUrl: null,
-        ),
-        ChildProfile(
-          profileId: 'dummy-2',
-          userId: 'dummy-child-2',
-          name: 'Noah',
-          dateOfBirth: DateTime(2016, 3, 22),
-          avatarUrl: null,
-        ),
-      ];
+      return [];
     }
 
-    // Step 1: Get linked child user_ids from family_links
-    final links = await _client
-        .from('family_links')
-        .select('child_id')
-        .eq('caregiver_id', userId);
+    try {
+      final response = await _client.rpc('get_child_profiles', params: {
+        'p_caregiver_id': userId,
+      });
 
-    final childIds =
-        (links as List).map((l) => l['child_id'] as String).toList();
-    if (childIds.isEmpty) return [];
+      return (response as List)
+          .map((json) => ChildProfile.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      // Fallback: try direct query (may fail with RLS)
+      final links = await _client
+          .from('family_links')
+          .select('child_id')
+          .eq('caregiver_id', userId);
 
-    // Step 2: Get profiles for those children
-    final profiles = await _client
-        .from('profiles')
-        .select()
-        .inFilter('user_id', childIds)
-        .order('full_name');
+      final childIds =
+          (links as List).map((l) => l['child_id'] as String).toList();
+      if (childIds.isEmpty) return [];
 
-    return (profiles as List)
-        .map((json) => ChildProfile.fromJson(json))
-        .toList();
+      final profiles = await _client
+          .from('profiles')
+          .select()
+          .inFilter('user_id', childIds)
+          .order('full_name');
+
+      return (profiles as List)
+          .map((json) => ChildProfile.fromJson(json))
+          .toList();
+    }
   }
 
   /// Get a specific child profile by profile_id
@@ -66,10 +59,8 @@ class ChildProfileService {
     return ChildProfile.fromJson(response);
   }
 
-  /// Create a new child profile and link to current caregiver.
-  /// NOTE: This creates a new row in `profiles` and a `family_links` entry.
-  /// The child needs a user_id (auth.users entry) — in practice this may be
-  /// created via a Supabase Edge Function or trigger.
+  /// Create a new child profile and link to current caregiver via RPC.
+  /// Uses SECURITY DEFINER function to bypass RLS and handle ENUM cast.
   Future<ChildProfile> createChildProfile({
     required String name,
     DateTime? dateOfBirth,
@@ -78,28 +69,14 @@ class ChildProfileService {
     final userId = SupabaseService.currentUserId;
     if (userId == null) throw Exception('User not authenticated');
 
-    // Insert profile for the child
-    // NOTE: user_id must be set — this assumes a child auth account exists.
-    // A real implementation may need an Edge Function to create the auth user.
-    final data = {
-      'full_name': name,
-      'date_of_birth': dateOfBirth?.toIso8601String(),
-      'avatar_url': avatarUrl,
-      'role': 'child',
-    };
-
-    final response =
-        await _client.from('profiles').insert(data).select().single();
-
-    final childProfile = ChildProfile.fromJson(response);
-
-    // Link child to caregiver
-    await _client.from('family_links').insert({
-      'caregiver_id': userId,
-      'child_id': childProfile.userId,
+    final response = await _client.rpc('create_child_profile', params: {
+      'p_caregiver_id': userId,
+      'p_full_name': name,
+      'p_date_of_birth': dateOfBirth?.toIso8601String().split('T').first,
+      'p_avatar_url': avatarUrl,
     });
 
-    return childProfile;
+    return ChildProfile.fromJson(response as Map<String, dynamic>);
   }
 
   /// Update a child profile

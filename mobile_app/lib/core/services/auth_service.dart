@@ -17,43 +17,44 @@ class AuthService {
     );
   }
 
-  /// Sign up with email and password
-  /// Note: The 'profiles' table is automatically updated via a Database Trigger
-  /// on the 'auth.users' table. We pass metadata for the trigger to pick up.
+  /// Sign up with email and password.
+  /// After auth signup, calls the create_profile RPC (SECURITY DEFINER)
+  /// to insert the profile row — no trigger dependency.
   Future<AuthResponse> signUp({
     required String email,
     required String password,
     required String name,
     required String role,
-    String? pinHash, // SHA-256 hash of the PIN
+    String? pinHash,
     String? accountType,
     String? phone,
   }) async {
-    // metadata to be passed to Trigger
-    final Map<String, dynamic> metadata = {
-      'full_name': name,
-      'role': role,
-    };
-
-    if (phone != null && phone.isNotEmpty) {
-      metadata['phone'] = phone;
-    }
-
-    if (accountType != null && accountType.isNotEmpty) {
-      metadata['account_type'] = accountType;
-    }
-
-    if (role == 'caregiver' && pinHash != null) {
-      metadata['parent_pin_hash'] = pinHash;
-    }
-
-    // Supabase Auth SignUp with Metadata
-    // The DB Trigger will handle the insertion into 'profiles' table
     final response = await _client.auth.signUp(
       email: email,
       password: password,
-      data: metadata,
+      data: {'full_name': name, 'role': role},
     );
+
+    // Supabase returns a user with empty identities when the email is
+    // already registered and verified — detect this and block re-registration.
+    if (response.user != null &&
+        (response.user!.identities == null ||
+            response.user!.identities!.isEmpty)) {
+      throw const AuthException(
+          'This email is already registered. Please log in instead.');
+    }
+
+    if (response.user != null) {
+      await _client.rpc('create_profile', params: {
+        'p_user_id': response.user!.id,
+        'p_email': email,
+        'p_full_name': name,
+        'p_role': role,
+        'p_phone_number': phone,
+        'p_account_type': accountType,
+        'p_parent_pin_hash': pinHash,
+      });
+    }
 
     return response;
   }
@@ -100,26 +101,33 @@ class AuthService {
     }
   }
 
-  /// Check if email already exists (via Supabase auth metadata)
-  /// Since profiles table has no email column, we check auth.users indirectly
-  /// by attempting a lookup. If the profile with that user exists, email is taken.
+  /// Check if email already exists in profiles table.
+  /// Only verified users will have profiles that persist, so this check
+  /// catches most duplicates before even calling signUp.
   Future<bool> emailExists(String email) async {
-    // We can't query profiles by email since there's no email column.
-    // Instead, we rely on Supabase auth — if signUp fails with
-    // "User already registered", the email exists.
-    // For a pre-check, we return false and let Supabase handle the duplicate.
-    // A more robust approach would be a Supabase Edge Function.
-    return false;
+    try {
+      final result = await _client
+          .from('profiles')
+          .select('user_id')
+          .eq('email', email)
+          .maybeSingle();
+      return result != null;
+    } catch (e) {
+      debugPrint('Error checking email existence: $e');
+      return false;
+    }
   }
 
   // Update User Profile
-  Future<void> updateProfile({String? name, String? phone}) async {
+  Future<void> updateProfile(
+      {String? name, String? phone, String? avatar}) async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('User not logged in');
 
     final updates = <String, dynamic>{};
     if (name != null) updates['full_name'] = name;
     if (phone != null) updates['phone_number'] = phone;
+    if (avatar != null) updates['avatar_url'] = avatar;
 
     if (updates.isEmpty) return;
 

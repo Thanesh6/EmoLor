@@ -122,10 +122,10 @@ class ActivityService {
   static const List<ActivityItem> _catalogue = [
     // ── Games ─────────────────────────────────────────────────────────
     ActivityItem(
-      id: 'game_emotion_path',
-      name: 'Emotion Path',
-      emoji: '🧭',
-      description: 'Walk through paths of emotion!',
+      id: 'game_emotion_slash',
+      name: 'Emotion Slash',
+      emoji: '⚔️',
+      description: 'Slash the right emotion!',
       category: ActivityCategory.games,
       gradientColors: [0xFF4ECDC4, 0xFF2AB7A9],
     ),
@@ -167,6 +167,14 @@ class ActivityService {
       name: 'Emotion Signals',
       emoji: '🔮',
       description: 'Spot the hidden signal!',
+      category: ActivityCategory.games,
+      gradientColors: [0xFF5D9CEC, 0xFF4388DA],
+    ),
+    ActivityItem(
+      id: 'game_emotion_catcher',
+      name: 'Emotion Catcher',
+      emoji: '🧺',
+      description: 'Catch the right feeling!',
       category: ActivityCategory.games,
       gradientColors: [0xFF5D9CEC, 0xFF4388DA],
     ),

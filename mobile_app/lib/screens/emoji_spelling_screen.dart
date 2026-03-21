@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../core/data/game_emojis.dart';
 import '../core/services/star_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
@@ -19,28 +20,8 @@ class EmojiSpellingScreen extends StatefulWidget {
 
 class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     with TickerProviderStateMixin {
-  static const List<Map<String, String>> _allEmojis = [
-    {'emoji': '😊', 'word': 'HAPPY'},
-    {'emoji': '😢', 'word': 'SAD'},
-    {'emoji': '😡', 'word': 'ANGRY'},
-    {'emoji': '😌', 'word': 'CALM'},
-    {'emoji': '😨', 'word': 'SCARED'},
-    {'emoji': '🤩', 'word': 'EXCITED'},
-    {'emoji': '🥰', 'word': 'LOVE'},
-    {'emoji': '😲', 'word': 'SURPRISED'},
-    {'emoji': '😳', 'word': 'SHY'},
-    {'emoji': '😎', 'word': 'PROUD'},
-    {'emoji': '🤪', 'word': 'SILLY'},
-    {'emoji': '😴', 'word': 'TIRED'},
-    {'emoji': '🥱', 'word': 'BORED'},
-    {'emoji': '🤔', 'word': 'CONFUSED'},
-    {'emoji': '🤗', 'word': 'HOPEFUL'},
-    {'emoji': '😬', 'word': 'NERVOUS'},
-    {'emoji': '🥺', 'word': 'LONELY'},
-    {'emoji': '😜', 'word': 'PLAYFUL'},
-    {'emoji': '😇', 'word': 'PEACEFUL'},
-    {'emoji': '☺️', 'word': 'GRATEFUL'},
-  ];
+  static final List<Map<String, String>> _allEmojis =
+      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word}).toList();
 
   static const String _activityId = 'game_emoji_spell';
   final ActivityProgressService _progressService = ActivityProgressService();
@@ -84,7 +65,8 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     final savedIndex = data['currentIndex'];
     final savedStars = data['stars'];
     final savedWordOrder = data['wordOrder'];
-    if (savedIndex is! int || savedStars is! int || savedWordOrder is! List) return;
+    if (savedIndex is! int || savedStars is! int || savedWordOrder is! List)
+      return;
     // Reconstruct the same shuffled order from saved word keys
     final wordList = savedWordOrder.whereType<String>().toList();
     if (wordList.isEmpty) return;
@@ -99,29 +81,29 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     final clampedIndex = savedIndex.clamp(0, restored.length - 1);
 
     // Restore mid-word state if available
-    final savedTyped         = data['typedSoFar'];
-    final savedScrambled     = data['scrambledLetters'];
-    final savedLetterUsed    = data['letterUsed'];
+    final savedTyped = data['typedSoFar'];
+    final savedScrambled = data['scrambledLetters'];
+    final savedLetterUsed = data['letterUsed'];
     final hasWordState = savedTyped is String &&
         savedScrambled is List &&
         savedLetterUsed is List;
 
     setState(() {
       _shuffledEmojis = restored;
-      _currentIndex   = clampedIndex;
-      _stars          = savedStars.clamp(0, restored.length);
+      _currentIndex = clampedIndex;
+      _stars = savedStars.clamp(0, restored.length);
     });
 
     if (hasWordState) {
       // Load the word visuals first, then override with saved letter state
       _loadWord();
-      final scrambled  = savedScrambled!.whereType<String>().toList();
+      final scrambled = savedScrambled!.whereType<String>().toList();
       final letterUsed = savedLetterUsed!.map((v) => v == true).toList();
       if (scrambled.isNotEmpty && letterUsed.length == scrambled.length) {
         setState(() {
           _scrambledLetters = scrambled;
-          _letterUsed       = letterUsed;
-          _typedSoFar       = savedTyped as String;
+          _letterUsed = letterUsed;
+          _typedSoFar = savedTyped as String;
         });
       }
     } else {
@@ -130,15 +112,15 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
   }
 
   Map<String, dynamic> _buildProgressData() => {
-    'currentIndex': _currentIndex,
-    'stars': _stars,
-    // Save the full shuffled word order so it can be restored identically
-    'wordOrder': _shuffledEmojis.map((e) => e['word'] as String).toList(),
-    // Mid-word state so quitting halfway is fully restored
-    'typedSoFar': _typedSoFar,
-    'scrambledLetters': _scrambledLetters,
-    'letterUsed': _letterUsed,
-  };
+        'currentIndex': _currentIndex,
+        'stars': _stars,
+        // Save the full shuffled word order so it can be restored identically
+        'wordOrder': _shuffledEmojis.map((e) => e['word'] as String).toList(),
+        // Mid-word state so quitting halfway is fully restored
+        'typedSoFar': _typedSoFar,
+        'scrambledLetters': _scrambledLetters,
+        'letterUsed': _letterUsed,
+      };
 
   Future<void> _handleReturnPressed() async {
     await ActivityExitHandler.handleExitActivity(
@@ -271,154 +253,165 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
       },
       child: Scaffold(
         body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFFF1E6), Color(0xFFFFE0F0), Color(0xFFE8F5E9)],
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFFFFF1E6), Color(0xFFFFE0F0), Color(0xFFE8F5E9)],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  // Space reserved for the top header row
-                  const SizedBox(height: 90),
-                  // Vertically centered game content
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Big emoji
-                            Text(_currentEmoji, style: const TextStyle(fontSize: 175)),
-                            const SizedBox(height: 20),
-                            // Word slots
-                            _buildWordSlots(),
-                            const SizedBox(height: 36),
-                            // Scrambled letter tiles
-                            _buildLetterTiles(),
-                            const SizedBox(height: 20),
-                            // Undo button
-                            if (_typedSoFar.isNotEmpty && !_showCorrect)
-                              TextButton.icon(
-                                onPressed: _undoLast,
-                                icon: const Icon(Icons.undo_rounded, color: Color(0xFF6366F1)),
-                                label: Text('Undo', style: _cute(sz: 18, c: const Color(0xFF6366F1))),
-                              ),
-                            // Feedback
-                            if (_showCorrect)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 16),
-                                child: Text('✨ Correct! ✨',
-                                    style: _cute(sz: 34, fw: FontWeight.w900, c: const Color(0xFF22C55E))),
-                              ),
-                            if (_showWrong)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 16),
-                                child: Text('Try another letter!',
-                                    style: _cute(sz: 22, c: const Color(0xFFEF4444))),
-                              ),
-                          ],
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    // Space reserved for the top header row
+                    const SizedBox(height: 90),
+                    // Vertically centered game content
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Big emoji
+                              Text(_currentEmoji,
+                                  style: const TextStyle(fontSize: 175)),
+                              const SizedBox(height: 20),
+                              // Word slots
+                              _buildWordSlots(),
+                              const SizedBox(height: 36),
+                              // Scrambled letter tiles
+                              _buildLetterTiles(),
+                              const SizedBox(height: 20),
+                              // Undo button
+                              if (_typedSoFar.isNotEmpty && !_showCorrect)
+                                TextButton.icon(
+                                  onPressed: _undoLast,
+                                  icon: const Icon(Icons.undo_rounded,
+                                      color: Color(0xFF6366F1)),
+                                  label: Text('Undo',
+                                      style: _cute(
+                                          sz: 18, c: const Color(0xFF6366F1))),
+                                ),
+                              // Feedback
+                              if (_showCorrect)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: Text('✨ Correct! ✨',
+                                      style: _cute(
+                                          sz: 34,
+                                          fw: FontWeight.w900,
+                                          c: const Color(0xFF22C55E))),
+                                ),
+                              if (_showWrong)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: Text('Try another letter!',
+                                      style: _cute(
+                                          sz: 22, c: const Color(0xFFEF4444))),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              // Back button — same style as Bubble Pop
-              Positioned(
-                top: 20,
-                left: 20,
-                child: GestureDetector(
-                  onTap: _handleReturnPressed,
-                  child: Container(
-                    width: 62,
-                    height: 62,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4)),
-                      ],
-                    ),
-                    child: const Icon(Icons.arrow_back_rounded,
-                        color: Colors.white, size: 34),
-                  ),
-                ),
-              ),
-              // Target banner — enlarged to match Bubble Pop
-              Positioned(
-                top: 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 30),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(34),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.6),
-                        width: 3,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('🔤 Spell it!  ', style: _cute(sz: 31, fw: FontWeight.w900, c: Colors.black87)),
-                        Text('${_currentIndex + 1}/${_shuffledEmojis.length}',
-                            style: _cute(sz: 28, c: const Color(0xFF6366F1))),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // Hint + Score — enlarged to match Bubble Pop
-              Positioned(
-                top: 20,
-                right: 20,
-                child: Row(
-                  children: [
-                    const HelpButton(
-                      activityId: 'game_emoji_spell',
-                      activityEmoji: '🔤',
-                      activityName: 'Emoji Spell',
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1B6B3A),
-                        borderRadius: BorderRadius.circular(26),
-                      ),
-                      child: Text('⭐ $_stars', style: _cute(sz: 26)),
-                    ),
                   ],
                 ),
-              ),
-            ],
+                // Back button — same style as Bubble Pop
+                Positioned(
+                  top: 20,
+                  left: 20,
+                  child: GestureDetector(
+                    onTap: _handleReturnPressed,
+                    child: Container(
+                      width: 62,
+                      height: 62,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F172A),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4)),
+                        ],
+                      ),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white, size: 34),
+                    ),
+                  ),
+                ),
+                // Target banner — enlarged to match Bubble Pop
+                Positioned(
+                  top: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16, horizontal: 30),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(34),
+                        border: Border.all(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.6),
+                          width: 3,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('🔤 Spell it!  ',
+                              style: _cute(
+                                  sz: 31,
+                                  fw: FontWeight.w900,
+                                  c: Colors.black87)),
+                          Text('${_currentIndex + 1}/${_shuffledEmojis.length}',
+                              style: _cute(sz: 28, c: const Color(0xFF6366F1))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Hint + Score — enlarged to match Bubble Pop
+                Positioned(
+                  top: 20,
+                  right: 20,
+                  child: Row(
+                    children: [
+                      const HelpButton(
+                        activityId: 'game_emoji_spell',
+                        activityEmoji: '🔤',
+                        activityName: 'Emoji Spell',
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 19, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED),
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                        child: Text('⭐ $_stars', style: _cute(sz: 26)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
   } // end build
 
-
-
   Widget _buildWordSlots() {
     return AnimatedBuilder(
       animation: _shakeController,
       builder: (context, child) {
-        final shake = _showWrong
-            ? sin(_shakeController.value * 3 * pi) * 8
-            : 0.0;
+        final shake =
+            _showWrong ? sin(_shakeController.value * 3 * pi) * 8 : 0.0;
         return Transform.translate(offset: Offset(shake, 0), child: child);
       },
       child: Row(
@@ -433,7 +426,9 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
             height: 88,
             decoration: BoxDecoration(
               color: filled
-                  ? (_showCorrect ? const Color(0xFF22C55E) : const Color(0xFF6366F1))
+                  ? (_showCorrect
+                      ? const Color(0xFF22C55E)
+                      : const Color(0xFF6366F1))
                   : isNext
                       ? const Color(0xFFEEF2FF)
                       : Colors.white,
@@ -447,22 +442,34 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
                 width: isNext ? 3.5 : 2.5,
               ),
               boxShadow: filled
-                  ? [BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 8, offset: const Offset(0, 3))]
+                  ? [
+                      BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3))
+                    ]
                   : isNext
-                      ? [BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                          blurRadius: 10)]
+                      ? [
+                          BoxShadow(
+                              color: const Color(0xFF6366F1)
+                                  .withValues(alpha: 0.2),
+                              blurRadius: 10)
+                        ]
                       : [],
             ),
             child: Center(
               child: Text(
-                filled ? _typedSoFar[i] : isNext ? '?' : '',
+                filled
+                    ? _typedSoFar[i]
+                    : isNext
+                        ? '?'
+                        : '',
                 style: _cute(
                     sz: 45,
                     fw: FontWeight.w900,
-                    c: filled ? Colors.white : const Color(0xFF6366F1).withValues(alpha: 0.3)),
+                    c: filled
+                        ? Colors.white
+                        : const Color(0xFF6366F1).withValues(alpha: 0.3)),
               ),
             ),
           );
@@ -486,7 +493,8 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
         children: List.generate(_scrambledLetters.length, (i) {
           final used = _letterUsed[i];
           final letter = _scrambledLetters[i];
-          final isCorrectLetter = !used && expectedLetter != null && letter == expectedLetter;
+          final isCorrectLetter =
+              !used && expectedLetter != null && letter == expectedLetter;
           return GestureDetector(
             onTap: used ? null : () => _onLetterTap(i),
             child: AnimatedContainer(
@@ -511,12 +519,20 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
                 boxShadow: used
                     ? []
                     : isCorrectLetter
-                        ? [BoxShadow(
-                            color: const Color(0xFF22C55E).withValues(alpha: 0.3),
-                            blurRadius: 12, offset: const Offset(0, 2))]
-                        : [BoxShadow(
-                            color: const Color(0xFFFF9F43).withValues(alpha: 0.2),
-                            blurRadius: 8, offset: const Offset(0, 3))],
+                        ? [
+                            BoxShadow(
+                                color: const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 2))
+                          ]
+                        : [
+                            BoxShadow(
+                                color: const Color(0xFFFF9F43)
+                                    .withValues(alpha: 0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3))
+                          ],
               ),
               child: Center(
                 child: Text(

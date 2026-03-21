@@ -10,8 +10,9 @@ import '../../screens/register_screen.dart';
 import '../../screens/verification_screen.dart';
 import '../../screens/forgot_password_screen.dart';
 import '../../screens/update_password_screen.dart';
-import '../../screens/adventure_map_screen.dart'; // Child Dashboard
+import '../../screens/child_dashboard.dart'; // Child Dashboard
 import '../../screens/caregiver_dashboard.dart';
+import '../../screens/orgz_child_dashboard.dart';
 import '../../screens/therapist_dashboard.dart';
 import '../../features/child_profile/presentation/child_profile_selection_screen.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
@@ -93,16 +94,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final userId = client.auth.currentUser!.id;
           final userEmail = client.auth.currentUser!.email?.toLowerCase() ?? '';
           final response = await client
-              .from('profiles')
-              .select('role')
-              .eq('user_id', userId)
+              .rpc('get_user_role', params: {'p_user_id': userId})
               .single();
 
           final role = response['role'] as String?;
-          final accountType = client
-              .auth.currentUser?.userMetadata?['account_type']
-              ?.toString()
-              .toLowerCase();
+          final accountType =
+              (response['account_type'] as String?)?.toLowerCase();
 
           // Admin gate: only the designated admin email may access admin
           if (role == 'admin') {
@@ -117,12 +114,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
           if (role == 'therapist') return '/therapist-dashboard';
           if (role == 'caregiver' && accountType == 'organization') {
-            return '/child-profiles';
+            return '/orgz-child-dashboard';
           }
         } catch (e) {
           debugPrint('Error fetching role in redirect: $e');
         }
-        return '/child-dashboard'; // Default for caregivers & fallback
+        return '/child-dashboard'; // Default for caregivers (single child)
       }
 
       return null;
@@ -154,7 +151,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Dashboards
       GoRoute(
         path: '/child-dashboard',
-        builder: (context, state) => const AdventureMapScreen(),
+        builder: (context, state) => const ChildDashboard(),
       ),
       GoRoute(
         path: '/child-profiles',
@@ -166,11 +163,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/child/home',
-        builder: (context, state) => const AdventureMapScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return ChildDashboard(
+            showSwitchAccount: extra?['showSwitch'] == true,
+            childName: extra?['childName'] as String?,
+          );
+        },
       ),
       GoRoute(
         path: '/caregiver-dashboard',
         builder: (context, state) => const CaregiverDashboard(),
+      ),
+      GoRoute(
+        path: '/orgz-child-dashboard',
+        builder: (context, state) => const OrgzChildDashboard(),
       ),
       GoRoute(
         path: '/therapist-dashboard',

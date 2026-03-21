@@ -98,8 +98,9 @@ class AuthNotifier extends AsyncNotifier<User?> {
   }
 
   /// Update user profile in DB
-  Future<void> updateProfile({String? name, String? phone}) async {
-    await _authService.updateProfile(name: name, phone: phone);
+  Future<void> updateProfile(
+      {String? name, String? phone, String? avatar}) async {
+    await _authService.updateProfile(name: name, phone: phone, avatar: avatar);
   }
 
   /// Update (or set) the caregiver's parent PIN hash

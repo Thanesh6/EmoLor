@@ -1,15 +1,19 @@
--- ==============================================================================
--- MIGRATION: ADD MISSING PROFILE FIELDS & FIX REGISTRATION TRIGGER
--- Run this script in the Supabase SQL Editor to fix the 500 Registration Error.
--- ==============================================================================
+-- ======================================================================
+-- MIGRATION UCD045: FIX SIGNUP TRIGGER SCHEMA MISMATCH (id vs user_id)
+--
+-- Purpose:
+-- - Prevent Supabase auth signup 500 errors caused by trigger insert failures
+-- - Support both legacy profiles.user_id and newer profiles.id schemas
+-- - Normalize unsupported roles (e.g. organization) to caregiver for DB CHECK
+--
+-- Run this in Supabase SQL Editor after UCD044.
+-- ======================================================================
 
--- 1. Add the missing columns that the Flutter app is trying to save
 ALTER TABLE public.profiles
 ADD COLUMN IF NOT EXISTS email TEXT,
 ADD COLUMN IF NOT EXISTS account_type TEXT,
 ADD COLUMN IF NOT EXISTS parent_pin_hash TEXT;
 
--- 2. Create/Update the trigger function that transfers auth metadata to profiles
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -100,7 +104,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. Ensure the trigger is actively attached to auth.users
+DO $$
+DECLARE
+  trigger_name TEXT;
+BEGIN
+  FOR trigger_name IN
+    SELECT t.tgname
+    FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'auth'
+      AND c.relname = 'users'
+      AND NOT t.tgisinternal
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON auth.users;', trigger_name);
+  END LOOP;
+END
+$$;
+
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users

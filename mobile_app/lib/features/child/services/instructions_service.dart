@@ -16,7 +16,7 @@ class InstructionsService {
   /// Notifies listeners of the current word's start/end character offset
   /// during TTS playback. Both reset to -1 when speech stops.
   final ValueNotifier<int> wordStart = ValueNotifier<int>(-1);
-  final ValueNotifier<int> wordEnd   = ValueNotifier<int>(-1);
+  final ValueNotifier<int> wordEnd = ValueNotifier<int>(-1);
 
   // ── Instruction catalogue ─────────────────────────────────────────────
 
@@ -30,23 +30,31 @@ class InstructionsService {
 
   static const Map<String, String> _instructionMap = {
     // ── Games ──────────────────────────────────────────────────────────
-    'game_emotion_path': 'Tap the right emotion to move along the path!\n'
-        'Each correct answer gets you closer to the finish.',
+    'game_emotion_slash': 'Emotion faces will fly across the screen!\n'
+        'Draw a slash through the faces that match the target emotion.\n'
+        'Be careful — slashing the wrong one loses a life!',
     'game_safe_or_not': 'Look at each picture carefully.\n'
         'Tap "Safe" if it feels okay, or "Not Safe" if it doesn\'t.',
     'game_color_memory': 'Watch the colors flash on screen.\n'
         'Then tap them in the same order!',
     'game_bubble_pop': 'Bubbles will float up with different feelings.\n'
         'Pop the bubble that matches the word shown!',
-    'game_emoji_puzzle': 'Drag each emoji piece to the matching spot on the board.\n'
-        'Place all pieces correctly to complete the puzzle!',
+    'game_emoji_puzzle':
+        'Drag each emoji piece to the matching spot on the board.\n'
+            'Place all pieces correctly to complete the puzzle!',
     'game_emoji_spell': 'Look at the emoji and think of the feeling it shows.\n'
         'Tap the letters in the right order to spell the word!',
     'game_calm_garden': 'Plant seeds by tapping the soil.\n'
         'Breathe slowly — your garden grows when you\'re calm.',
     'game_emotion_signals': 'Look at the person\'s face and body.\n'
         'Pick the emotion signal they are showing!',
-
+    'game_emotion_catcher': 'Emotion faces will fall from the sky!\n'
+        'Move your basket left and right to catch the target emotion.\n'
+        'Avoid catching the wrong one — you only have 3 lives!',
+    'game_emotion_sorting':
+        'Look at each emoji and decide what emotion it shows.\n'
+            'Drag it into the correct emotion group to sort it!\n'
+            'Sort them all to earn a star!',
     // ── Drawing ────────────────────────────────────────────────────────
     'draw_free': 'Pick a colour and start drawing!\n'
         'You can change brush size with the slider.',
@@ -75,15 +83,15 @@ class InstructionsService {
     // Wire word-boundary callbacks for karaoke highlighting.
     _tts.setProgressHandler((text, start, end, word) {
       wordStart.value = start;
-      wordEnd.value   = end;
+      wordEnd.value = end;
     });
     _tts.setCompletionHandler(() {
       wordStart.value = -1;
-      wordEnd.value   = -1;
+      wordEnd.value = -1;
     });
     _tts.setCancelHandler(() {
       wordStart.value = -1;
-      wordEnd.value   = -1;
+      wordEnd.value = -1;
     });
 
     _ttsInitialised = true;
@@ -139,12 +147,13 @@ class InstructionsService {
         final map = v as Map?;
         if (map == null) continue;
         final rawName = map['name'] as String? ?? '';
-        final name    = rawName.toLowerCase();
-        final locale  = (map['locale'] as String? ?? '').toLowerCase();
+        final name = rawName.toLowerCase();
+        final locale = (map['locale'] as String? ?? '').toLowerCase();
         // Must be an English voice
         if (!locale.startsWith('en')) continue;
         if (femaleKeywords.any((k) => name.contains(k))) {
-          await _tts.setVoice({'name': rawName, 'locale': map['locale'] as String? ?? 'en-US'});
+          await _tts.setVoice(
+              {'name': rawName, 'locale': map['locale'] as String? ?? 'en-US'});
           return; // done — female voice selected
         }
       }
