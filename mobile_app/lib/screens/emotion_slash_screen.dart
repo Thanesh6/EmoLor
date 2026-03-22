@@ -9,6 +9,7 @@ import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
+import '../core/services/emotion_journal_service.dart';
 
 /// Emotion Slash — Fruit-Ninja-style game where emotion faces fly across
 /// the screen and the child swipes to slash the ones matching the target.
@@ -225,6 +226,12 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
       _targetIndex = 0;
     }
     _sessionStars++;
+    EmotionJournalService.log(
+      emoji: _targetEmotion['emoji'] as String,
+      emotionName: _targetEmotion['name'] as String,
+      category: _targetEmotion['category'] as String,
+      gameId: _activityId,
+    );
     StarRewardWidget.show(context);
 
     Future.delayed(const Duration(milliseconds: 800), () {

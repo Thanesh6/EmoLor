@@ -7,6 +7,7 @@ import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
+import '../core/services/emotion_journal_service.dart';
 
 /// Emoji Spell — A spelling game where children see an emoji and
 /// tap scrambled letters to spell the emotion name.
@@ -20,7 +21,7 @@ class EmojiSpellingScreen extends StatefulWidget {
 class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     with TickerProviderStateMixin {
   static final List<Map<String, String>> _allEmojis =
-      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word, 'category': e.category}).toList();
+      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word, 'name': e.name, 'category': e.category}).toList();
 
   static const String _activityId = 'game_emoji_spell';
   final ActivityProgressService _progressService = ActivityProgressService();
@@ -169,6 +170,14 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     _bounceController.forward(from: 0);
 
     _sessionStars++;
+
+    final entry = _shuffledEmojis[_currentIndex];
+    EmotionJournalService.log(
+      emoji: entry['emoji']!,
+      emotionName: entry['name']!,
+      category: entry['category']!,
+      gameId: _activityId,
+    );
 
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;

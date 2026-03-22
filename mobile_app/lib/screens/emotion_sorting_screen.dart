@@ -8,6 +8,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
+import '../core/services/emotion_journal_service.dart';
 
 /// Emotion Sorting — Children drag emoji faces into the correct
 /// category boxes (Feelings, Needs, Actions, Responses).
@@ -36,6 +37,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
   static final List<Map<String, String>> _allItems =
       GameEmojis.all.map((e) => {
         'emoji': e.emoji,
+        'name': e.name,
         'category': e.category == 'feelings' ? 'Feelings'
             : e.category == 'needs' ? 'Needs'
             : e.category == 'actions' ? 'Actions'
@@ -192,6 +194,16 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
   void _onRoundComplete() {
     setState(() => _showRoundComplete = true);
     _sessionStars++;
+
+    // Log each emoji that was sorted in this round
+    for (final item in _currentItems) {
+      EmotionJournalService.log(
+        emoji: item['emoji']!,
+        emotionName: item['name']!,
+        category: item['category']!,
+        gameId: _activityId,
+      );
+    }
 
     Future.delayed(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/emotion_colour_mapping.dart';
 
 /// Central data source for all 48 emojis used across the 6 games.
 /// These emojis match the Express Cards screen exactly.
@@ -121,6 +122,15 @@ class GameEmoji {
     required this.color,
   });
 
+  /// Returns the child's personalised colour for this emoji,
+  /// falling back to the hardcoded colour if no custom mapping exists.
+  Color get personalizedColor {
+    final custom = EmotionColourMapping.colorFor(name);
+    // If the mapping knows this emotion name, use the custom color.
+    // Otherwise fall back to the hardcoded color.
+    return custom != const Color(0xFF999999) ? custom : color;
+  }
+
   /// Convenience: spelling word (uppercase name)
   String get word => name.toUpperCase();
 
@@ -128,7 +138,7 @@ class GameEmoji {
   Map<String, dynamic> toMap() => {
         'emoji': emoji,
         'name': name,
-        'color': color,
+        'color': personalizedColor,
         'category': category,
       };
 }

@@ -8,6 +8,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
+import '../core/services/emotion_journal_service.dart';
 
 /// Emoji Puzzle — A jigsaw-style game where children drag emoji pieces
 /// into the correct grid positions to complete a large emoji image.
@@ -135,6 +136,14 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   void _onPuzzleComplete() {
     setState(() => _showComplete = true);
     _sessionStars++;
+
+    final puzzle = _puzzles[_currentPuzzle];
+    EmotionJournalService.log(
+      emoji: puzzle['emoji'] as String,
+      emotionName: puzzle['name'] as String,
+      category: puzzle['category'] as String,
+      gameId: _activityId,
+    );
 
     Future.delayed(const Duration(milliseconds: 1500), () async {
       if (!mounted) return;
@@ -323,9 +332,13 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
         children: [
           // Reference emoji (faded) behind the grid
           Center(
-            child: Opacity(
-              opacity: 0.12,
-              child: Text(emoji, style: TextStyle(fontSize: boardSize * 0.85)),
+            child: Transform.translate(
+              offset: Offset(0, -boardSize * 0.015),
+              child: Opacity(
+                opacity: 0.12,
+                child: Text(emoji,
+                    style: TextStyle(fontSize: boardSize * 0.85, height: 1.0)),
+              ),
             ),
           ),
           // Grid of drop targets
@@ -488,9 +501,12 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
     // Show a cropped portion of the emoji using alignment
     final row = pieceIndex ~/ _gridSize;
     final col = pieceIndex % _gridSize;
-    // Map piece position to alignment
+    // Map piece position to alignment — no extra shift so pieces align correctly
     final alignX = (col - (_gridSize - 1) / 2) / ((_gridSize - 1) / 2);
     final alignY = (row - (_gridSize - 1) / 2) / ((_gridSize - 1) / 2);
+    final emojiSize = cellSize * _gridSize * 0.85;
+    // Shift emoji text up slightly to compensate for built-in descent/padding
+    final upShift = emojiSize * 0.02;
 
     return SizedBox(
       width: cellSize,
@@ -500,9 +516,12 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
           maxWidth: cellSize * _gridSize,
           maxHeight: cellSize * _gridSize,
           alignment: Alignment(alignX, alignY),
-          child: Text(
-            emoji,
-            style: TextStyle(fontSize: cellSize * _gridSize * 0.85),
+          child: Transform.translate(
+            offset: Offset(0, -upShift),
+            child: Text(
+              emoji,
+              style: TextStyle(fontSize: emojiSize, height: 1.0),
+            ),
           ),
         ),
       ),

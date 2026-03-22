@@ -9,6 +9,7 @@ import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
+import '../core/services/emotion_journal_service.dart';
 
 /// Emotion Bubbles Pop — Colored bubbles float up, child taps the one
 /// matching the target emotion-color. Adaptive difficulty via AdaptiveEngine.
@@ -233,6 +234,12 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
         _levelErrors = 0; // reset for next level
       });
       _sessionStars++;
+      EmotionJournalService.log(
+        emoji: _targetEmotion['emoji'] as String,
+        emotionName: _targetEmotion['name'] as String,
+        category: _targetEmotion['category'] as String,
+        gameId: _activityId,
+      );
     } else {
       // Wrong — track per-level error and reduce bubbles adaptively
       setState(() {
