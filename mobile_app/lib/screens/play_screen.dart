@@ -19,45 +19,45 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
 
   final List<Map<String, dynamic>> _games = [
     {
-      'name': 'Emoji Puzzle',
+      'name': 'EMOZZLE',
       'emoji': '🧩',
       'color': const Color(0xFF2D8B4E),
-      'desc': 'Build the emoji!',
+      'desc': 'Build the Emoji',
       'screen': const EmojiPuzzleScreen()
     },
     {
-      'name': 'Bubble Pop',
+      'name': 'EMOPOP',
       'emoji': '🫧',
       'color': const Color(0xFFFF7EB3),
-      'desc': 'Pop the feeling!',
+      'desc': 'Pop the Emoji',
       'screen': const EmotionBubblesScreen()
     },
     {
-      'name': 'Emoji Spell',
+      'name': 'EMOSPELL',
       'emoji': '🔤',
       'color': const Color(0xFFFF9F43),
-      'desc': 'Spell the emoji!',
+      'desc': 'Spell the Emoji',
       'screen': const EmojiSpellingScreen()
     },
     {
-      'name': 'Emotion Sorting',
+      'name': 'EMOSORT',
       'emoji': '🗂️',
       'color': const Color(0xFFBB6BD9),
-      'desc': 'Sort the feelings!',
+      'desc': 'Sort the Emoji',
       'screen': const EmotionSortingScreen()
     },
     {
-      'name': 'Emotion Slash',
+      'name': 'EMOSLASH',
       'emoji': '⚔️',
       'color': const Color(0xFF4ECDC4),
-      'desc': 'Slash the feelings!',
+      'desc': 'Slash the Emoji',
       'screen': const EmotionSlashScreen()
     },
     {
-      'name': 'Emotion Catcher',
+      'name': 'EMOCATCH',
       'emoji': '🧺',
       'color': const Color(0xFF5D9CEC),
-      'desc': 'Catch the feelings!',
+      'desc': 'Catch the Emoji',
       'screen': const EmotionCatcherScreen()
     },
   ];

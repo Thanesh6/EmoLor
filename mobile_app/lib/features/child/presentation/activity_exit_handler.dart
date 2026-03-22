@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/star_service.dart';
 import '../models/activity_save_state.dart';
 import '../services/activity_progress_service.dart';
 import 'exit_activity_dialog.dart';
@@ -46,6 +47,8 @@ class ActivityExitHandler {
     VoidCallback? onBeforeExit,
     int difficultyLevel = 1,
     double speedMultiplier = 1.0,
+    String? starGameKey,
+    int sessionStars = 0,
   }) async {
     // Step 2: Pause – conceptually the timer is paused while the dialog
     // is up (the activity loop is blocked on `await showDialog`).
@@ -60,6 +63,11 @@ class ActivityExitHandler {
     if (shouldExit != true) {
       // Alt-flow: child tapped "Keep Playing" → resume (dialog closes).
       return;
+    }
+
+    // Accumulate session stars to persistent total before saving.
+    if (starGameKey != null && sessionStars > 0) {
+      await StarService.addStars(starGameKey, sessionStars);
     }
 
     // Step 5: Save current activity state to local storage.

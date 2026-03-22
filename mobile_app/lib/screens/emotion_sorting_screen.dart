@@ -48,8 +48,12 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
   static const int _itemsPerRound = 6;
   // No max rounds — endless mode cycling through emojis
   int _currentRound = 0;
-  int _stars = 0;
+  int _sessionStars = 0;
   int _sortedCorrectly = 0;
+
+  // Adaptive heuristic: track errors per round
+  int _roundErrors = 0;
+  int? _lastWrongItemIndex; // track which item was dropped wrong
 
   late List<Map<String, String>> _currentItems; // items to sort this round
   late List<bool> _itemSorted; // whether each item has been sorted
@@ -76,56 +80,19 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
 
     final data = saved.progressData;
     final savedRound = data['currentRound'];
-    final savedStars = data['stars'];
-    final savedCorrectly = data['sortedCorrectly'];
-    final savedItemsRaw = data['currentItems'];
-    final savedSortedRaw = data['itemSorted'];
+    if (savedRound is! int) return;
 
-    if (savedRound is! int ||
-        savedStars is! int ||
-        savedCorrectly is! int ||
-        savedItemsRaw is! List ||
-        savedSortedRaw is! List) {
-      return;
-    }
-
-    // Parse the lists
-    try {
-      final parsedItems = savedItemsRaw.map<Map<String, String>>((item) {
-        final map = item as Map;
-        return {
-          'emoji': map['emoji'] as String,
-          'category': map['category'] as String,
-        };
-      }).toList();
-
-      final parsedSorted = savedSortedRaw.map<bool>((b) => b as bool).toList();
-
-      if (parsedItems.length == _itemsPerRound &&
-          parsedSorted.length == _itemsPerRound) {
-        setState(() {
-          _currentRound = savedRound;
-          _stars = savedStars;
-          _sortedCorrectly = savedCorrectly;
-          _currentItems = parsedItems;
-          _itemSorted = parsedSorted;
-          _showRoundComplete = false;
-          _showWrongFeedback = false;
-          _hoveredCategory = null;
-        });
-      }
-    } catch (_) {
-      // Ignore parasing errors
-    }
+    // Resume at saved round, restart round fresh (no mid-round state)
+    setState(() {
+      _currentRound = savedRound;
+      _sessionStars = 0; // always start session at 0
+    });
+    _setupRound();
   }
 
   Map<String, dynamic> _buildProgressData() {
     return {
       'currentRound': _currentRound,
-      'stars': _stars,
-      'sortedCorrectly': _sortedCorrectly,
-      'currentItems': _currentItems,
-      'itemSorted': _itemSorted,
     };
   }
 
@@ -146,6 +113,8 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
       activityId: _activityId,
       activityEmoji: '📋',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emotionSorting,
+      sessionStars: _sessionStars,
     );
   }
 
@@ -159,6 +128,8 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
     _showRoundComplete = false;
     _showWrongFeedback = false;
     _hoveredCategory = null;
+    _roundErrors = 0;
+    _lastWrongItemIndex = null;
 
     // Pick items: early rounds favour Feelings, later rounds mix all.
     // First 4 rounds: at least half feelings. After that: fully random.
@@ -204,8 +175,10 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
         _onRoundComplete();
       }
     } else {
-      // Wrong — shake
+      // Wrong — shake and track error
       setState(() {
+        _roundErrors++;
+        _lastWrongItemIndex = itemIndex;
         _showWrongFeedback = true;
         _hoveredCategory = null;
       });
@@ -218,8 +191,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
 
   void _onRoundComplete() {
     setState(() => _showRoundComplete = true);
-    StarService.addStars(StarService.colorMemory, 1);
-    _stars++;
+    _sessionStars++;
 
     Future.delayed(const Duration(milliseconds: 1200), () async {
       if (!mounted) return;
@@ -334,7 +306,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                       const HelpButton(
                         activityId: 'game_emotion_sorting',
                         activityEmoji: '📋',
-                        activityName: 'Emotion Sorting',
+                        activityName: 'EMOSORT',
                       ),
                       const SizedBox(width: 10),
                       Container(
@@ -344,7 +316,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_stars', style: _cute(sz: 26)),
+                        child: Text('⭐ $_sessionStars', style: _cute(sz: 26)),
                       ),
                     ],
                   ),
@@ -400,6 +372,29 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
         ),
       ),
     );
+  }
+
+  /// Check if a category should be highlighted as a hint for an item.
+  bool _shouldHighlightCategory(String categoryName) {
+    if (_roundErrors == 0) return false;
+    // Collect unsorted items that should show hints
+    final unsorted = <int>[];
+    for (int i = 0; i < _currentItems.length; i++) {
+      if (!_itemSorted[i]) unsorted.add(i);
+    }
+    if (unsorted.isEmpty) return false;
+
+    if (_roundErrors == 1) {
+      // Highlight only the correct category for the last wrong item
+      if (_lastWrongItemIndex != null &&
+          !_itemSorted[_lastWrongItemIndex!]) {
+        return _currentItems[_lastWrongItemIndex!]['category'] == categoryName;
+      }
+      return false;
+    } else {
+      // 2+ errors: highlight correct category for ALL unsorted items
+      return unsorted.any((i) => _currentItems[i]['category'] == categoryName);
+    }
   }
 
   Widget _buildItemsTray() {
@@ -479,6 +474,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
           final emoji = cat['emoji'] as String;
           final color = cat['color'] as Color;
           final isHovered = _hoveredCategory == name;
+          final isHinted = _shouldHighlightCategory(name);
 
           // Count how many items of this category have been sorted
           int sortedCount = 0;
@@ -509,11 +505,17 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                     decoration: BoxDecoration(
                       color: isHovered
                           ? color.withValues(alpha: 0.25)
-                          : color.withValues(alpha: 0.1),
+                          : isHinted
+                              ? color.withValues(alpha: 0.18)
+                              : color.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: isHovered ? color : color.withValues(alpha: 0.4),
-                        width: isHovered ? 4 : 2.5,
+                        color: isHovered
+                            ? color
+                            : isHinted
+                                ? color.withValues(alpha: 0.8)
+                                : color.withValues(alpha: 0.4),
+                        width: isHovered ? 4 : isHinted ? 3.5 : 2.5,
                       ),
                       boxShadow: isHovered
                           ? [
@@ -521,7 +523,14 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                                   color: color.withValues(alpha: 0.3),
                                   blurRadius: 14)
                             ]
-                          : [],
+                          : isHinted
+                              ? [
+                                  BoxShadow(
+                                      color: color.withValues(alpha: 0.35),
+                                      blurRadius: 12,
+                                      spreadRadius: 2)
+                                ]
+                              : [],
                     ),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,

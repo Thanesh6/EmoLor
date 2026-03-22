@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/data/game_emojis.dart';
+import '../core/services/star_service.dart';
+import '../core/widgets/star_reward_widget.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
@@ -64,7 +66,6 @@ class _Particle {
 class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     with TickerProviderStateMixin {
   static const String _activityId = 'game_emotion_slash';
-  // No max rounds — endless mode cycling through all 48 emojis
   static const double _gravity = 0.18;
 
   final ActivityProgressService _progressService = ActivityProgressService();
@@ -107,13 +108,10 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
 
   Timer? _gameTicker;
   Timer? _spawnTimer;
-  Timer? _roundTimer;
 
-  int _round = 0;
+  int _sessionStars = 0;
   int _lives = 3;
-  int _score = 0;
-  int _totalMistakes = 0;
-  int _roundScore = 0;
+  int _levelErrors = 0; // errors for current target
   bool _betweenRounds = false;
   bool _gameEnded = false;
 
@@ -129,6 +127,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     _flashController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
+      value: 1.0, // Start fully complete so red overlay is invisible
     );
     _roundTransitionController = AnimationController(
       vsync: this,
@@ -146,49 +145,53 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     final saved = await _progressService.loadProgress(_activityId);
     if (!mounted || saved == null) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) _startRound();
+        if (mounted) _showTarget();
       });
       return;
     }
     final data = saved.progressData;
-    if (data['round'] is int && data['score'] is int && data['lives'] is int) {
-      setState(() {
-        _round = data['round'] as int;
-        _score = data['score'] as int;
-        _lives = (data['lives'] as int).clamp(1, 3);
-        _totalMistakes = (data['totalMistakes'] as int?) ?? 0;
-      });
+    // Restore target order and position
+    final savedOrder = data['targetOrder'];
+    final savedIndex = data['targetIndex'];
+    final savedLives = data['lives'];
+    if (savedOrder is List && savedIndex is int && savedLives is int) {
+      final order = savedOrder.whereType<num>().map((n) => n.toInt()).toList();
+      if (order.isNotEmpty && order.every((i) => i >= 0 && i < _emotions.length)) {
+        _targetOrder = order;
+        _targetIndex = savedIndex.clamp(0, order.length);
+        _lives = savedLives.clamp(1, 3);
+      }
     }
+    // Session stars always start at 0
+    _sessionStars = 0;
+    _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _startRound();
+      if (mounted) _showTarget();
     });
   }
 
   Map<String, dynamic> _buildProgressData() => {
-        'round': _round,
-        'score': _score,
+        'targetOrder': _targetOrder,
+        'targetIndex': _targetIndex,
         'lives': _lives,
-        'totalMistakes': _totalMistakes,
       };
 
   @override
   void dispose() {
     _gameTicker?.cancel();
     _spawnTimer?.cancel();
-    _roundTimer?.cancel();
     _flashController.dispose();
     _roundTransitionController.dispose();
     super.dispose();
   }
 
-  // ── Round Management ─────────────────────────────────────────────
+  // ── Target Management ─────────────────────────────────────────────
 
-  void _startRound() {
+  void _showTarget() {
     if (_gameEnded) return;
     _emojis.clear();
-    _roundScore = 0;
     _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
-    _targetIndex++;
+    _levelErrors = 0;
 
     setState(() => _betweenRounds = true);
     _roundTransitionController.forward(from: 0);
@@ -196,50 +199,60 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted || _gameEnded) return;
       setState(() => _betweenRounds = false);
+      _startSpawning();
+    });
+  }
 
-      // Spawn emojis at intervals
-      final spawnInterval =
-          Duration(milliseconds: (1500 - _round * 60).clamp(800, 1500));
-      int spawned = 0;
-      final maxSpawn = 8 + (_round ~/ 3); // 8-11 emojis per round
+  void _startSpawning() {
+    _spawnTimer?.cancel();
+    _spawnTimer = Timer.periodic(const Duration(milliseconds: 1200), (timer) {
+      if (!mounted || _gameEnded || _betweenRounds) {
+        timer.cancel();
+        return;
+      }
+      _spawnEmoji();
+    });
+    // Spawn one immediately
+    _spawnEmoji();
+  }
 
-      _spawnTimer = Timer.periodic(spawnInterval, (timer) {
-        if (!mounted || _gameEnded || _betweenRounds) {
-          timer.cancel();
-          return;
-        }
-        if (spawned >= maxSpawn) {
-          timer.cancel();
-          return;
-        }
-        _spawnEmoji();
-        spawned++;
-      });
+  void _advanceTarget() {
+    _spawnTimer?.cancel();
+    _targetIndex++;
+    // When all 48 emojis have been shown, reshuffle and start over
+    if (_targetIndex >= _emotions.length) {
+      _targetOrder = _buildFeelingsFirstOrder();
+      _targetIndex = 0;
+    }
+    _sessionStars++;
+    StarRewardWidget.show(context);
 
-      // Round ends after time limit
-      final roundDuration = Duration(seconds: (15 + _round).clamp(15, 20));
-      _roundTimer?.cancel();
-      _roundTimer = Timer(roundDuration, () {
-        if (mounted && !_gameEnded) _endRound();
-      });
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted && !_gameEnded) _showTarget();
     });
   }
 
   void _spawnEmoji() {
     if (_gameEnded) return;
-    final velocityScale = 1.0 + _round * 0.07;
-    final isTarget = _rng.nextDouble() < 0.4; // 40% chance target
+    // Adaptive: increase target chance on errors, slow down speed
+    final targetChance = _levelErrors == 0
+        ? 0.4
+        : _levelErrors == 1
+            ? 0.55
+            : 0.7; // 2+ errors: 70% chance target
+    final isTarget = _rng.nextDouble() < targetChance;
     final emotion = isTarget
         ? _targetEmotion
         : _emotions
             .where((e) => e['name'] != _targetEmotion['name'])
             .toList()[_rng.nextInt(_emotions.length - 1)];
 
-    // Launch from bottom with upward arc
+    // Launch from bottom with upward arc — slower on more errors
     final startX = 80 + _rng.nextDouble() * (_screenW - 160);
     final startY = _screenH + 40;
-    final vx = (_rng.nextDouble() - 0.5) * 3.0 * velocityScale;
-    final vy = -(11.0 + _rng.nextDouble() * 5.0) * velocityScale;
+    final vx = (_rng.nextDouble() - 0.5) * 3.0;
+    final speedReduction = _levelErrors >= 2 ? 3.0 : (_levelErrors == 1 ? 1.5 : 0.0);
+    final vy = -(11.0 + _rng.nextDouble() * 5.0 - speedReduction);
 
     _emojis.add(_FlyingEmoji(
       emoji: emotion['emoji'] as String,
@@ -253,37 +266,13 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     ));
   }
 
-  void _endRound() {
-    _spawnTimer?.cancel();
-    _roundTimer?.cancel();
-
-    if (_lives <= 0) {
-      // Out of lives — reshuffle and reset lives, keep score going
-      _lives = 3;
-      _totalMistakes = 0;
-    }
-
-    _round++;
-    // When all 48 emojis have been shown, reshuffle and start over
-    if (_targetIndex >= _emotions.length) {
-      _targetOrder = _buildFeelingsFirstOrder();
-      _targetIndex = 0;
-    }
-
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && !_gameEnded) _startRound();
-    });
-  }
-
   void _restart() {
     _engine.reset();
     _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     setState(() {
-      _round = 0;
+      _sessionStars = 0;
       _lives = 3;
-      _score = 0;
-      _totalMistakes = 0;
       _gameEnded = false;
       _betweenRounds = false;
       _emojis.clear();
@@ -292,7 +281,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     });
     _gameTicker =
         Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
-    _startRound();
+    _showTarget();
   }
 
   // ── Game Loop ────────────────────────────────────────────────────
@@ -391,17 +380,18 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     _engine.recordTap();
 
     if (emoji.isTarget) {
-      _score++;
-      _roundScore++;
       _engine.resetErrors();
       _spawnExplosion(emoji.x, emoji.y, emoji.color);
+      // Correct slash — advance to next target
+      _advanceTarget();
     } else {
-      _totalMistakes++;
       _lives--;
+      _levelErrors++;
       _engine.trackError();
       _flashController.forward(from: 0);
       if (_lives <= 0) {
-        _endRound();
+        // Reset lives, keep going
+        _lives = 3;
       }
     }
   }
@@ -426,17 +416,18 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
   Future<void> _handleReturnPressed() async {
     _gameTicker?.cancel();
     _spawnTimer?.cancel();
-    _roundTimer?.cancel();
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
       activityEmoji: '⚔️',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emotionSlash,
+      sessionStars: _sessionStars,
     );
     if (mounted && !_gameEnded) {
       _gameTicker =
           Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
-      _startRound();
+      _showTarget();
     }
   }
 
@@ -493,10 +484,12 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                       ),
                     ),
 
-                  // Flying emojis (20% bigger)
+                  // Flying emojis
                   ..._emojis
                       .where((e) => !e.slashed || e.slashOpacity > 0)
                       .map((e) {
+                    // Adaptive hint: glow around target emojis on 2+ errors
+                    final showHint = !e.slashed && e.isTarget && _levelErrors >= 2;
                     return Positioned(
                       left: e.x - 36,
                       top: e.y - 36,
@@ -505,16 +498,31 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                             e.slashed ? e.slashOpacity.clamp(0.0, 1.0) : 1.0,
                         child: Transform.scale(
                           scale: e.slashed ? 1.5 : 1.0,
-                          child: Text(
-                            e.emoji,
-                            style: const TextStyle(fontSize: 72),
+                          child: Container(
+                            decoration: showHint
+                                ? BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF4CAF50)
+                                            .withValues(alpha: 0.6),
+                                        blurRadius: 20,
+                                        spreadRadius: 8,
+                                      ),
+                                    ],
+                                  )
+                                : null,
+                            child: Text(
+                              e.emoji,
+                              style: const TextStyle(fontSize: 72),
+                            ),
                           ),
                         ),
                       ),
                     );
                   }),
 
-                  // Target prompt bar (20% bigger) + level display
+                  // Target prompt bar
                   Positioned(
                     top: 20,
                     left: 0,
@@ -581,7 +589,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                     ),
                   ),
 
-                  // Hint + Star — top right (matched to Emoji Puzzle)
+                  // Hint + Star — top right
                   Positioned(
                     top: 14,
                     right: 16,
@@ -590,7 +598,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                         HelpButton(
                           activityId: 'game_emotion_slash',
                           activityEmoji: '⚔️',
-                          activityName: 'Emotion Slash',
+                          activityName: 'EMOSLASH',
                         ),
                         const SizedBox(width: 10),
                         Container(
@@ -600,7 +608,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                             color: const Color(0xFF6B21A8),
                             borderRadius: BorderRadius.circular(26),
                           ),
-                          child: Text('⭐ $_score', style: _cute(size: 26)),
+                          child: Text('⭐ $_sessionStars', style: _cute(size: 26)),
                         ),
                       ],
                     ),

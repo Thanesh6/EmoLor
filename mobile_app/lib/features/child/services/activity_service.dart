@@ -123,9 +123,9 @@ class ActivityService {
     // ── Games ─────────────────────────────────────────────────────────
     ActivityItem(
       id: 'game_emotion_slash',
-      name: 'Emotion Slash',
+      name: 'EMOSLASH',
       emoji: '⚔️',
-      description: 'Slash the right emotion!',
+      description: 'Slash the Emoji',
       category: ActivityCategory.games,
       gradientColors: [0xFF4ECDC4, 0xFF2AB7A9],
     ),
@@ -147,9 +147,9 @@ class ActivityService {
     ),
     ActivityItem(
       id: 'game_bubble_pop',
-      name: 'Bubble Pop',
+      name: 'EMOPOP',
       emoji: '🫧',
-      description: 'Pop the right feeling!',
+      description: 'Pop the Emoji',
       category: ActivityCategory.games,
       gradientColors: [0xFFFF7EB3, 0xFFFF5A9E],
     ),
@@ -172,9 +172,9 @@ class ActivityService {
     ),
     ActivityItem(
       id: 'game_emotion_catcher',
-      name: 'Emotion Catcher',
+      name: 'EMOCATCH',
       emoji: '🧺',
-      description: 'Catch the right feeling!',
+      description: 'Catch the Emoji',
       category: ActivityCategory.games,
       gradientColors: [0xFF5D9CEC, 0xFF4388DA],
     ),

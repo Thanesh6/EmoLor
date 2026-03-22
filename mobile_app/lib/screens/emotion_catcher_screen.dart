@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/data/game_emojis.dart';
+import '../core/services/star_service.dart';
+import '../core/widgets/star_reward_widget.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
@@ -57,7 +59,6 @@ class _Sparkle {
 class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     with TickerProviderStateMixin {
   static const String _activityId = 'game_emotion_catcher';
-  // No max rounds — endless mode cycling through all 48 emojis
   static const double _basketWidth = 156.0;
   static const double _basketHeight = 84.0;
 
@@ -98,13 +99,11 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
 
   Timer? _gameTicker;
   Timer? _spawnTimer;
-  Timer? _roundTimer;
 
   double _basketX = 0.5; // fraction of screen width
-  int _round = 0;
+  int _sessionStars = 0;
   int _lives = 3;
-  int _score = 0;
-  int _totalMistakes = 0;
+  int _levelErrors = 0; // errors for current target
   bool _betweenRounds = false;
   bool _gameEnded = false;
 
@@ -138,46 +137,47 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     if (!mounted) return;
     if (saved != null) {
       final data = saved.progressData;
-      if (data['round'] is int &&
-          data['score'] is int &&
-          data['lives'] is int) {
-        setState(() {
-          _round = data['round'] as int;
-          _score = data['score'] as int;
-          _lives = (data['lives'] as int).clamp(1, 3);
-          _totalMistakes = (data['totalMistakes'] as int?) ?? 0;
-        });
+      final savedOrder = data['targetOrder'];
+      final savedIndex = data['targetIndex'];
+      final savedLives = data['lives'];
+      if (savedOrder is List && savedIndex is int && savedLives is int) {
+        final order = savedOrder.whereType<num>().map((n) => n.toInt()).toList();
+        if (order.isNotEmpty && order.every((i) => i >= 0 && i < _emotions.length)) {
+          _targetOrder = order;
+          _targetIndex = savedIndex.clamp(0, order.length);
+          _lives = savedLives.clamp(1, 3);
+        }
       }
     }
+    _sessionStars = 0;
+    _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _startRound();
+      if (mounted) _showTarget();
     });
   }
 
   Map<String, dynamic> _buildProgressData() => {
-        'round': _round,
-        'score': _score,
+        'targetOrder': _targetOrder,
+        'targetIndex': _targetIndex,
         'lives': _lives,
-        'totalMistakes': _totalMistakes,
       };
 
   @override
   void dispose() {
     _gameTicker?.cancel();
     _spawnTimer?.cancel();
-    _roundTimer?.cancel();
     _shakeController.dispose();
     _roundTransitionController.dispose();
     super.dispose();
   }
 
-  // ── Round Management ─────────────────────────────────────────────
+  // ── Target Management ─────────────────────────────────────────────
 
-  void _startRound() {
+  void _showTarget() {
     if (_gameEnded) return;
     _fallingEmojis.clear();
     _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
-    _targetIndex++;
+    _levelErrors = 0;
 
     setState(() => _betweenRounds = true);
     _roundTransitionController.forward(from: 0);
@@ -185,37 +185,53 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted || _gameEnded) return;
       setState(() => _betweenRounds = false);
+      _startSpawning();
+    });
+  }
 
-      final spawnInterval =
-          Duration(milliseconds: (1600 - _round * 60).clamp(900, 1600));
-      int spawned = 0;
-      final maxSpawn = 10 + (_round ~/ 2); // 10-14 per round
+  void _startSpawning() {
+    _spawnTimer?.cancel();
+    _spawnTimer = Timer.periodic(const Duration(milliseconds: 1400), (timer) {
+      if (!mounted || _gameEnded || _betweenRounds) {
+        timer.cancel();
+        return;
+      }
+      _spawnEmoji();
+    });
+    // Spawn one immediately
+    _spawnEmoji();
+  }
 
-      _spawnTimer = Timer.periodic(spawnInterval, (timer) {
-        if (!mounted || _gameEnded || _betweenRounds) {
-          timer.cancel();
-          return;
-        }
-        if (spawned >= maxSpawn) {
-          timer.cancel();
-          return;
-        }
-        _spawnEmoji();
-        spawned++;
-      });
+  void _advanceTarget() {
+    _spawnTimer?.cancel();
+    _targetIndex++;
+    // When all 48 emojis have been shown, reshuffle and start over
+    if (_targetIndex >= _emotions.length) {
+      _targetOrder = _buildFeelingsFirstOrder();
+      _targetIndex = 0;
+    }
+    _sessionStars++;
+    StarRewardWidget.show(context);
 
-      final roundDuration = Duration(seconds: (20 + _round).clamp(20, 25));
-      _roundTimer?.cancel();
-      _roundTimer = Timer(roundDuration, () {
-        if (mounted && !_gameEnded) _endRound();
-      });
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted && !_gameEnded) _showTarget();
     });
   }
 
   void _spawnEmoji() {
     if (_gameEnded) return;
-    final fallSpeed = 2.0 + _round * 0.2;
-    final isTarget = _rng.nextDouble() < 0.35;
+    // Adaptive: increase target chance and slow fall speed on errors
+    final targetChance = _levelErrors == 0
+        ? 0.35
+        : _levelErrors == 1
+            ? 0.5
+            : 0.65; // 2+ errors: 65% target
+    final fallSpeed = _levelErrors >= 2
+        ? 1.5
+        : _levelErrors == 1
+            ? 2.0
+            : 2.5;
+    final isTarget = _rng.nextDouble() < targetChance;
     final emotion = isTarget
         ? _targetEmotion
         : _emotions
@@ -235,37 +251,13 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     ));
   }
 
-  void _endRound() {
-    _spawnTimer?.cancel();
-    _roundTimer?.cancel();
-
-    if (_lives <= 0) {
-      // Out of lives — reset lives and mistakes, keep score going
-      _lives = 3;
-      _totalMistakes = 0;
-    }
-
-    _round++;
-    // When all 48 emojis have been shown, reshuffle and start over
-    if (_targetIndex >= _emotions.length) {
-      _targetOrder = _buildFeelingsFirstOrder();
-      _targetIndex = 0;
-    }
-
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted && !_gameEnded) _startRound();
-    });
-  }
-
   void _restart() {
     _engine.reset();
     _targetOrder = _buildFeelingsFirstOrder();
     _targetIndex = 0;
     setState(() {
-      _round = 0;
+      _sessionStars = 0;
       _lives = 3;
-      _score = 0;
-      _totalMistakes = 0;
       _gameEnded = false;
       _betweenRounds = false;
       _basketX = 0.5;
@@ -274,7 +266,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     });
     _gameTicker =
         Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
-    _startRound();
+    _showTarget();
   }
 
   // ── Game Loop ────────────────────────────────────────────────────
@@ -328,16 +320,18 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     _engine.recordTap();
 
     if (emoji.isTarget) {
-      _score++;
       _engine.resetErrors();
       _spawnSparkles(emoji.x, emoji.y, emoji.color);
+      // Correct catch — advance to next target
+      _advanceTarget();
     } else {
-      _totalMistakes++;
       _lives--;
+      _levelErrors++;
       _engine.trackError();
       _shakeController.forward(from: 0);
       if (_lives <= 0) {
-        _endRound();
+        // Reset lives, keep going
+        _lives = 3;
       }
     }
   }
@@ -362,17 +356,18 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
   Future<void> _handleReturnPressed() async {
     _gameTicker?.cancel();
     _spawnTimer?.cancel();
-    _roundTimer?.cancel();
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
       activityEmoji: '🧺',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emotionCatcher,
+      sessionStars: _sessionStars,
     );
     if (mounted && !_gameEnded) {
       _gameTicker =
           Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
-      _startRound();
+      _showTarget();
     }
   }
 
@@ -436,13 +431,30 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                   ..._fallingEmojis
                       .where((e) => !e.missed && e.catchScale > 0)
                       .map((e) {
+                    // Adaptive hint: glow around target emojis on 2+ errors
+                    final showHint = !e.caught && e.isTarget && _levelErrors >= 2;
                     return Positioned(
                       left: e.x - 36,
                       top: e.y - 36,
                       child: Transform.scale(
                         scale: e.caught ? e.catchScale.clamp(0.0, 1.0) : 1.0,
-                        child:
-                            Text(e.emoji, style: const TextStyle(fontSize: 72)),
+                        child: Container(
+                          decoration: showHint
+                              ? BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF4CAF50)
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 20,
+                                      spreadRadius: 8,
+                                    ),
+                                  ],
+                                )
+                              : null,
+                          child: Text(e.emoji,
+                              style: const TextStyle(fontSize: 72)),
+                        ),
                       ),
                     );
                   }),
@@ -466,7 +478,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                     ),
                   ),
 
-                  // Target prompt bar (matched to Slash game)
+                  // Target prompt bar
                   Positioned(
                     top: 20,
                     left: 0,
@@ -533,7 +545,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                     ),
                   ),
 
-                  // Hint + Star — top right (matched to Emoji Puzzle)
+                  // Hint + Star — top right
                   Positioned(
                     top: 14,
                     right: 16,
@@ -542,7 +554,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                         HelpButton(
                           activityId: 'game_emotion_catcher',
                           activityEmoji: '🧺',
-                          activityName: 'Emotion Catcher',
+                          activityName: 'EMOCATCH',
                         ),
                         const SizedBox(width: 10),
                         Container(
@@ -552,7 +564,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                             color: const Color(0xFF6B21A8),
                             borderRadius: BorderRadius.circular(26),
                           ),
-                          child: Text('⭐ $_score', style: _cute(size: 26)),
+                          child: Text('⭐ $_sessionStars', style: _cute(size: 26)),
                         ),
                       ],
                     ),

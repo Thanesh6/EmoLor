@@ -5,7 +5,6 @@ import '../core/data/game_emojis.dart';
 import '../core/services/star_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
-import '../features/child/presentation/completion_feedback_overlay.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
@@ -31,9 +30,12 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   static const int _totalPieces = _gridSize * _gridSize;
 
   int _currentPuzzle = 0;
-  int _stars = 0;
+  int _sessionStars = 0;
   bool _showComplete = false;
   final ActivityProgressService _progressService = ActivityProgressService();
+
+  // Adaptive heuristic: track errors per level
+  int _levelErrors = 0;
 
   // Each piece has a correct index (0..8) and is either placed or in the tray
   late List<int> _trayPieces; // piece indices still in tray (shuffled)
@@ -54,46 +56,21 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
 
     final data = saved.progressData;
     final savedPuzzle = data['currentPuzzle'];
-    final savedStars = data['stars'];
-    final savedTrayRaw = data['trayPieces'];
-    final savedBoardRaw = data['boardSlots'];
 
-    if (savedPuzzle is! int ||
-        savedStars is! int ||
-        savedTrayRaw is! List ||
-        savedBoardRaw is! List) {
-      return;
-    }
-
-    final parsedTray =
-        savedTrayRaw.whereType<num>().map((n) => n.toInt()).toList();
-    final parsedBoard = savedBoardRaw
-        .map<int?>((v) => v == null ? null : (v as num).toInt())
-        .toList();
-
+    if (savedPuzzle is! int) return;
     if (savedPuzzle < 0 || savedPuzzle >= _puzzles.length) return;
-    if (parsedTray.length > _totalPieces ||
-        parsedBoard.length != _totalPieces) {
-      return;
-    }
 
+    // Resume at saved puzzle level, restart puzzle fresh (no mid-puzzle state)
     setState(() {
       _currentPuzzle = savedPuzzle;
-      _stars = savedStars.clamp(0, _puzzles.length);
-      _trayPieces = parsedTray;
-      _boardSlots = parsedBoard;
-      _showComplete = false;
-      _draggedPiece = null;
-      _hoveredSlot = null;
+      _sessionStars = 0; // always start session at 0
     });
+    _setupPuzzle();
   }
 
   Map<String, dynamic> _buildProgressData() {
     return {
       'currentPuzzle': _currentPuzzle,
-      'stars': _stars,
-      'trayPieces': List<int>.from(_trayPieces),
-      'boardSlots': _boardSlots,
     };
   }
 
@@ -114,6 +91,8 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
       activityId: _activityId,
       activityEmoji: '🧩',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emojiPuzzle,
+      sessionStars: _sessionStars,
     );
   }
 
@@ -121,6 +100,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
     _showComplete = false;
     _draggedPiece = null;
     _hoveredSlot = null;
+    _levelErrors = 0; // reset errors for new level
     // All pieces start in tray, shuffled
     _trayPieces = List.generate(_totalPieces, (i) => i);
     _trayPieces.shuffle(Random());
@@ -143,8 +123,9 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
         _onPuzzleComplete();
       }
     } else {
-      // Wrong slot — bounce back
+      // Wrong slot — bounce back and track error
       setState(() {
+        _levelErrors++;
         _draggedPiece = null;
         _hoveredSlot = null;
       });
@@ -153,40 +134,19 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
 
   void _onPuzzleComplete() {
     setState(() => _showComplete = true);
-    StarService.addStars(StarService.emojiPuzzle, 1);
-    _stars++;
+    _sessionStars++;
 
     Future.delayed(const Duration(milliseconds: 1500), () async {
       if (!mounted) return;
-      final ctx = context; // capture before async gap
+      StarRewardWidget.show(context);
       if (_currentPuzzle + 1 >= _puzzles.length) {
-        await _progressService.deleteProgress(_activityId);
-        if (!mounted) return;
-        // All puzzles done
-        // ignore: use_build_context_synchronously
-        CompletionFeedbackOverlay.show(
-          context: ctx, // ignore: use_build_context_synchronously
-          activityId: _activityId,
-          activityName: 'Emoji Puzzle',
-          starGameKey: StarService.emojiPuzzle,
-          starsEarned: 3,
-          scoreValue: _stars,
-          scoreMax: _puzzles.length,
-          onPlayAgain: () {
-            setState(() {
-              _currentPuzzle = 0;
-              _stars = 0;
-            });
-            _setupPuzzle();
-          },
-        );
+        // All puzzles done — restart from beginning
+        setState(() => _currentPuzzle = 0);
       } else {
-        // ignore: use_build_context_synchronously
-        StarRewardWidget.show(ctx);
         setState(() => _currentPuzzle++);
-        _setupPuzzle();
-        await _saveProgress();
       }
+      _setupPuzzle();
+      await _saveProgress();
     });
   }
 
@@ -303,7 +263,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                       const HelpButton(
                         activityId: 'game_emoji_puzzle',
                         activityEmoji: '🧩',
-                        activityName: 'Emoji Puzzle',
+                        activityName: 'EMOZZLE',
                       ),
                       const SizedBox(width: 10),
                       Container(
@@ -313,7 +273,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_stars', style: _cute(sz: 26)),
+                        child: Text('⭐ $_sessionStars', style: _cute(sz: 26)),
                       ),
                     ],
                   ),
@@ -379,9 +339,20 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
               final placedPiece = _boardSlots[slotIndex];
               final isHovered =
                   _hoveredSlot == slotIndex && _boardSlots[slotIndex] == null;
-              final isHintSlot = _draggedPiece != null &&
-                  _draggedPiece == slotIndex &&
-                  _boardSlots[slotIndex] == null;
+              // Adaptive hint: 0 errors = no hint, 1 error = hint only for
+              // the piece being dragged, 2+ errors = hint for all empty slots
+              final bool isHintSlot;
+              if (_levelErrors == 0 || _draggedPiece == null) {
+                isHintSlot = false;
+              } else if (_levelErrors == 1) {
+                // Highlight only the correct slot for the dragged piece
+                isHintSlot = _draggedPiece == slotIndex &&
+                    _boardSlots[slotIndex] == null;
+              } else {
+                // 2+ errors: highlight every empty slot that matches a tray piece
+                isHintSlot = _boardSlots[slotIndex] == null &&
+                    _trayPieces.contains(slotIndex);
+              }
 
               return DragTarget<int>(
                 onWillAcceptWithDetails: (details) {

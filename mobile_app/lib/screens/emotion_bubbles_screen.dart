@@ -3,11 +3,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/data/game_emojis.dart';
+import '../core/services/star_service.dart';
+import '../core/widgets/star_reward_widget.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
-import '../features/child/presentation/completion_feedback_overlay.dart';
-import '../core/services/star_service.dart';
 import '../features/child/services/activity_progress_service.dart';
 
 /// Emotion Bubbles Pop — Colored bubbles float up, child taps the one
@@ -77,16 +77,15 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   late Map<String, dynamic> _targetEmotion;
   final List<_Bubble> _bubbles = [];
   Timer? _ticker;
-  int _score = 0;
-  int _round = 0;
-  final int _maxRounds = 48;
+  int _sessionStars = 0;
+  int _round = 0; // for difficulty adaptation
   bool _showFeedback = false;
   bool _feedbackCorrect = false;
-  bool _gameOver = false;
 
   // Difficulty (adaptive)
   int _numBubbles = 4; // how many on screen at once
   double _baseSpeed = 0.003;
+  int _levelErrors = 0; // errors for current target emoji
 
   @override
   void initState() {
@@ -103,39 +102,37 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     final saved = await _progressService.loadProgress(_activityId);
     if (!mounted || saved == null) return;
     final data = saved.progressData;
-    final savedScore = data['score'];
-    final savedRound = data['round'];
+    final savedOrder = data['targetOrder'];
+    final savedIndex = data['targetIndex'];
     final savedNumBubbles = data['numBubbles'];
     final savedBaseSpeed = data['baseSpeed'];
-    final savedTargetName = data['targetEmotionName'];
-    if (savedScore is! int ||
-        savedRound is! int ||
+    if (savedOrder is! List ||
+        savedIndex is! int ||
         savedNumBubbles is! int ||
-        savedBaseSpeed is! double ||
-        savedTargetName is! String) {
+        savedBaseSpeed is! double) {
       return;
     }
-    // Find matching emotion
-    final matchedEmotion = _emotions.firstWhere(
-      (e) => e['name'] == savedTargetName,
-      orElse: () => _emotions.first,
-    );
+    final order = savedOrder.whereType<num>().map((n) => n.toInt()).toList();
+    if (order.isEmpty || !order.every((i) => i >= 0 && i < _emotions.length)) {
+      return;
+    }
     setState(() {
-      _score = savedScore;
-      _round = savedRound.clamp(0, _maxRounds - 1);
+      _targetOrder = order;
+      _targetIndex = savedIndex.clamp(0, order.length);
       _numBubbles = savedNumBubbles.clamp(3, 6);
       _baseSpeed = savedBaseSpeed.clamp(0.001, 0.006);
-      _targetEmotion = matchedEmotion;
+      _sessionStars = 0; // always start at 0
+      _round = _targetIndex; // approximate for difficulty
     });
+    _pickTarget();
     _spawnBubbles();
   }
 
   Map<String, dynamic> _buildProgressData() => {
-        'score': _score,
-        'round': _round,
+        'targetOrder': _targetOrder,
+        'targetIndex': _targetIndex,
         'numBubbles': _numBubbles,
         'baseSpeed': _baseSpeed,
-        'targetEmotionName': _targetEmotion['name'] as String,
       };
 
   Future<void> _handleReturnPressed() async {
@@ -147,6 +144,8 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       activityId: _activityId,
       activityEmoji: '🫧',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emotionBubbles,
+      sessionStars: _sessionStars,
     );
     // If still mounted, user chose Keep Playing — restart ticker
     if (mounted) {
@@ -163,7 +162,6 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
 
   void _pickTarget() {
     _targetEmotion = _emotions[_targetOrder[_targetIndex % _emotions.length]];
-    _targetIndex++;
     _engine.markPromptShown();
   }
 
@@ -181,7 +179,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     selected.shuffle(_rng);
 
     // Distribute bubbles evenly across x so they never overlap
-    final step = 0.8 / selected.length; // e.g. 4 bubbles -> 0.2 apart
+    final step = 0.8 / selected.length;
     for (int i = 0; i < selected.length; i++) {
       final e = selected[i];
       _bubbles.add(_Bubble(
@@ -197,7 +195,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   }
 
   void _tick() {
-    if (_gameOver || _showFeedback) return;
+    if (_showFeedback) return;
     setState(() {
       for (final b in _bubbles) {
         if (!b.popped) {
@@ -206,9 +204,15 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       }
       // Remove bubbles that floated off-screen
       _bubbles.removeWhere((b) => b.y < -0.2 && !b.popped);
-      // If all gone without correct tap, respawn
+      // If all gone without correct tap, respawn with easier settings
       if (_bubbles.where((b) => !b.popped).isEmpty) {
         _engine.trackError();
+        _levelErrors++;
+        // Reduce bubbles when they all float away
+        if (_levelErrors >= 2) {
+          _numBubbles = max(2, _numBubbles - 1);
+        }
+        _baseSpeed = max(0.001, _baseSpeed - 0.0005); // slow them down
         _adaptDifficulty();
         _spawnBubbles();
       }
@@ -223,49 +227,45 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       // Correct!
       setState(() {
         bubble.popped = true;
-        _score++;
         _feedbackCorrect = true;
         _showFeedback = true;
         _engine.resetErrors();
+        _levelErrors = 0; // reset for next level
       });
-      // Award 1 star per correct pop
-      StarService.addStars(StarService.emotionBubbles, 1);
+      _sessionStars++;
     } else {
-      // Wrong
+      // Wrong — track per-level error and reduce bubbles adaptively
       setState(() {
         bubble.popped = true;
         _feedbackCorrect = false;
         _showFeedback = true;
         _engine.trackError();
+        _levelErrors++;
+        // Adaptive: reduce bubbles on errors
+        if (_levelErrors == 1) {
+          _numBubbles = max(3, _numBubbles - 1);
+        } else if (_levelErrors >= 2) {
+          _numBubbles = max(2, _numBubbles - 1);
+        }
       });
     }
 
     Future.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
-      _round++;
-      if (_round >= _maxRounds) {
-        // UCD018 — show completion feedback overlay.
-        _ticker?.cancel();
-        int stars = 0;
-        if (_score >= 1) stars++;
-        if (_score >= _maxRounds * 0.6) stars++;
-        if (_score >= _maxRounds * 0.85) stars++;
-        CompletionFeedbackOverlay.show(
-          context: context,
-          activityId: 'game_bubble_pop',
-          activityName: 'Emotion Bubbles',
-          starGameKey: StarService.emotionBubbles,
-          starsEarned: stars,
-          scoreValue: _score,
-          scoreMax: _maxRounds,
-          onPlayAgain: _restart,
-        );
-      } else {
-        _adaptDifficulty();
-        _pickTarget();
-        _spawnBubbles();
-        setState(() => _showFeedback = false);
+      if (_feedbackCorrect) {
+        StarRewardWidget.show(context);
+        _targetIndex++;
+        // When all 48 done, reshuffle and start over
+        if (_targetIndex >= _emotions.length) {
+          _targetOrder = _buildFeelingsFirstOrder();
+          _targetIndex = 0;
+        }
       }
+      _round++;
+      _adaptDifficulty();
+      _pickTarget();
+      _spawnBubbles();
+      setState(() => _showFeedback = false);
     });
   }
 
@@ -274,7 +274,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       // Make easier
       _numBubbles = max(3, _numBubbles - 1);
       _baseSpeed = max(0.001, _baseSpeed - 0.0005);
-    } else if (_score > _round * 0.7) {
+    } else if (_sessionStars > _round * 0.7) {
       // Doing great → harder
       _numBubbles = min(6, _numBubbles + 1);
       _baseSpeed = min(0.006, _baseSpeed + 0.0005);
@@ -282,21 +282,6 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     if (_engine.isOverloaded) {
       _baseSpeed = max(0.001, _baseSpeed - 0.001);
     }
-  }
-
-  void _restart() {
-    _engine.reset();
-    _score = 0;
-    _round = 0;
-    _gameOver = false;
-    _showFeedback = false;
-    _numBubbles = 4;
-    _baseSpeed = 0.003;
-    _targetOrder = _buildFeelingsFirstOrder();
-    _targetIndex = 0;
-    _pickTarget();
-    _spawnBubbles();
-    setState(() {});
   }
 
   TextStyle _cute(
@@ -372,7 +357,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                   );
                 }),
 
-                // Header: target prompt (compact single row like Emotion Path)
+                // Header: target prompt
                 Positioned(
                   top: 20,
                   left: 0,
@@ -410,7 +395,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                   ),
                 ),
 
-                // Hint + Star (matched to Emoji Puzzle)
+                // Hint + Star
                 Positioned(
                   top: 14,
                   right: 16,
@@ -419,7 +404,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                       const HelpButton(
                         activityId: 'game_bubble_pop',
                         activityEmoji: '🫧',
-                        activityName: 'Bubble Pop',
+                        activityName: 'EMOPOP',
                       ),
                       const SizedBox(width: 10),
                       Container(
@@ -429,7 +414,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_score / $_maxRounds',
+                        child: Text('⭐ $_sessionStars',
                             style: _cute(size: 26)),
                       ),
                     ],
@@ -457,51 +442,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                     ),
                   ),
 
-                // Game over
-                if (_gameOver)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(40),
-                      margin: const EdgeInsets.all(30),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black26, blurRadius: 20)
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('🎉', style: TextStyle(fontSize: 70)),
-                          const SizedBox(height: 16),
-                          Text('Amazing!',
-                              style: _cute(
-                                  size: 40,
-                                  weight: FontWeight.w900,
-                                  color: const Color(0xFF6B21A8))),
-                          const SizedBox(height: 10),
-                          Text('You got $_score / $_maxRounds',
-                              style: _cute(size: 28, color: Colors.black54)),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _restart,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4ECDC4),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 40, vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(25)),
-                            ),
-                            child:
-                                Text('Play Again! 🔄', style: _cute(size: 24)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Back button (UCD016: exit with save prompt)
+                // Back button
                 Positioned(
                   top: 20,
                   left: 20,

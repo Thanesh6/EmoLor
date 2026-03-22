@@ -37,7 +37,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
   late List<Map<String, String>> _shuffledEmojis;
 
   int _currentIndex = 0;
-  int _stars = 0;
+  int _sessionStars = 0;
   String _currentWord = '';
   String _currentEmoji = '';
   List<String> _scrambledLetters = [];
@@ -70,11 +70,8 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     if (!mounted || saved == null) return;
     final data = saved.progressData;
     final savedIndex = data['currentIndex'];
-    final savedStars = data['stars'];
     final savedWordOrder = data['wordOrder'];
-    if (savedIndex is! int || savedStars is! int || savedWordOrder is! List)
-      return;
-    // Reconstruct the same shuffled order from saved word keys
+    if (savedIndex is! int || savedWordOrder is! List) return;
     final wordList = savedWordOrder.whereType<String>().toList();
     if (wordList.isEmpty) return;
     final restored = wordList
@@ -87,46 +84,18 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     if (restored.isEmpty) return;
     final clampedIndex = savedIndex.clamp(0, restored.length - 1);
 
-    // Restore mid-word state if available
-    final savedTyped = data['typedSoFar'];
-    final savedScrambled = data['scrambledLetters'];
-    final savedLetterUsed = data['letterUsed'];
-    final hasWordState = savedTyped is String &&
-        savedScrambled is List &&
-        savedLetterUsed is List;
-
+    // Resume at saved level, restart word fresh (no mid-word state)
     setState(() {
       _shuffledEmojis = restored;
       _currentIndex = clampedIndex;
-      _stars = savedStars.clamp(0, restored.length);
+      _sessionStars = 0; // always start session at 0
     });
-
-    if (hasWordState) {
-      // Load the word visuals first, then override with saved letter state
-      _loadWord();
-      final scrambled = savedScrambled!.whereType<String>().toList();
-      final letterUsed = savedLetterUsed!.map((v) => v == true).toList();
-      if (scrambled.isNotEmpty && letterUsed.length == scrambled.length) {
-        setState(() {
-          _scrambledLetters = scrambled;
-          _letterUsed = letterUsed;
-          _typedSoFar = savedTyped as String;
-        });
-      }
-    } else {
-      _loadWord();
-    }
+    _loadWord();
   }
 
   Map<String, dynamic> _buildProgressData() => {
         'currentIndex': _currentIndex,
-        'stars': _stars,
-        // Save the full shuffled word order so it can be restored identically
         'wordOrder': _shuffledEmojis.map((e) => e['word'] as String).toList(),
-        // Mid-word state so quitting halfway is fully restored
-        'typedSoFar': _typedSoFar,
-        'scrambledLetters': _scrambledLetters,
-        'letterUsed': _letterUsed,
       };
 
   Future<void> _handleReturnPressed() async {
@@ -135,6 +104,8 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
       activityId: _activityId,
       activityEmoji: '🔤',
       buildProgressData: _buildProgressData,
+      starGameKey: StarService.emojiSpell,
+      sessionStars: _sessionStars,
     );
   }
 
@@ -197,9 +168,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     setState(() => _showCorrect = true);
     _bounceController.forward(from: 0);
 
-    // Award 1 star per word
-    StarService.addStars(StarService.safeOrNot, 1);
-    _stars++;
+    _sessionStars++;
 
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
@@ -375,7 +344,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
                       const HelpButton(
                         activityId: 'game_emoji_spell',
                         activityEmoji: '🔤',
-                        activityName: 'Emoji Spell',
+                        activityName: 'EMOSPELL',
                       ),
                       const SizedBox(width: 10),
                       Container(
@@ -385,7 +354,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
                           color: const Color(0xFF7C3AED),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_stars', style: _cute(sz: 26)),
+                        child: Text('⭐ $_sessionStars', style: _cute(sz: 26)),
                       ),
                     ],
                   ),

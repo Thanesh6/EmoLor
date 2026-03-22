@@ -24,6 +24,10 @@ class StarService {
   static const drawing = 'drawing';
   static const stories = 'stories';
   static const emotionMatch = 'emotion_match';
+  static const emojiSpell = 'emoji_spell';
+  static const emotionSorting = 'emotion_sorting';
+  static const emotionSlash = 'emotion_slash';
+  static const emotionCatcher = 'emotion_catcher';
 
   static final List<String> allGames = [
     emotionPath,
@@ -37,13 +41,18 @@ class StarService {
     drawing,
     stories,
     emotionMatch,
+    emojiSpell,
+    emotionSorting,
+    emotionSlash,
+    emotionCatcher,
   ];
 
-  /// Add [stars] earned from [game]. Caps each game at 3 per session.
+  /// Add [stars] earned from [game]. Stars accumulate without cap.
   static Future<void> addStars(String game, int stars) async {
+    if (stars <= 0) return;
     final prefs = await SharedPreferences.getInstance();
     final current = prefs.getInt('$_prefix$game') ?? 0;
-    await prefs.setInt('$_prefix$game', current + stars.clamp(0, 3));
+    await prefs.setInt('$_prefix$game', current + stars);
   }
 
   /// Get total stars earned for [game].

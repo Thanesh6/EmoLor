@@ -239,22 +239,53 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                   child: AnimatedBuilder(
                     animation: _pulseController,
                     builder: (context, child) {
+                      final titleText = 'WELCOME TO EMOLOR, ${(_resolvedChildName ?? 'CHILD').toUpperCase()}';
+                      final avatarText = ' ${_avatarEmoji ?? '😊'}';
+                      final baseStyle = GoogleFonts.fredoka(
+                        fontSize: 37,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.5,
+                      );
                       return Transform.scale(
                         scale: _scaleAnim.value,
-                        child: Text(
-                          'WELCOME TO EMOLOR, ${(_resolvedChildName ?? 'CHILD').toUpperCase()} ${_avatarEmoji ?? '😊'}',
-                          style: GoogleFonts.fredoka(
-                            fontSize: 37,
-                            fontWeight: FontWeight.w700,
-                            color: _colorAnim.value,
-                            letterSpacing: 1.5,
-                            shadows: const [
-                              Shadow(
-                                  offset: Offset(2, 2),
-                                  blurRadius: 6,
-                                  color: Colors.black38),
-                            ],
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Title text with gold shiny outline
+                            Stack(
+                              children: [
+                                // Gold outline (stroke)
+                                Text(
+                                  titleText,
+                                  style: baseStyle.copyWith(
+                                    foreground: Paint()
+                                      ..style = PaintingStyle.stroke
+                                      ..strokeWidth = 2.5
+                                      ..color = const Color(0xFFFFD700),
+                                  ),
+                                ),
+                                // White fill on top
+                                Text(
+                                  titleText,
+                                  style: baseStyle.copyWith(
+                                    color: _colorAnim.value,
+                                    shadows: const [
+                                      Shadow(
+                                        offset: Offset(2, 2),
+                                        blurRadius: 6,
+                                        color: Colors.black38,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Avatar emoji — normal, no outline
+                            Text(
+                              avatarText,
+                              style: const TextStyle(fontSize: 37),
+                            ),
+                          ],
                         ),
                       );
                     },
