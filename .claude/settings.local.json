@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter devices:*)",
+      "Bash(flutter run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(taskkill //F //IM \"dart.exe\")",
+      "Bash(taskkill //F //IM \"flutter.exe\")"
+    ]
+  }
+}

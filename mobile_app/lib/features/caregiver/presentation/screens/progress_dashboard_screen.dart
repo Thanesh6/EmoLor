@@ -86,7 +86,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     FontWeight weight = FontWeight.w400,
     Color color = Colors.black87,
   }) {
-    return GoogleFonts.poppins(
+    return GoogleFonts.baloo2(
         fontSize: size, fontWeight: weight, color: color);
   }
 
@@ -233,7 +233,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           Text(
             'Progress Dashboard',
             style: _poppins(
-              size: 26,
+              size: 34,
               weight: FontWeight.w700,
               color: const Color(0xFF6B21A8),
             ),
@@ -241,7 +241,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           const SizedBox(height: 4),
           Text(
             'Weekly overview of your child\'s learning journey',
-            style: _poppins(size: 14, color: Colors.grey[600]!),
+            style: _poppins(size: 18, color: Colors.grey[600]!),
           ),
           const SizedBox(height: 28),
 
@@ -249,32 +249,39 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           _buildSummaryRow(data),
           const SizedBox(height: 28),
 
-          // Mood Trends chart
+          // Emotion Trends chart
           _buildSection(
-            title: 'Mood Trends (This Week)',
+            title: 'Emotion Trends (This Week)',
             icon: Icons.insights,
             child: _buildMoodChart(data.weeklyMoods),
           ),
           const SizedBox(height: 24),
 
-          // Activity Completion
-          _buildSection(
-            title: 'Activity Completion',
-            icon: Icons.emoji_events,
-            child: _buildActivityStats(data),
+          // Activity Completion & Earned Rewards side by side
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _buildSection(
+                  title: 'Activity Completion',
+                  icon: Icons.emoji_events,
+                  child: _buildActivityStats(data),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildSection(
+                  title: 'Earned Rewards',
+                  icon: Icons.workspace_premium,
+                  child: _buildBadgeGrid(data.earnedBadges),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 
           // Active Goals (UCD024)
           _buildGoalsSection(),
-          const SizedBox(height: 24),
-
-          // Badges
-          _buildSection(
-            title: 'Earned Badges',
-            icon: Icons.workspace_premium,
-            child: _buildBadgeGrid(data.earnedBadges),
-          ),
 
           if (data.recentCompletions.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -307,7 +314,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           ),
           _summaryCard(
             '🏅',
-            'Badges',
+            'Rewards',
             '${data.earnedBadges.length}',
             Colors.purple,
           ),
@@ -359,12 +366,17 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 28)),
-          const SizedBox(height: 8),
-          Text(value, style: _poppins(size: 24, weight: FontWeight.w700)),
-          Text(label, style: _poppins(size: 13, color: Colors.grey[600]!)),
+          Text(emoji, style: const TextStyle(fontSize: 34)),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: _poppins(size: 34, weight: FontWeight.w700)),
+              Text(label, style: _poppins(size: 19, color: Colors.grey[600]!)),
+            ],
+          ),
         ],
       ),
     );
@@ -396,9 +408,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF6B21A8), size: 22),
+              Icon(icon, color: const Color(0xFF6B21A8), size: 26),
               const SizedBox(width: 10),
-              Text(title, style: _poppins(size: 18, weight: FontWeight.w700)),
+              Text(title, style: _poppins(size: 26, weight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 18),
@@ -413,15 +425,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   Widget _buildMoodChart(List<DailyMood> week) {
     final hasAnyMoods = week.any((d) => d.entries.isNotEmpty);
     if (!hasAnyMoods) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: Text(
-            'No moods logged this week yet.',
-            style: _poppins(size: 14, color: Colors.grey[500]!),
-          ),
-        ),
-      );
+      return _buildSampleEmotionBars();
     }
 
     return SizedBox(
@@ -645,11 +649,11 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           // Header row with Add button
           Row(
             children: [
-              const Icon(Icons.flag, color: Color(0xFF6B21A8), size: 22),
+              const Icon(Icons.flag, color: Color(0xFF6B21A8), size: 26),
               const SizedBox(width: 10),
               Expanded(
                 child: Text('Goals',
-                    style: _poppins(size: 18, weight: FontWeight.w700)),
+                    style: _poppins(size: 26, weight: FontWeight.w700)),
               ),
               TextButton.icon(
                 onPressed: _openNewGoalDialog,
@@ -672,22 +676,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
 
           // Goal list
           if (_goals.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Column(
-                  children: [
-                    const Text('🎯', style: TextStyle(fontSize: 36)),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No goals yet. Tap "Add New Goal" to get started!',
-                      style: _poppins(size: 14, color: Colors.grey[500]!),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            )
+            ..._buildSampleGoals()
           else
             ..._goals.map(_buildGoalCard),
         ],
@@ -806,6 +795,142 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
         ],
       ),
     );
+  }
+
+  // ── Sample emotion bars (shown when no moods logged) ───────────
+
+  Widget _buildSampleEmotionBars() {
+    final sampleEmotions = [
+      {'label': 'Happy', 'value': 0.8, 'color': Colors.green},
+      {'label': 'Calm', 'value': 0.65, 'color': Colors.blue},
+      {'label': 'Excited', 'value': 0.45, 'color': Colors.orange},
+      {'label': 'Tired', 'value': 0.25, 'color': Colors.grey},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sampleEmotions.map((e) {
+        final label = e['label'] as String;
+        final value = e['value'] as double;
+        final color = e['color'] as Color;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(label,
+                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                  Text('${(value * 100).toInt()}%',
+                      style: _poppins(
+                          size: 14, color: color, weight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 10,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Sample goals (shown when no goals set) ────────────────────
+
+  List<Widget> _buildSampleGoals() {
+    final sampleGoals = [
+      {
+        'label': 'Complete 5 activities',
+        'progress': 0.6,
+        'current': 3,
+        'target': 5,
+        'color': Colors.blue,
+        'emoji': '🎮',
+      },
+      {
+        'label': 'Earn 10 stars',
+        'progress': 0.4,
+        'current': 4,
+        'target': 10,
+        'color': Colors.orange,
+        'emoji': '⭐',
+      },
+      {
+        'label': 'Log emotions daily',
+        'progress': 0.85,
+        'current': 6,
+        'target': 7,
+        'color': Colors.green,
+        'emoji': '📝',
+      },
+    ];
+
+    return sampleGoals.map((g) {
+      final label = g['label'] as String;
+      final progress = g['progress'] as double;
+      final current = g['current'] as int;
+      final target = g['target'] as int;
+      final color = g['color'] as Color;
+      final emoji = g['emoji'] as String;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3E8FF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE1BEE7)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 22)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(label,
+                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 8,
+                      backgroundColor: Colors.grey[200],
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '$current / $target',
+                  style: _poppins(
+                      size: 12, weight: FontWeight.w600, color: color),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   // ── Badge grid ──────────────────────────────────────────────────
