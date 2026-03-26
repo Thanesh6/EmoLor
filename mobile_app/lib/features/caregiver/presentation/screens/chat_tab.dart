@@ -84,15 +84,19 @@ class _ChatTabState extends State<ChatTab> {
     });
 
     try {
-      // Get my name
+      // Get my name — prefer auth metadata to avoid profiles RLS recursion
       String myName = 'Me';
       try {
-        final me = await SupabaseService.client
-            .from('profiles')
-            .select('full_name')
-            .eq('user_id', _myUserId)
-            .maybeSingle();
-        myName = (me?['full_name'] as String?) ?? 'Me';
+        final user = SupabaseService.client.auth.currentUser;
+        myName = user?.userMetadata?['full_name'] as String? ?? 'Me';
+        if (myName == 'Me') {
+          final me = await SupabaseService.client
+              .from('profiles')
+              .select('full_name')
+              .eq('user_id', _myUserId)
+              .maybeSingle();
+          myName = (me?['full_name'] as String?) ?? 'Me';
+        }
       } catch (_) {}
 
       final contactId = contact['user_id'] as String;

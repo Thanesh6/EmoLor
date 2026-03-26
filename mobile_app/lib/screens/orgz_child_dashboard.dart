@@ -22,9 +22,15 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
 
   // Form
   final _nameController = TextEditingController();
-  final _dobController = TextEditingController();
-  DateTime? _selectedDob;
+  final _ageController = TextEditingController();
+  String? _selectedAvatar;
   bool _isCreating = false;
+
+  final List<String> _avatarOptions = [
+    '👧', '👦', '🧒', '👶',
+    '🦄', '🐻', '🐼', '🐨',
+    '🦊', '🐱', '🐶', '🐰',
+  ];
 
   @override
   void initState() {
@@ -35,7 +41,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
   @override
   void dispose() {
     _nameController.dispose();
-    _dobController.dispose();
+    _ageController.dispose();
     super.dispose();
   }
 
@@ -58,18 +64,32 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
 
   Future<void> _createChild() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a name'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
 
     setState(() => _isCreating = true);
     try {
+      // Calculate DOB from age for backend
+      DateTime? dob;
+      final age = int.tryParse(_ageController.text.trim());
+      if (age != null && age > 0) {
+        final now = DateTime.now();
+        dob = DateTime(now.year - age, now.month, now.day);
+      }
+
       final profile = await _profileService.createChildProfile(
         name: name,
-        dateOfBirth: _selectedDob,
+        dateOfBirth: dob,
+        avatarUrl: _selectedAvatar,
       );
       if (mounted) {
         _nameController.clear();
-        _dobController.clear();
-        _selectedDob = null;
+        _ageController.clear();
+        _selectedAvatar = null;
         setState(() {
           _showCreateForm = false;
           _isCreating = false;
@@ -90,23 +110,6 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
           ),
         );
       }
-    }
-  }
-
-  Future<void> _pickDob() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(now.year - 5),
-      firstDate: DateTime(2005),
-      lastDate: now,
-    );
-    if (picked != null && mounted) {
-      setState(() {
-        _selectedDob = picked;
-        _dobController.text =
-            '${picked.day}/${picked.month}/${picked.year}';
-      });
     }
   }
 
@@ -155,89 +158,187 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
       child: Row(
         children: [
-          // Logout button
+          // Logout button — 20% bigger
           GestureDetector(
             onTap: () => _confirmLogout(),
             child: Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
-                border: Border.all(color: const Color(0xFFFF6B6B), width: 2),
+                border: Border.all(color: const Color(0xFFFF6B6B), width: 2.5),
               ),
               child: const Icon(Icons.logout_rounded,
-                  color: Color(0xFFFF6B6B), size: 22),
+                  color: Color(0xFFFF6B6B), size: 28),
             ),
           ),
           const Spacer(),
-          // Title
+          // Title — 45% bigger, purple
           Text(
-            'EmoLor',
+            'EMOLOR',
             style: GoogleFonts.baloo2(
-              fontSize: 32,
+              fontSize: 46,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: const Color(0xFF6B21A8),
               shadows: const [
                 Shadow(
-                    offset: Offset(2, 2),
-                    blurRadius: 4,
-                    color: Colors.black26),
+                    offset: Offset(1, 1),
+                    blurRadius: 3,
+                    color: Colors.black12),
               ],
             ),
           ),
           const Spacer(),
           // Placeholder for symmetry
-          const SizedBox(width: 44),
+          const SizedBox(width: 56),
         ],
       ),
     );
   }
 
   Widget _buildProfileList() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Who\'s Playing Today?',
-            style: GoogleFonts.baloo2(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              shadows: const [
-                Shadow(
-                    offset: Offset(2, 2),
-                    blurRadius: 4,
-                    color: Colors.black26),
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          children: [
+            const SizedBox(height: 34),
+            Text(
+              "Who's Playing Today?",
+              style: GoogleFonts.baloo2(
+                fontSize: 48,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF6B21A8),
+                shadows: const [
+                  Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black12),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Select a child to start playing',
+              style: GoogleFonts.baloo2(
+                fontSize: 25,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 50),
+            // Circular profile avatars in a wrap
+            Wrap(
+              spacing: 40,
+              runSpacing: 34,
+              alignment: WrapAlignment.center,
+              children: [
+                ..._profiles.map((profile) => _buildCircularProfile(profile)),
+                // Add profile button
+                _buildAddProfileCircle(),
               ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select a child or add a new one',
-            style: GoogleFonts.baloo2(
-              fontSize: 16,
-              color: Colors.white.withValues(alpha: 0.8),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircularProfile(ChildProfile profile) {
+    final avatarText = profile.avatarUrl ?? profile.name[0].toUpperCase();
+    final isEmoji = profile.avatarUrl != null && profile.avatarUrl!.length <= 2;
+
+    return GestureDetector(
+      onTap: () => _selectChild(profile),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFF6B21A8), width: 5),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6B21A8).withValues(alpha: 0.25),
+                  blurRadius: 22,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Center(
+              child: isEmoji
+                  ? Text(avatarText, style: const TextStyle(fontSize: 70))
+                  : Text(
+                      profile.name[0].toUpperCase(),
+                      style: GoogleFonts.baloo2(
+                        fontSize: 59,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF6B21A8),
+                      ),
+                    ),
             ),
           ),
-          const SizedBox(height: 24),
-          // Child profile cards
-          ..._profiles.map((profile) => _buildProfileCard(profile)),
-          const SizedBox(height: 16),
-          // Add child button
-          _buildAddChildButton(),
-          const SizedBox(height: 32),
+          const SizedBox(height: 14),
+          Text(
+            profile.name,
+            style: GoogleFonts.baloo2(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF4C1D95),
+            ),
+          ),
+          if (profile.age != null)
+            Text(
+              'Age ${profile.age}',
+              style: GoogleFonts.baloo2(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey[600],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddProfileCircle() {
+    return GestureDetector(
+      onTap: () => setState(() => _showCreateForm = true),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 140,
+            height: 140,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.6),
+              border: Border.all(color: const Color(0xFF6B21A8).withValues(alpha: 0.5), width: 4),
+            ),
+            child: const Center(
+              child: Icon(Icons.add_rounded, color: Color(0xFF6B21A8), size: 62),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Add Child',
+            style: GoogleFonts.baloo2(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -368,46 +469,33 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          const SizedBox(height: 20),
-          // Avatar placeholder
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.8),
-              border: Border.all(color: Colors.white, width: 4),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Text('👶', style: TextStyle(fontSize: 50)),
-            ),
-          ),
           const SizedBox(height: 16),
+          // Title — big purple font
           Text(
-            _profiles.isEmpty ? 'Create Your First Child' : 'Add a New Child',
+            'Create Profile',
             style: GoogleFonts.baloo2(
-              fontSize: 26,
+              fontSize: 53,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: const Color(0xFF6B21A8),
               shadows: const [
-                Shadow(
-                    offset: Offset(2, 2),
-                    blurRadius: 4,
-                    color: Colors.black26),
+                Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black12),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 6),
+          Text(
+            'Create profile of children',
+            style: GoogleFonts.baloo2(
+              fontSize: 25,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
+            ),
+          ),
+          const SizedBox(height: 28),
           // Form card
           Container(
-            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 640),
+            padding: const EdgeInsets.all(36),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
@@ -422,100 +510,120 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Child\'s Name',
-                  style: GoogleFonts.fredoka(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF4C1D95),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                // Name field
+                Text("Child's Name",
+                    style: GoogleFonts.baloo2(
+                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                const SizedBox(height: 10),
                 TextField(
                   controller: _nameController,
-                  style: GoogleFonts.fredoka(fontSize: 16),
+                  style: GoogleFonts.baloo2(fontSize: 25),
+                  textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(
-                    hintText: 'Enter child\'s name',
-                    hintStyle: GoogleFonts.fredoka(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.person_outline_rounded,
-                        color: Color(0xFF6D28D9)),
+                    hintText: 'e.g. Thanesh',
+                    hintStyle: GoogleFonts.baloo2(fontSize: 22, color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFF6B21A8), size: 30),
                     filled: true,
                     fillColor: const Color(0xFFF5F3FF),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
+                        borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(
-                          color: Color(0xFF6D28D9), width: 2),
-                    ),
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(color: Color(0xFF6B21A8), width: 2)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  'Date of Birth (Optional)',
-                  style: GoogleFonts.fredoka(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF4C1D95),
-                  ),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 24),
+
+                // Age field
+                Text('Age',
+                    style: GoogleFonts.baloo2(
+                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                const SizedBox(height: 10),
                 TextField(
-                  controller: _dobController,
-                  readOnly: true,
-                  onTap: _pickDob,
-                  style: GoogleFonts.fredoka(fontSize: 16),
+                  controller: _ageController,
+                  style: GoogleFonts.baloo2(fontSize: 25),
+                  keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    hintText: 'Tap to select date',
-                    hintStyle: GoogleFonts.fredoka(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.cake_outlined,
-                        color: Color(0xFF6D28D9)),
+                    hintText: 'e.g. 7',
+                    hintStyle: GoogleFonts.baloo2(fontSize: 22, color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.cake_rounded, color: Color(0xFF6B21A8), size: 30),
                     filled: true,
                     fillColor: const Color(0xFFF5F3FF),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
+                        borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(
-                          color: Color(0xFF6D28D9), width: 2),
-                    ),
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(color: Color(0xFF6B21A8), width: 2)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 30),
+
+                // Avatar selection
+                Text('Choose an Avatar',
+                    style: GoogleFonts.baloo2(
+                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                const SizedBox(height: 16),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 6,
+                    childAspectRatio: 1,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                  ),
+                  itemCount: _avatarOptions.length,
+                  itemBuilder: (context, index) {
+                    final avatar = _avatarOptions[index];
+                    final isSelected = _selectedAvatar == avatar;
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedAvatar = avatar),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFF6B21A8).withValues(alpha: 0.15)
+                              : const Color(0xFFF5F3FF),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFF6B21A8) : Colors.grey[300]!,
+                            width: isSelected ? 3.5 : 2,
+                          ),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: const Color(0xFF6B21A8).withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4))]
+                              : [],
+                        ),
+                        child: Center(
+                          child: Text(avatar, style: TextStyle(fontSize: isSelected ? 42 : 36)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 32),
+
                 // Create button
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 72,
                   child: ElevatedButton(
                     onPressed: _isCreating ? null : _createChild,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6D28D9),
+                      backgroundColor: const Color(0xFF6B21A8),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                      elevation: 4,
+                      shadowColor: const Color(0xFF6B21A8).withValues(alpha: 0.4),
                     ),
                     child: _isCreating
                         ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
+                            width: 30, height: 30,
+                            child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
                           )
-                        : Text(
-                            'Create & Start Playing',
-                            style: GoogleFonts.fredoka(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        : Text('Create & Start Playing',
+                            style: GoogleFonts.baloo2(fontSize: 28, fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -528,12 +636,12 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
               onPressed: () => setState(() => _showCreateForm = false),
               child: Text(
                 'Back to profiles',
-                style: GoogleFonts.fredoka(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
+                style: GoogleFonts.baloo2(
+                  fontSize: 22,
+                  color: const Color(0xFF6B21A8),
+                  fontWeight: FontWeight.w600,
                   decoration: TextDecoration.underline,
-                  decorationColor: Colors.white,
+                  decorationColor: const Color(0xFF6B21A8),
                 ),
               ),
             ),

@@ -173,7 +173,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/caregiver-dashboard',
-        builder: (context, state) => const CaregiverDashboard(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return CaregiverDashboard(
+            childName: extra?['childName'] as String?,
+            showSwitchAccount: extra?['showSwitch'] == true,
+          );
+        },
       ),
       GoRoute(
         path: '/orgz-child-dashboard',

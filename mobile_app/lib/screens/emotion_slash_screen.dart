@@ -426,6 +426,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOSLASH',
       activityEmoji: '⚔️',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionSlash,

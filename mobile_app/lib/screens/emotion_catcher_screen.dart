@@ -366,6 +366,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOCATCH',
       activityEmoji: '🧺',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionCatcher,

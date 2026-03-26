@@ -90,6 +90,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOZZLE',
       activityEmoji: '🧩',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emojiPuzzle,

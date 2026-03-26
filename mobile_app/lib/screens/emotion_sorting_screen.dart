@@ -113,6 +113,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOSORT',
       activityEmoji: '📋',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionSorting,

@@ -31,9 +31,26 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   // Goals (loaded separately so they can refresh independently)
   List<PerformanceGoal> _goals = [];
 
+  // Week selector
+  late String _selectedWeek;
+  late List<String> _weekOptions;
+
+  List<String> _buildWeekOptions() {
+    final now = DateTime.now();
+    final options = <String>['This Week', 'Last Week'];
+    // One more week before last week as date range
+    final weekStart = now.subtract(Duration(days: now.weekday - 1 + 14));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    String fmt(DateTime d) => '${d.day}/${d.month}/${d.year}';
+    options.add('${fmt(weekStart)} – ${fmt(weekEnd)}');
+    return options;
+  }
+
   @override
   void initState() {
     super.initState();
+    _weekOptions = _buildWeekOptions();
+    _selectedWeek = _weekOptions.first;
     _dataFuture = _loadAll();
   }
 
@@ -41,7 +58,91 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     // Load emotion palette for colour mapping
     await _loadEmotionPalette();
     await _loadGoals();
-    return _service.loadProgress();
+
+    // "This Week" → real data from services, fallback to sample if empty
+    if (_selectedWeek == 'This Week') {
+      final real = await _service.loadProgress();
+      if (!real.isEmpty) return real;
+      // Show sample data so dashboard isn't empty initially
+      return _buildMockData(0);
+    }
+
+    // "Last Week" & previous → mock data
+    return _buildMockData(_selectedWeek == 'Last Week' ? 1 : 2);
+  }
+
+  /// Generate mock/sample progress data for display
+  /// weeksAgo: 0 = this week sample, 1 = last week, 2 = previous week
+  ProgressData _buildMockData(int weeksAgo) {
+    final now = DateTime.now();
+    final weekStart = now.subtract(Duration(days: now.weekday - 1 + 7 * weeksAgo));
+
+    // Mock daily moods
+    final weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final mockEmotions = ['happy', 'calm', 'excited', 'sad', 'happy', 'calm', 'happy'];
+    final daysWithData = weeksAgo == 0 ? 3 : (weeksAgo == 1 ? 6 : 4);
+    final weeklyMoods = List.generate(7, (i) {
+      final day = weekStart.add(Duration(days: i));
+      final hasData = i < daysWithData;
+      return DailyMood(
+        date: day,
+        dayLabel: weekDays[i],
+        entries: hasData
+            ? [MoodSnapshot(emotionId: mockEmotions[i], timestamp: day.add(const Duration(hours: 10)))]
+            : [],
+      );
+    });
+
+    // Mock activity stats — vary by week
+    final completedCount = weeksAgo == 0 ? 4 : (weeksAgo == 1 ? 8 : 5);
+    final totalTime = weeksAgo == 0 ? 1200 : (weeksAgo == 1 ? 2400 : 1500);
+    final mockStars = weeksAgo == 0 ? 6 : (weeksAgo == 1 ? 12 : 7);
+
+    final activityStats = ActivityStats(
+      totalCompleted: completedCount,
+      totalTimeSeconds: totalTime,
+      totalStarsEarned: mockStars,
+      averageScore: weeksAgo == 0 ? 72.0 : (weeksAgo == 1 ? 78.0 : 65.0),
+      completionsByActivity: weeksAgo == 0
+          ? {'EMOZZLE': 2, 'EMOPOP': 1, 'EMOSPELL': 1}
+          : (weeksAgo == 1
+              ? {'EMOZZLE': 3, 'EMOPOP': 2, 'EMOSPELL': 1, 'EMOSORT': 1, 'EMOSLASH': 1}
+              : {'EMOZZLE': 2, 'EMOPOP': 1, 'EMOCATCH': 1, 'EMOSORT': 1}),
+    );
+
+    // Mock completions
+    final mockCompletions = [
+      CompletionRecord(
+        activityId: 'game_emoji_puzzle', activityName: 'EMOZZLE',
+        starsEarned: 3, scoreValue: 85, scoreMax: 100,
+        timeSpentSeconds: 300, completedAt: weekStart.add(const Duration(days: 2, hours: 14)),
+      ),
+      CompletionRecord(
+        activityId: 'game_emotion_bubbles', activityName: 'EMOPOP',
+        starsEarned: 2, scoreValue: 70, scoreMax: 100,
+        timeSpentSeconds: 240, completedAt: weekStart.add(const Duration(days: 3, hours: 10)),
+      ),
+      CompletionRecord(
+        activityId: 'game_emotion_sorting', activityName: 'EMOSORT',
+        starsEarned: 1, scoreValue: 60, scoreMax: 100,
+        timeSpentSeconds: 180, completedAt: weekStart.add(const Duration(days: 4, hours: 16)),
+      ),
+    ];
+
+    return ProgressData(
+      weeklyMoods: weeklyMoods,
+      activityStats: activityStats,
+      starBreakdown: weeksAgo == 0
+          ? {'emoji_puzzle': 3, 'emotion_bubbles': 2, 'emoji_spell': 1}
+          : (weeksAgo == 1
+              ? {'emoji_puzzle': 5, 'emotion_bubbles': 3, 'emoji_spell': 2, 'emotion_sorting': 2}
+              : {'emoji_puzzle': 3, 'emotion_bubbles': 2, 'emotion_catcher': 2}),
+      totalStars: mockStars,
+      earnedBadges: weeksAgo <= 1
+          ? [Badge(id: 'first_star', title: 'First Star', emoji: '⭐', description: 'Earned first star', color: Colors.orange)]
+          : [],
+      recentCompletions: mockCompletions,
+    );
   }
 
   Future<void> _loadGoals() async {
@@ -201,19 +302,22 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   }
 
   Widget _buildEmpty() {
+    final isThisWeek = _selectedWeek == 'This Week';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('🎮', style: TextStyle(fontSize: 64)),
+          Text(isThisWeek ? '🎮' : '📊', style: const TextStyle(fontSize: 64)),
           const SizedBox(height: 16),
           Text(
-            'No activities yet',
+            isThisWeek ? 'No activities this week yet' : 'No data available',
             style: _poppins(size: 20, weight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
-            'Start playing to see progress here!',
+            isThisWeek
+                ? 'Play some games and your progress will show up here!'
+                : 'No progress was recorded for this period.',
             style: _poppins(size: 15, color: Colors.grey[600]!),
           ),
         ],
@@ -229,21 +333,83 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Text(
-            'Progress Dashboard',
-            style: _poppins(
-              size: 34,
-              weight: FontWeight.w700,
-              color: const Color(0xFF6B21A8),
-            ),
+          // Header with week selector
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Progress Dashboard',
+                      style: _poppins(
+                        size: 34,
+                        weight: FontWeight.w700,
+                        color: const Color(0xFF6B21A8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Weekly overview of your child\'s learning journey',
+                      style: _poppins(size: 18, weight: FontWeight.w600, color: Colors.grey[600]!),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (val) {
+                  setState(() {
+                    _selectedWeek = val;
+                    _dataFuture = _loadAll();
+                  });
+                },
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                offset: const Offset(0, 50),
+                itemBuilder: (_) => _weekOptions.map((w) => PopupMenuItem(
+                  value: w,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        w == _selectedWeek ? Icons.check_circle : Icons.circle_outlined,
+                        color: const Color(0xFF6B21A8),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(w, style: _poppins(size: 16, weight: w == _selectedWeek ? FontWeight.w700 : FontWeight.w500)),
+                    ],
+                  ),
+                )).toList(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE9D5FF)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.calendar_today, color: Color(0xFF6B21A8), size: 22),
+                      const SizedBox(width: 10),
+                      Text(_selectedWeek, style: _poppins(size: 18, weight: FontWeight.w600, color: const Color(0xFF6B21A8))),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.keyboard_arrow_down, color: Color(0xFF6B21A8), size: 22),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Weekly overview of your child\'s learning journey',
-            style: _poppins(size: 18, color: Colors.grey[600]!),
-          ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
 
           // Summary stats row
           _buildSummaryRow(data),
@@ -251,37 +417,60 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
 
           // Emotion Trends chart
           _buildSection(
-            title: 'Emotion Trends (This Week)',
+            title: 'Emotion Trends',
             icon: Icons.insights,
             child: _buildMoodChart(data.weeklyMoods),
           ),
           const SizedBox(height: 24),
 
-          // Activity Completion & Earned Rewards side by side
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _buildSection(
-                  title: 'Activity Completion',
-                  icon: Icons.emoji_events,
-                  child: _buildActivityStats(data),
+          // Activity Completion & Daily Activity side by side
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _buildSection(
+                    title: 'Activity Completion',
+                    icon: Icons.emoji_events,
+                    child: _buildActivityStats(data),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildSection(
-                  title: 'Earned Rewards',
-                  icon: Icons.workspace_premium,
-                  child: _buildBadgeGrid(data.earnedBadges),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildSection(
+                    title: 'Daily Activity',
+                    icon: Icons.show_chart,
+                    child: _buildDailyActivityChart(data),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
-          // Active Goals (UCD024)
-          _buildGoalsSection(),
+          // Engagement Time & Top Emotions side by side
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _buildSection(
+                    title: 'Engagement Time',
+                    icon: Icons.timer_outlined,
+                    child: _buildEngagementChart(data),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildSection(
+                    title: 'Top Emotions',
+                    icon: Icons.favorite,
+                    child: _buildTopEmotionsChart(data),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           if (data.recentCompletions.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -368,14 +557,24 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
       ),
       child: Row(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 34)),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value, style: _poppins(size: 34, weight: FontWeight.w700)),
-              Text(label, style: _poppins(size: 19, color: Colors.grey[600]!)),
-            ],
+          Text(emoji, style: const TextStyle(fontSize: 36)),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value, style: _poppins(size: 36, weight: FontWeight.w700)),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(label, style: _poppins(size: 22, color: Colors.grey[600]!)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -543,7 +742,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
         if (breakdown.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text('By Activity',
-              style: _poppins(size: 15, weight: FontWeight.w600)),
+              style: _poppins(size: 19, weight: FontWeight.w600)),
           const SizedBox(height: 10),
           ...breakdown.take(6).map((e) {
             final maxVal = breakdown.first.value
@@ -563,8 +762,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
       child: Row(
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
@@ -572,9 +771,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label, style: _poppins(size: 14)),
+            child: Text(label, style: _poppins(size: 18)),
           ),
-          Text(value, style: _poppins(size: 14, weight: FontWeight.w700)),
+          Text(value, style: _poppins(size: 18, weight: FontWeight.w700)),
         ],
       ),
     );
@@ -592,11 +791,11 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
             children: [
               Expanded(
                 child: Text(label,
-                    style: _poppins(size: 13), overflow: TextOverflow.ellipsis),
+                    style: _poppins(size: 16), overflow: TextOverflow.ellipsis),
               ),
               Text('$count',
                   style: _poppins(
-                      size: 13,
+                      size: 16,
                       weight: FontWeight.w600,
                       color: const Color(0xFF6B21A8))),
             ],
@@ -624,6 +823,198 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     final hrs = mins ~/ 60;
     final remMins = mins % 60;
     return '${hrs}h ${remMins}m';
+  }
+
+  // ── Daily Activity Line Chart ─────────────────────────────────
+  Widget _buildDailyActivityChart(ProgressData data) {
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // Sample data - counts per day
+    final counts = data.weeklyMoods.map((d) => d.entries.length.toDouble()).toList();
+    final maxY = counts.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+
+    return SizedBox(
+      height: 200,
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: 1,
+            getDrawingHorizontalLine: (_) => FlLine(
+              color: Colors.grey[200]!,
+              strokeWidth: 1,
+            ),
+          ),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, _) {
+                  final idx = value.toInt();
+                  if (idx >= 0 && idx < days.length) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(days[idx], style: _poppins(size: 13, weight: FontWeight.w600)),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          borderData: FlBorderData(show: false),
+          minY: 0,
+          maxY: maxY + 1,
+          lineBarsData: [
+            LineChartBarData(
+              spots: List.generate(counts.length, (i) => FlSpot(i.toDouble(), counts[i])),
+              isCurved: true,
+              color: const Color(0xFF6B21A8),
+              barWidth: 3,
+              dotData: FlDotData(
+                show: true,
+                getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                  radius: 5,
+                  color: const Color(0xFF6B21A8),
+                  strokeWidth: 2,
+                  strokeColor: Colors.white,
+                ),
+              ),
+              belowBarData: BarAreaData(
+                show: true,
+                color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Engagement Time Bar Chart ─────────────────────────────────
+  Widget _buildEngagementChart(ProgressData data) {
+    final games = ['EMOZZLE', 'EMOPOP', 'EMOSPELL', 'EMOSORT', 'EMOSLASH', 'EMOCATCH'];
+    final colors = [Colors.purple, Colors.blue, Colors.green, Colors.orange, Colors.red, Colors.teal];
+    // Sample engagement minutes per game
+    final mins = [18.0, 12.0, 15.0, 8.0, 22.0, 10.0];
+
+    return SizedBox(
+      height: 200,
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY: 25,
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipItem: (group, _, rod, __) {
+                return BarTooltipItem(
+                  '${games[group.x.toInt()]}\n${rod.toY.toInt()} min',
+                  _poppins(size: 12, weight: FontWeight.w600, color: Colors.white),
+                );
+              },
+            ),
+          ),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, _) {
+                  final idx = value.toInt();
+                  if (idx >= 0 && idx < games.length) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        games[idx].substring(0, 4),
+                        style: _poppins(size: 11, weight: FontWeight.w600),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          barGroups: List.generate(games.length, (i) {
+            return BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: mins[i],
+                  color: colors[i],
+                  width: 22,
+                  borderRadius: BorderRadius.circular(6),
+                  backDrawRodData: BackgroundBarChartRodData(
+                    show: true,
+                    toY: 25,
+                    color: Colors.grey[100]!,
+                  ),
+                ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  // ── Top Emotions Pie Chart ────────────────────────────────────
+  Widget _buildTopEmotionsChart(ProgressData data) {
+    final emotions = [
+      {'name': 'Happy', 'value': 35.0, 'color': Colors.green, 'emoji': '😊'},
+      {'name': 'Calm', 'value': 25.0, 'color': Colors.blue, 'emoji': '😌'},
+      {'name': 'Excited', 'value': 20.0, 'color': Colors.orange, 'emoji': '🤩'},
+      {'name': 'Sad', 'value': 12.0, 'color': Colors.lightBlue, 'emoji': '😢'},
+      {'name': 'Angry', 'value': 8.0, 'color': Colors.red, 'emoji': '😡'},
+    ];
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 160,
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 3,
+              centerSpaceRadius: 35,
+              sections: emotions.map((e) {
+                return PieChartSectionData(
+                  value: e['value'] as double,
+                  color: e['color'] as Color,
+                  radius: 40,
+                  title: '${(e['value'] as double).toInt()}%',
+                  titleStyle: _poppins(size: 12, weight: FontWeight.w700, color: Colors.white),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 14,
+          runSpacing: 8,
+          children: emotions.map((e) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(e['emoji'] as String, style: const TextStyle(fontSize: 16)),
+                const SizedBox(width: 4),
+                Text(
+                  '${e['name']} ${(e['value'] as double).toInt()}%',
+                  style: _poppins(size: 14, weight: FontWeight.w600),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ],
+    );
   }
 
   // ── Goals section (UCD024) ──────────────────────────────────────
@@ -655,18 +1046,18 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                 child: Text('Goals',
                     style: _poppins(size: 26, weight: FontWeight.w700)),
               ),
-              TextButton.icon(
+              ElevatedButton.icon(
                 onPressed: _openNewGoalDialog,
-                icon: const Icon(Icons.add, size: 18),
+                icon: const Icon(Icons.add, size: 22),
                 label: Text('Add New Goal',
-                    style: _poppins(size: 13, weight: FontWeight.w600)),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFF6B21A8),
+                    style: _poppins(size: 16, weight: FontWeight.w600, color: Colors.white)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B21A8),
+                  foregroundColor: Colors.white,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: const BorderSide(color: Color(0xFFE9D5FF)),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -709,7 +1100,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           // Top row: category + status + delete
           Row(
             children: [
-              Text(goal.category.emoji, style: const TextStyle(fontSize: 22)),
+              Text(goal.category.emoji, style: const TextStyle(fontSize: 34)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -717,11 +1108,11 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                   children: [
                     Text(
                       goal.category.label,
-                      style: _poppins(size: 14, weight: FontWeight.w600),
+                      style: _poppins(size: 22, weight: FontWeight.w600),
                     ),
                     Text(
                       '${goal.category.unitLabel(goal.target)}  •  ${goal.duration.label}',
-                      style: _poppins(size: 12, color: Colors.grey[600]!),
+                      style: _poppins(size: 18, color: Colors.grey[600]!),
                     ),
                   ],
                 ),
@@ -736,7 +1127,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                 child: Text(
                   goal.status.label,
                   style: _poppins(
-                      size: 11, weight: FontWeight.w600, color: statusColor),
+                      size: 17, weight: FontWeight.w600, color: statusColor),
                 ),
               ),
               const SizedBox(width: 6),
@@ -770,7 +1161,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
               Text(
                 '${goal.currentProgress} / ${goal.target}',
                 style: _poppins(
-                    size: 12, weight: FontWeight.w600, color: statusColor),
+                    size: 22, weight: FontWeight.w600, color: statusColor),
               ),
             ],
           ),
@@ -822,10 +1213,10 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(label,
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                      style: _poppins(size: 23, weight: FontWeight.w600)),
                   Text('${(value * 100).toInt()}%',
                       style: _poppins(
-                          size: 14, color: color, weight: FontWeight.w700)),
+                          size: 23, color: color, weight: FontWeight.w700)),
                 ],
               ),
               const SizedBox(height: 6),
@@ -896,11 +1287,11 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           children: [
             Row(
               children: [
-                Text(emoji, style: const TextStyle(fontSize: 22)),
+                Text(emoji, style: const TextStyle(fontSize: 34)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(label,
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                      style: _poppins(size: 22, weight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -912,7 +1303,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                     borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
                       value: progress,
-                      minHeight: 8,
+                      minHeight: 10,
                       backgroundColor: Colors.grey[200],
                       valueColor:
                           AlwaysStoppedAnimation<Color>(color),
@@ -923,7 +1314,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                 Text(
                   '$current / $target',
                   style: _poppins(
-                      size: 12, weight: FontWeight.w600, color: color),
+                      size: 22, weight: FontWeight.w600, color: color),
                 ),
               ],
             ),
@@ -948,10 +1339,13 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
       );
     }
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: badges.map((b) => _badgeTile(b)).toList(),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: badges.map((b) => _badgeTile(b)).toList(),
+      ),
     );
   }
 
@@ -959,8 +1353,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     return Tooltip(
       message: badge.description,
       child: Container(
-        width: 100,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        width: 138,
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
         decoration: BoxDecoration(
           color: badge.color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(14),
@@ -969,12 +1363,12 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(badge.emoji, style: const TextStyle(fontSize: 30)),
+            Text(badge.emoji, style: const TextStyle(fontSize: 41)),
             const SizedBox(height: 6),
             Text(
               badge.title,
               style: _poppins(
-                  size: 12, weight: FontWeight.w600, color: badge.color),
+                  size: 17, weight: FontWeight.w600, color: badge.color),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

@@ -47,7 +47,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
         .animate(_pulseController);
     _colorAnim = ColorTween(
       begin: Colors.white,
-      end: const Color(0xFFFDE68A),
+      end: Colors.white,
     ).animate(CurvedAnimation(
       parent: _pulseController,
       curve: Curves.easeInOut,
@@ -417,55 +417,105 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
             ),
           ),
 
-          // Bottom Right: Caregiver
+          // Bottom Right: Caregiver + Profile Switcher (org only)
           Positioned(
             bottom: 18,
             right: 18,
-            child: GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => ParentGateDialog(
-                    onSuccess: () {
-                      context.push('/caregiver-dashboard');
-                    },
-                  ),
-                );
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6B21A8), Color(0xFF4C1D95)],
-                  ),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.purple.withValues(alpha: 0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.family_restroom,
-                        color: Colors.white, size: 25),
-                    const SizedBox(width: 7),
-                    Text(
-                      'Caregiver',
-                      style: GoogleFonts.fredoka(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Profile Switcher — only for org accounts
+                if (widget.showSwitchAccount)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: GestureDetector(
+                      onTap: () => context.go('/orgz-child-dashboard'),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.blue.withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.switch_account_rounded,
+                                color: Colors.white, size: 25),
+                            const SizedBox(width: 7),
+                            Text(
+                              'Switch',
+                              style: GoogleFonts.fredoka(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
+                  ),
+                // Caregiver button
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => ParentGateDialog(
+                        onSuccess: () {
+                          context.push('/caregiver-dashboard', extra: {
+                            'childName': _resolvedChildName,
+                            'showSwitch': widget.showSwitchAccount,
+                          });
+                        },
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF6B21A8), Color(0xFF4C1D95)],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.family_restroom,
+                            color: Colors.white, size: 25),
+                        const SizedBox(width: 7),
+                        Text(
+                          'Caregiver',
+                          style: GoogleFonts.fredoka(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],

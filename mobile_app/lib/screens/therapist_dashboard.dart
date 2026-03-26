@@ -547,19 +547,22 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
               child: Text(emoji, style: const TextStyle(fontSize: 28)),
             ),
             const SizedBox(width: 18),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: _textStyle(
-                      fontSize: 28, fontWeight: FontWeight.w700, color: color),
-                ),
-                Text(
-                  title,
-                  style: _textStyle(fontSize: 14, color: Colors.grey[600]!),
-                ),
-              ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: _textStyle(
+                        fontSize: 28, fontWeight: FontWeight.w700, color: color),
+                  ),
+                  Text(
+                    title,
+                    style: _textStyle(fontSize: 14, color: Colors.grey[600]!),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

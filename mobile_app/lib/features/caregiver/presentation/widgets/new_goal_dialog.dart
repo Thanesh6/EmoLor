@@ -188,7 +188,7 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
 
                   // ── 1. Goal Category ──────────────────────────────
                   Text('Goal Category',
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                      style: _poppins(size: 18, weight: FontWeight.w600)),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -225,7 +225,7 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
 
                   // ── 2. Target ──────────────────────────────────────
                   Text('Target',
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                      style: _poppins(size: 18, weight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _targetController,
@@ -273,7 +273,7 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
 
                   // ── 3. Duration ────────────────────────────────────
                   Text('Duration',
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
+                      style: _poppins(size: 18, weight: FontWeight.w600)),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -306,97 +306,7 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 22),
-
-                  // ── 4. Linked Reward (optional — UCD025) ─────────
-                  Text('Link a Reward (Optional)',
-                      style: _poppins(size: 14, weight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  if (_selectedReward != null)
-                    // Show selected reward card
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Color(_selectedReward!.colorValue)
-                            .withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Color(_selectedReward!.colorValue)
-                              .withValues(alpha: 0.4),
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: Color(_selectedReward!.colorValue)
-                                  .withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text(_selectedReward!.emoji,
-                                  style: const TextStyle(fontSize: 22)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _selectedReward!.title,
-                                  style: _poppins(
-                                    size: 14,
-                                    weight: FontWeight.w600,
-                                    color: Color(_selectedReward!.colorValue),
-                                  ),
-                                ),
-                                Text(
-                                  _selectedReward!.description,
-                                  style: _poppins(
-                                      size: 11, color: Colors.grey[500]!),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Change button
-                          IconButton(
-                            icon: const Icon(Icons.swap_horiz, size: 20),
-                            tooltip: 'Change reward',
-                            color: Color(_selectedReward!.colorValue),
-                            onPressed: _saving ? null : _openRewardPicker,
-                          ),
-                          // Remove button
-                          IconButton(
-                            icon: const Icon(Icons.close, size: 18),
-                            tooltip: 'Remove reward',
-                            color: Colors.grey[400],
-                            onPressed: _saving ? null : _clearReward,
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    // "Add Reward" button
-                    OutlinedButton.icon(
-                      onPressed: _saving ? null : _openRewardPicker,
-                      icon: const Icon(Icons.card_giftcard, size: 18),
-                      label: Text('Add Reward',
-                          style: _poppins(size: 14, weight: FontWeight.w500)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF6B21A8),
-                        side: BorderSide(color: Colors.grey[300]!),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
                   // ── Inline error ──────────────────────────────────
                   if (_errorMessage != null) ...[

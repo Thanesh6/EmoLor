@@ -103,6 +103,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOSPELL',
       activityEmoji: '🔤',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emojiSpell,

@@ -143,6 +143,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     await ActivityExitHandler.handleExitActivity(
       context: context,
       activityId: _activityId,
+      activityName: 'EMOPOP',
       activityEmoji: '🫧',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionBubbles,

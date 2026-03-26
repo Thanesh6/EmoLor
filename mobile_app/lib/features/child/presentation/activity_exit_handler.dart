@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/star_service.dart';
 import '../models/activity_save_state.dart';
+import '../models/completion_record.dart';
 import '../services/activity_progress_service.dart';
+import '../services/completion_service.dart';
 import 'exit_activity_dialog.dart';
 
 /// UCD016 – Shared helper for the "Exit Activity" flow.
@@ -42,6 +44,7 @@ class ActivityExitHandler {
     required BuildContext context,
     required String activityId,
     String activityEmoji = '🎮',
+    String activityName = '',
     int elapsedSeconds = 0,
     Map<String, dynamic> Function()? buildProgressData,
     VoidCallback? onBeforeExit,
@@ -68,6 +71,20 @@ class ActivityExitHandler {
     // Accumulate session stars to persistent total before saving.
     if (starGameKey != null && sessionStars > 0) {
       await StarService.addStars(starGameKey, sessionStars);
+    }
+
+    // Save a CompletionRecord so the caregiver dashboard can track activity
+    if (sessionStars > 0 || elapsedSeconds > 0) {
+      final name = activityName.isNotEmpty ? activityName : activityId;
+      await CompletionService.save(CompletionRecord(
+        activityId: activityId,
+        activityName: name,
+        starsEarned: sessionStars,
+        scoreValue: sessionStars * 20, // approximate score from stars
+        scoreMax: 100,
+        timeSpentSeconds: elapsedSeconds,
+        completedAt: DateTime.now(),
+      ));
     }
 
     // Step 5: Save current activity state to local storage.

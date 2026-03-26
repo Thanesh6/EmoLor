@@ -354,6 +354,7 @@ class _DrawScreenState extends State<DrawScreen> {
                   onTap: () => ActivityExitHandler.handleExitActivity(
                     context: context,
                     activityId: 'draw_free',
+                    activityName: 'Draw',
                     activityEmoji: '🖌️',
                     buildProgressData: () => {
                       'strokeCount': _points.length,

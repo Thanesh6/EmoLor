@@ -3,44 +3,130 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/services/emotion_colour_mapping.dart';
+import '../core/services/emotion_journal_service.dart';
+import '../core/services/star_service.dart';
 import '../features/caregiver/presentation/screens/chat_tab.dart';
 import '../features/caregiver/presentation/screens/progress_dashboard_screen.dart';
 import '../features/caregiver/presentation/widgets/new_goal_dialog.dart';
+import '../features/child/services/child_rewards_service.dart';
+import '../features/child/services/completion_service.dart';
+import '../features/child/models/completion_record.dart';
 
 class CaregiverDashboard extends StatefulWidget {
-  const CaregiverDashboard({super.key});
+  final String? childName;
+  final bool showSwitchAccount;
+
+  const CaregiverDashboard({
+    super.key,
+    this.childName,
+    this.showSwitchAccount = false,
+  });
 
   @override
   State<CaregiverDashboard> createState() => _CaregiverDashboardState();
 }
 
 class _CaregiverDashboardState extends State<CaregiverDashboard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedNavIndex = 0;
   String _caregiverName = 'Caregiver';
   String _caregiverAvatar = '😊';
-  String _childName = 'Child';
+  late String _childName;
   String _childAvatar = '🐱';
   late AnimationController _glowCtrl;
+
+  // ── Real-time data from services ──
+  int _totalStars = 0;
+  int _rewardsUnlocked = 0;
+  int _totalActivities = 0;
+  int _todayActivities = 0;
+  int _weekExpressions = 0;
+  Map<String, int> _emotionFreq = {};
+  Map<String, int> _gameFreq = {};
+  List<CompletionRecord> _recentCompletions = [];
+  List<Map<String, dynamic>> _recentJournal = [];
+  List<Map<String, dynamic>> _activeGoals = [];
 
   @override
   void initState() {
     super.initState();
+    _childName = widget.childName ?? 'Child';
     _glowCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addObserver(this);
     _loadCaregiverProfile();
     _loadChildProfile();
+    _loadRealData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh data when app comes back to foreground (after playing games)
+    if (state == AppLifecycleState.resumed) {
+      _loadRealData();
+    }
+  }
+
+  /// Load all real data from local services
+  Future<void> _loadRealData() async {
+    try {
+      final stars = await StarService.getTotalStars();
+      final rewards = await ChildRewardsService.getUnlockedCount();
+      final completions = await CompletionService.history();
+      final emotionFreq = await EmotionJournalService.getEmotionFrequency();
+      final gameFreq = await EmotionJournalService.getGameFrequency();
+      final journal = await EmotionJournalService.getEntries();
+
+      // Calculate today's activities
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayCompletions = completions.where(
+          (c) => c.completedAt.isAfter(todayStart)).toList();
+
+      // This week's expressions (journal entries)
+      final weekStart = now.subtract(Duration(days: now.weekday - 1));
+      final weekStartDate = DateTime(weekStart.year, weekStart.month, weekStart.day);
+      final weekExpressions = journal.where((e) {
+        final ts = DateTime.parse(e['timestamp'] as String);
+        return ts.isAfter(weekStartDate);
+      }).length;
+
+      if (mounted) {
+        setState(() {
+          _totalStars = stars;
+          _rewardsUnlocked = rewards;
+          _totalActivities = completions.length;
+          _todayActivities = todayCompletions.length;
+          _weekExpressions = weekExpressions;
+          _emotionFreq = emotionFreq;
+          _gameFreq = gameFreq;
+          _recentCompletions = completions.take(4).toList();
+          _recentJournal = journal.reversed.take(10).toList();
+          // Build real goals based on actual progress
+          _activeGoals = [
+            {'label': 'Earn 50 stars', 'current': stars.clamp(0, 50), 'target': 50, 'color': 'orange', 'emoji': '⭐'},
+            {'label': 'Complete 20 activities', 'current': completions.length.clamp(0, 20), 'target': 20, 'color': 'blue', 'emoji': '🎮'},
+            {'label': 'Explore all 8 emotions', 'current': emotionFreq.length.clamp(0, 8), 'target': 8, 'color': 'green', 'emoji': '🗣️'},
+          ];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading dashboard data: $e');
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _glowCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadChildProfile() async {
+    // If child name was passed in (org account), skip DB lookup
+    if (widget.childName != null && widget.childName!.isNotEmpty) return;
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
@@ -63,6 +149,18 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
             final av = childProfile['avatar_url'] as String?;
             if (av != null && av.isNotEmpty) _childAvatar = av;
           });
+        }
+      }
+      // Fallback for personal accounts: use the user's own name
+      if (_childName == 'Child') {
+        final rpcResult = await Supabase.instance.client
+            .rpc('get_user_role', params: {'p_user_id': userId});
+        if (mounted && rpcResult is List && rpcResult.isNotEmpty) {
+          final row = rpcResult.first as Map<String, dynamic>;
+          final name = row['full_name'] as String?;
+          if (name != null && name.isNotEmpty) {
+            setState(() => _childName = name);
+          }
         }
       }
     } catch (_) {}
@@ -135,6 +233,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -162,7 +261,8 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                     ),
                   ],
                 ),
-                child: Column(
+                child: SafeArea(
+                  child: Column(
                   children: [
                     // Logo — glowing EMOLOR title
                     Center(
@@ -173,7 +273,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                           return Text(
                             'EMOLOR',
                             style: GoogleFonts.fredoka(
-                              fontSize: 51,
+                              fontSize: 61,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
                               shadows: [
@@ -191,9 +291,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         },
                       ),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 10),
 
-                    // Nav Items — equally spaced
+                    // Nav Items — equal spacing
                     Expanded(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -201,6 +301,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                           _buildNavItem(
                               Icons.home_rounded, 'Home', _selectedNavIndex == 0,
                               () {
+                            _loadRealData(); // refresh real data on tab switch
                             setState(() => _selectedNavIndex = 0);
                           }),
                           _buildNavItem(
@@ -231,7 +332,47 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         ],
                       ),
                     ),
+
+                    // Back to Child Dashboard button at bottom
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: InkWell(
+                        onTap: () {
+                          if (widget.showSwitchAccount) {
+                            context.go('/child/home', extra: {
+                              'showSwitch': true,
+                              'childName': _childName,
+                            });
+                          } else {
+                            context.go('/child-dashboard');
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Text('Child Dashboard',
+                                  style: GoogleFonts.baloo2(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                   ],
+                ),
                 ),
               ),
 
@@ -303,38 +444,42 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                                     color: const Color(0xFF6B21A8))),
                           ),
                           const PopupMenuDivider(),
+                          ...(_recentCompletions.isEmpty
+                            ? [
+                                PopupMenuItem(
+                                  enabled: false,
+                                  child: Text('No recent activity',
+                                      style: _textStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                ),
+                              ]
+                            : _recentCompletions.take(3).map((c) =>
+                                PopupMenuItem(
+                                  enabled: false,
+                                  child: Text(
+                                    '🎮 ${_childName} completed ${c.activityName} — ${_timeAgo(c.completedAt.toIso8601String())}',
+                                    style: _textStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ).toList()),
                           PopupMenuItem(
                             enabled: false,
                             child: Text(
-                              '\u{1F3AE} Thanesh completed EMOZZLE \u2014 2 mins ago',
-                              style: _textStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            enabled: false,
-                            child: Text(
-                              '\u2B50 3 new stars earned today',
-                              style: _textStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            enabled: false,
-                            child: Text(
-                              '\u{1F4AC} New message from Dr. Sarah',
+                              '⭐ $_totalStars total stars earned',
                               style: _textStyle(fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                           ),
                         ],
                       );
                     },
-                    child: _buildHeaderButton(Icons.notifications_outlined, '3'),
+                    child: _buildHeaderButton(Icons.notifications_outlined,
+                        '${_recentCompletions.length > 0 ? _recentCompletions.length : 0}'),
                   ),
                   const SizedBox(width: 14),
                   GestureDetector(
                     onTap: () {
                       setState(() => _selectedNavIndex = 3);
                     },
-                    child: _buildHeaderButton(Icons.message_outlined, '2'),
+                    child: _buildHeaderButton(Icons.message_outlined, '0'),
                   ),
                 ],
               ),
@@ -343,16 +488,16 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
 
           const SizedBox(height: 14),
 
-          // Stats Cards — compact row
+          // Stats Cards — real data
           Row(
             children: [
-              _buildStatCard('😊', 'Mood', '85%', Colors.green, '+5%'),
+              _buildStatCard('🎮', 'Activities', '$_todayActivities', Colors.blue, 'Today'),
               const SizedBox(width: 10),
-              _buildStatCard('🎮', 'Activities', '12', Colors.blue, 'Today'),
+              _buildStatCard('⭐', 'Stars', '$_totalStars', Colors.orange, 'Total'),
               const SizedBox(width: 10),
-              _buildStatCard('⭐', 'Stars', '127', Colors.orange, '+15'),
+              _buildStatCard('🏅', 'Rewards', '$_rewardsUnlocked', Colors.green, 'Earned'),
               const SizedBox(width: 10),
-              _buildStatCard('🗣️', 'Express', '28', Colors.purple, 'This week'),
+              _buildStatCard('🗣️', 'Express', '$_weekExpressions', Colors.purple, 'This week'),
             ],
           ),
 
@@ -372,39 +517,39 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         child: _buildCard(
                           'Recent Activity',
                           Icons.history,
-                          FutureBuilder<List<Map<String, dynamic>>>(
-                            future: _fetchRecentActivities(),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              }
-                              final activities = snapshot.data ?? [];
-                              if (activities.isEmpty) {
-                                // Show sample data so the card looks right
-                                return Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildActivityItem('🧩', 'Played EMOZZLE (⭐3)', '5 mins ago', Colors.purple),
-                                    _buildActivityItem('🫧', 'Played EMOPOP (⭐2)', '20 mins ago', Colors.blue),
-                                    _buildActivityItem('🔤', 'Played EMOSPELL (⭐4)', '1 hour ago', Colors.green),
-                                  ],
-                                );
-                              }
-                              return Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: activities.take(3).map((a) {
-                                  final game = a['game_type'] ?? 'Unknown';
-                                  final score = a['score'] ?? 0;
-                                  final ts = a['created_at'];
+                          Builder(
+                            builder: (context) {
+                              final gameEmojis = {
+                                'EMOZZLE': '🧩', 'EMOPOP': '🫧', 'EMOSPELL': '🔤',
+                                'EMOSORT': '📋', 'EMOSLASH': '⚔️', 'EMOCATCH': '🎯',
+                                'Draw': '🖌️', 'Express Cards': '🗣️', 'My Colours': '🎨',
+                              };
+                              final gameColors = {
+                                'EMOZZLE': Colors.purple, 'EMOPOP': Colors.blue,
+                                'EMOSPELL': Colors.green, 'EMOSORT': Colors.orange,
+                                'EMOSLASH': Colors.red, 'EMOCATCH': Colors.teal,
+                                'Draw': Colors.pink, 'Express Cards': Colors.indigo, 'My Colours': Colors.amber,
+                              };
+                              if (_recentCompletions.isNotEmpty) {
+                                final items = _recentCompletions.map((c) {
+                                  final name = c.activityName;
+                                  final emoji = gameEmojis[name] ?? '🎮';
+                                  final color = gameColors[name] ?? Colors.blue;
                                   return _buildActivityItem(
-                                      '🎮',
-                                      'Played $game ($score)',
-                                      ts != null ? _timeAgo(ts) : 'Recently',
-                                      Colors.blue);
-                                }).toList(),
-                              );
+                                      emoji,
+                                      '$name (⭐${c.starsEarned})',
+                                      _timeAgo(c.completedAt.toIso8601String()),
+                                      color);
+                                }).toList();
+                                return _buildActivityGrid(items);
+                              }
+                              // Sample entries when no real data yet
+                              return _buildActivityGrid([
+                                _buildActivityItem('🧩', 'EMOZZLE (⭐3)', '5 mins ago', Colors.purple),
+                                _buildActivityItem('🫧', 'EMOPOP (⭐2)', '20 mins ago', Colors.blue),
+                                _buildActivityItem('🔤', 'EMOSPELL (⭐4)', '1 hour ago', Colors.green),
+                                _buildActivityItem('📋', 'EMOSORT (⭐1)', '2 hours ago', Colors.orange),
+                              ]);
                             },
                           ),
                         ),
@@ -414,14 +559,39 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         child: _buildCard(
                           'Emotion Trends',
                           Icons.insights,
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildEmotionBar('Happy', 0.8, Colors.green),
-                              _buildEmotionBar('Calm', 0.65, Colors.blue),
-                              _buildEmotionBar('Excited', 0.45, Colors.orange),
-                              _buildEmotionBar('Tired', 0.25, Colors.grey),
-                            ],
+                          Builder(
+                            builder: (context) {
+                              final emotionColors = {
+                                'Happy': Colors.green, 'Sad': Colors.blue,
+                                'Angry': Colors.red, 'Scared': Colors.purple,
+                                'Excited': Colors.orange, 'Calm': Colors.teal,
+                                'Surprised': Colors.amber, 'Disgusted': Colors.brown,
+                              };
+                              if (_emotionFreq.isNotEmpty) {
+                                final sorted = _emotionFreq.entries.toList()
+                                  ..sort((a, b) => b.value.compareTo(a.value));
+                                final top = sorted.take(4).toList();
+                                final maxVal = top.first.value.toDouble();
+                                return Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: top.map((e) => _buildEmotionBar(
+                                      e.key,
+                                      maxVal > 0 ? e.value / maxVal : 0,
+                                      emotionColors[e.key] ?? Colors.grey,
+                                  )).toList(),
+                                );
+                              }
+                              // Sample emotion trends
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildEmotionBar('Happy', 0.85, Colors.green),
+                                  _buildEmotionBar('Calm', 0.65, Colors.teal),
+                                  _buildEmotionBar('Excited', 0.50, Colors.orange),
+                                  _buildEmotionBar('Sad', 0.20, Colors.blue),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -457,28 +627,28 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                                       style: const TextStyle(fontSize: 30))),
                             ),
                             const SizedBox(width: 14),
-                            Text('Thanesh',
+                            Text(_childName,
                                 style: _textStyle(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700)),
                             const Spacer(),
-                            // Right: stats vertically
+                            // Right: real stats vertically
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('⭐ 127 Stars',
+                                Text('⭐ $_totalStars Stars',
                                     style: _textStyle(
                                         fontSize: 15,
                                         color: Colors.orange[700]!,
                                         fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 4),
-                                Text('🏅 8 Rewards',
+                                Text('🏅 $_rewardsUnlocked Rewards',
                                     style: _textStyle(
                                         fontSize: 15,
                                         color: Colors.blue[700]!,
                                         fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 4),
-                                Text('📅 14 Days',
+                                Text('🎮 $_totalActivities Games',
                                     style: _textStyle(
                                         fontSize: 15,
                                         color: Colors.green[700]!,
@@ -542,13 +712,13 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 24),
+            Icon(icon, color: Colors.white, size: 29),
             const SizedBox(width: 15),
             Flexible(
               child: Text(
                 label,
                 style: _textStyle(
-                  fontSize: 24,
+                  fontSize: 29,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   color: Colors.white,
                 ),
@@ -672,11 +842,11 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF6B21A8), size: 26),
+              Icon(icon, color: const Color(0xFF6B21A8), size: 28),
               const SizedBox(width: 10),
               Text(
                 title,
-                style: _textStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                style: _textStyle(fontSize: 26, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -726,6 +896,24 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
     );
   }
 
+  Widget _buildActivityGrid(List<Widget> items) {
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      rows.add(Row(
+        children: [
+          Expanded(child: items[i]),
+          const SizedBox(width: 10),
+          if (i + 1 < items.length)
+            Expanded(child: items[i + 1])
+          else
+            const Expanded(child: SizedBox()),
+        ],
+      ));
+      if (i + 2 < items.length) rows.add(const SizedBox(height: 10));
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: rows);
+  }
+
   Widget _buildEmotionBar(String emotion, double value, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
@@ -770,10 +958,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
   Widget _buildProfileStat(String emoji, String value) {
     return Column(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 25)),
-        const SizedBox(height: 5),
+        Text(emoji, style: const TextStyle(fontSize: 30)),
+        const SizedBox(height: 6),
         Text(value,
-            style: _textStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            style: _textStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       ],
     );
   }
@@ -818,155 +1006,178 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
     {'name': 'Anticipation', 'emoji': '🤩'},
   ];
 
-  Widget _buildChildColoursCard() {
-    return FutureBuilder<void>(
-      future: EmotionColourMapping.ensureLoaded(),
-      builder: (context, snapshot) {
-        return _buildCard(
-          "My Child's Colours",
-          Icons.palette,
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _emotionList.map((e) {
-              final color = EmotionColourMapping.colorFor(e['name']!);
-              final isDark = color.computeLuminance() < 0.4;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.4),
-                      blurRadius: 6,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(e['emoji']!, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 6),
-                    Text(
-                      e['name']!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
   // ── Goals & Rewards Tab ────────────────────────────────────────────
 
   Widget _buildGoalsRewardsTab() {
     return Padding(
-      padding: const EdgeInsets.all(35),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Goals & Rewards',
-                style: _textStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF6B21A8))),
-            const SizedBox(height: 8),
-            Text("Set targets and track your child's reward progress",
-                style: _textStyle(fontSize: 18, color: Colors.grey[600]!)),
-            const SizedBox(height: 30),
-
-            // Create Goal button
-            SizedBox(
-              width: 240,
-              child: ElevatedButton.icon(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row with Create Goal button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Goals & Rewards',
+                        style: _textStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF6B21A8))),
+                    const SizedBox(height: 4),
+                    Text("Set targets and track your child's reward progress",
+                        style: _textStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600]!)),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
                 onPressed: () {
-                  // Open new goal dialog
                   showDialog(
                     context: context,
                     builder: (_) => const NewGoalDialog(),
                   );
                 },
-                icon: const Icon(Icons.add_circle_outline),
+                icon: const Icon(Icons.add_circle_outline, size: 24),
                 label: Text('Create New Goal',
                     style: _textStyle(
-                        fontSize: 15,
+                        fontSize: 18,
                         color: Colors.white,
                         fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF6B21A8),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
               ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Main content fills remaining space
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Left: Active Goals
+                Expanded(
+                  flex: 1,
+                  child: _buildCard(
+                    'Active Goals',
+                    Icons.flag_rounded,
+                    Builder(
+                      builder: (context) {
+                        if (_activeGoals.isEmpty) {
+                          return Center(
+                            child: Text('No active goals — create one!',
+                                style: _textStyle(fontSize: 16, color: Colors.grey[400]!)),
+                          );
+                        }
+                        final colorMap = {
+                          'orange': Colors.orange, 'blue': Colors.blue,
+                          'green': Colors.green, 'purple': Colors.purple,
+                          'red': Colors.red, 'teal': Colors.teal,
+                        };
+                        return Column(
+                          children: _activeGoals.asMap().entries.map((entry) {
+                            final i = entry.key;
+                            final g = entry.value;
+                            final current = (g['current'] as int?) ?? 0;
+                            final target = (g['target'] as int?) ?? 1;
+                            final progress = target > 0 ? current / target : 0.0;
+                            final color = colorMap[g['color']] ?? Colors.blue;
+                            return _buildGoalRow(
+                              g['label'] as String,
+                              progress.clamp(0.0, 1.0),
+                              '$current/$target',
+                              color,
+                              g['emoji'] as String,
+                              onRemove: () {
+                                setState(() => _activeGoals.removeAt(i));
+                              },
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Right: Earned Rewards — real data
+                Expanded(
+                  flex: 1,
+                  child: _buildCard(
+                    'Earned Rewards',
+                    Icons.emoji_events_rounded,
+                    FutureBuilder<List<ChildReward>>(
+                      future: ChildRewardsService.getAllRewards(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        final allRewards = snapshot.data!;
+                        final unlocked = allRewards.where((r) => r.unlockedAt != null).toList();
+                        final locked = allRewards.where((r) => r.unlockedAt == null).take(4 - unlocked.length.clamp(0, 4)).toList();
+                        final display = [...unlocked.take(4), ...locked].take(4).toList();
+
+                        if (display.isEmpty) {
+                          return Center(child: Text('No rewards yet', style: _textStyle(fontSize: 16, color: Colors.grey[400]!)));
+                        }
+
+                        final rows = <Widget>[];
+                        for (int i = 0; i < display.length; i += 2) {
+                          rows.add(Row(
+                            children: [
+                              Expanded(child: _buildRewardChip(
+                                display[i].emoji, display[i].title, display[i].unlockedAt != null)),
+                              const SizedBox(width: 14),
+                              if (i + 1 < display.length)
+                                Expanded(child: _buildRewardChip(
+                                  display[i + 1].emoji, display[i + 1].title, display[i + 1].unlockedAt != null))
+                              else
+                                const Expanded(child: SizedBox()),
+                            ],
+                          ));
+                          if (i + 2 < display.length) rows.add(const SizedBox(height: 14));
+                        }
+                        return Column(children: rows);
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 30),
-
-            // Active Goals
-            _buildCard(
-              'Active Goals',
-              Icons.flag_rounded,
-              Column(
-                children: [
-                  _buildGoalRow('Complete 3 activities/week', 0.6, '3/5',
-                      Colors.blue, '🎮'),
-                  _buildGoalRow('Earn 10 stars', 0.4, '4/10', Colors.orange,
-                      '⭐'),
-                  _buildGoalRow('Log emotions daily', 0.85, '6/7',
-                      Colors.green, '📝'),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // Earned Rewards
-            _buildCard(
-              'Earned Rewards',
-              Icons.emoji_events_rounded,
-              FutureBuilder<void>(
-                future: EmotionColourMapping.ensureLoaded(),
-                builder: (context, _) {
-                  return Wrap(
-                    spacing: 15,
-                    runSpacing: 15,
-                    children: [
-                      _buildRewardChip('👣', 'First Steps', true),
-                      _buildRewardChip('✨', 'Tiny Spark', true),
-                      _buildRewardChip('😊', 'Happy Smile', false),
-                      _buildRewardChip('🌟', 'Little Star', false),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildGoalRow(
-      String label, double progress, String progressText, Color color, String emoji) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      String label, double progress, String progressText, Color color, String emoji,
+      {VoidCallback? onRemove}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
       child: Row(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 24)),
-          const SizedBox(width: 12),
+          Text(emoji, style: const TextStyle(fontSize: 32)),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -976,21 +1187,40 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                   children: [
                     Flexible(
                       child: Text(label,
-                          style: _textStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          style: _textStyle(fontSize: 20, fontWeight: FontWeight.w600)),
                     ),
-                    Text(progressText,
-                        style: _textStyle(
-                            fontSize: 13,
-                            color: Colors.grey[500]!,
-                            fontWeight: FontWeight.w400)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(progressText,
+                            style: _textStyle(
+                                fontSize: 20,
+                                color: color,
+                                fontWeight: FontWeight.w700)),
+                        if (onRemove != null) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: onRemove,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.close, color: Colors.red, size: 18),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
                     value: progress,
-                    minHeight: 8,
+                    minHeight: 12,
                     backgroundColor: color.withValues(alpha: 0.15),
                     valueColor: AlwaysStoppedAnimation(color),
                   ),
@@ -1005,30 +1235,32 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
 
   Widget _buildRewardChip(String emoji, String label, bool earned) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         color: earned ? const Color(0xFFFFF3E0) : Colors.grey[100],
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
             color: earned ? Colors.orange.shade300 : Colors.grey.shade300,
-            width: 1.5),
+            width: 2),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 22)),
+          Text(emoji, style: const TextStyle(fontSize: 28)),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style: _textStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              Text(earned ? 'Earned ✓' : 'Locked',
-                  style: _textStyle(
-                      fontSize: 11,
-                      color: earned ? Colors.green : Colors.grey[400]!,
-                      fontWeight: FontWeight.w400)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: _textStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis),
+                Text(earned ? 'Earned ✓' : 'Locked',
+                    style: _textStyle(
+                        fontSize: 13,
+                        color: earned ? Colors.green : Colors.grey[400]!,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
           ),
         ],
       ),
@@ -1039,136 +1271,397 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
 
   Widget _buildMyChildTab() {
     return Padding(
-      padding: const EdgeInsets.all(35),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('My Child',
-                style: _textStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF6B21A8))),
-            const SizedBox(height: 8),
-            Text("View your child's profile, colours and avatar",
-                style: _textStyle(fontSize: 18, color: Colors.grey[600]!)),
-            const SizedBox(height: 30),
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('My Child',
+              style: _textStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF6B21A8))),
+          const SizedBox(height: 4),
+          Text("View your child's profile, colours and emotion journey",
+              style: _textStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600]!)),
+          const SizedBox(height: 16),
 
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Main content — 2x2 grid filling remaining space
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Left — Child Profile Card
-                Expanded(
-                  child: _buildCard(
-                    'Child Profile',
-                    Icons.person,
-                    Column(
-                      children: [
-                        Container(
-                          width: 90,
-                          height: 90,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                                colors: [Color(0xFFFFB74D), Color(0xFFFF8A65)]),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: Colors.white, width: 4),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: Colors.orange.withValues(alpha: 0.3),
-                                  blurRadius: 15),
+                // LEFT column — Profile + Interaction Log
+                SizedBox(
+                  width: 300,
+                  child: Column(
+                    children: [
+                      // Child Profile card
+                      Expanded(
+                        flex: 3,
+                        child: _buildMyChildCard(
+                          'Child Profile',
+                          Icons.person,
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 70,
+                                height: 70,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                      colors: [Color(0xFFFFB74D), Color(0xFFFF8A65)]),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(color: Colors.white, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: Colors.orange.withValues(alpha: 0.3),
+                                        blurRadius: 12),
+                                  ],
+                                ),
+                                child: Center(
+                                    child: Text(_childAvatar,
+                                        style: const TextStyle(fontSize: 38))),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(_childName.isEmpty ? 'Thanesh' : _childName,
+                                  style: _textStyle(
+                                      fontSize: 22, fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 2),
+                              Text('Emoji Explorer',
+                                  style: _textStyle(
+                                      fontSize: 14, color: Colors.grey[500]!)),
+                              const SizedBox(height: 12),
+                              _buildChildDetailRow('🎂', 'Age', '7 years old'),
+                              const SizedBox(height: 6),
+                              _buildChildDetailRow('🧩', 'Level', 'Beginner'),
+                              const SizedBox(height: 6),
+                              _buildChildDetailRow('📅', 'Joined', 'Mar 2026'),
                             ],
                           ),
-                          child: const Center(
-                              child: Text('😊',
-                                  style: TextStyle(fontSize: 50))),
                         ),
-                        const SizedBox(height: 16),
-                        Text('Child',
-                            style: _textStyle(
-                                fontSize: 22, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 4),
-                        Text('Emoji Explorer',
-                            style: _textStyle(
-                                fontSize: 14, color: Colors.grey[500]!)),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildProfileStat('⭐', 'Stars'),
-                            _buildProfileStat('🏅', 'Badges'),
-                            _buildProfileStat('📅', 'Days'),
-                          ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Emotion Interaction Log
+                      Expanded(
+                        flex: 2,
+                        child: _buildMyChildCard(
+                          'Interaction Log',
+                          Icons.auto_stories_rounded,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Recent emotions explored",
+                                style: _textStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500]!,
+                                    fontWeight: FontWeight.w400),
+                              ),
+                              const SizedBox(height: 8),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: Builder(
+                                    builder: (context) {
+                                      if (_recentJournal.isEmpty) {
+                                        return Text('No interactions yet',
+                                            style: _textStyle(fontSize: 14, color: Colors.grey[400]!));
+                                      }
+                                      // Deduplicate by emotion name, show most recent per emotion
+                                      final seen = <String>{};
+                                      final unique = <Map<String, dynamic>>[];
+                                      for (final e in _recentJournal) {
+                                        final emotion = e['emotion'] as String? ?? '';
+                                        if (!seen.contains(emotion)) {
+                                          seen.add(emotion);
+                                          unique.add(e);
+                                        }
+                                      }
+                                      return Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: unique.take(6).map((e) =>
+                                          _buildJournalChip(
+                                            e['emoji'] as String? ?? '😊',
+                                            e['emotion'] as String? ?? 'Unknown',
+                                            e['game'] as String? ?? '',
+                                          ),
+                                        ).toList(),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
 
-                const SizedBox(width: 25),
+                const SizedBox(width: 14),
 
-                // Right — Colour-Emotion Mappings
-                Expanded(child: _buildChildColoursCard()),
-              ],
-            ),
-
-            const SizedBox(height: 25),
-
-            // Recent Emotion Journal
-            _buildCard(
-              'Emotion Interaction Log',
-              Icons.auto_stories_rounded,
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Recent emotions your child interacted with during games",
-                    style: _textStyle(
-                        fontSize: 13,
-                        color: Colors.grey[500]!,
-                        fontWeight: FontWeight.w400),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                // RIGHT column — Colours + Learning Preferences
+                Expanded(
+                  child: Column(
                     children: [
-                      _buildJournalChip('😊', 'Happy', 'EMOZZLE'),
-                      _buildJournalChip('😢', 'Sad', 'EMOPOP'),
-                      _buildJournalChip('😡', 'Angry', 'EMOSLASH'),
-                      _buildJournalChip('😨', 'Scared', 'EMOCATCH'),
-                      _buildJournalChip('🤩', 'Excited', 'EMOSPELL'),
-                      _buildJournalChip('😌', 'Calm', 'EMOSORT'),
+                      // My Child's Colours — 2-column grid
+                      Expanded(
+                        flex: 3,
+                        child: FutureBuilder<void>(
+                          future: EmotionColourMapping.ensureLoaded(),
+                          builder: (context, snapshot) {
+                            return _buildMyChildCard(
+                              "My Child's Colours",
+                              Icons.palette,
+                              Expanded(
+                                child: GridView.count(
+                                  crossAxisCount: 2,
+                                  mainAxisSpacing: 10,
+                                  crossAxisSpacing: 10,
+                                  childAspectRatio: 2.6,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  children: _emotionList.map((e) {
+                                    final color =
+                                        EmotionColourMapping.colorFor(e['name']!);
+                                    final isDark = color.computeLuminance() < 0.4;
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        borderRadius: BorderRadius.circular(14),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: color.withValues(alpha: 0.4),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 3),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Text(e['emoji']!,
+                                              style:
+                                                  const TextStyle(fontSize: 32)),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              e['name']!,
+                                              style: TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.w700,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black87,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Learning Preferences — 2x2 grid
+                      Expanded(
+                        flex: 2,
+                        child: _buildMyChildCard(
+                          'Learning Preferences',
+                          Icons.psychology_rounded,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "How your child learns best",
+                                style: _textStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500]!,
+                                    fontWeight: FontWeight.w400),
+                              ),
+                              const SizedBox(height: 10),
+                              Builder(
+                                builder: (context) {
+                                  // Find favourite game from real data
+                                  String favGame = 'None yet';
+                                  if (_gameFreq.isNotEmpty) {
+                                    final sorted = _gameFreq.entries.toList()
+                                      ..sort((a, b) => b.value.compareTo(a.value));
+                                    favGame = sorted.first.key;
+                                  }
+                                  // Find top emotion
+                                  String topEmotion = 'None yet';
+                                  if (_emotionFreq.isNotEmpty) {
+                                    final sorted = _emotionFreq.entries.toList()
+                                      ..sort((a, b) => b.value.compareTo(a.value));
+                                    topEmotion = sorted.first.key;
+                                  }
+                                  return Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _buildPreferenceRow(
+                                                Icons.speed_rounded, 'Difficulty',
+                                                'Adaptive', Colors.blue),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: _buildPreferenceRow(
+                                                Icons.games_rounded, 'Favourite Game',
+                                                favGame, Colors.purple),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: _buildPreferenceRow(
+                                                Icons.emoji_emotions_rounded,
+                                                'Top Emotion', topEmotion, Colors.orange),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          Expanded(
+                                            child: _buildPreferenceRow(
+                                                Icons.timer_rounded, 'Total Games',
+                                                '$_totalActivities', Colors.green),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  // Card specifically for My Child tab — uses Expanded instead of ScrollView
+  Widget _buildMyChildCard(String title, IconData icon, Widget child) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withValues(alpha: 0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: const Color(0xFF6B21A8), size: 24),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: _textStyle(fontSize: 22, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreferenceRow(IconData icon, String label, String value, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: _textStyle(
+                      fontSize: 15, color: Colors.grey[500]!, fontWeight: FontWeight.w500)),
+              Text(value,
+                  style: _textStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChildDetailRow(String emoji, String label, String value) {
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 20)),
+        const SizedBox(width: 10),
+        Text('$label: ',
+            style: _textStyle(
+                fontSize: 16, color: Colors.grey[500]!, fontWeight: FontWeight.w500)),
+        Flexible(
+          child: Text(value,
+              style: _textStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              overflow: TextOverflow.ellipsis),
+        ),
+      ],
     );
   }
 
   Widget _buildJournalChip(String emoji, String emotion, String game) {
     final color = EmotionColourMapping.colorFor(emotion);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 5),
+          Text(emoji, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 6),
           Text(emotion,
-              style: _textStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(width: 4),
+              style: _textStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 5),
           Text('· $game',
               style: _textStyle(
-                  fontSize: 11,
+                  fontSize: 14,
                   color: Colors.grey[500]!,
                   fontWeight: FontWeight.w400)),
         ],
@@ -1178,128 +1671,498 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
 
   // ── Settings Tab ─────────────────────────────────────────────────
 
+  // ── Notification toggle states ──
+  bool _messageAlerts = true;
+  bool _rewardAlerts = true;
+  bool _sessionReminders = false;
+
   Widget _buildSettingsTab() {
     return Padding(
-      padding: const EdgeInsets.all(35),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Settings',
-                style: _textStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF6B21A8))),
-            const SizedBox(height: 8),
-            Text('Manage your account, security and preferences',
-                style: _textStyle(fontSize: 18, color: Colors.grey[600]!)),
-            const SizedBox(height: 30),
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Settings',
+              style: _textStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF6B21A8))),
+          const SizedBox(height: 4),
+          Text('Manage your account, security and preferences',
+              style: _textStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600]!)),
+          const SizedBox(height: 20),
 
-            // Account section
-            _buildCard(
-              'Account',
-              Icons.person_outline,
-              Column(
-                children: [
-                  _buildSettingsRow(Icons.edit, 'Edit Profile',
-                      'Update your name and avatar',
-                      onTap: () => context.push('/profile')),
-                  const Divider(height: 1),
-                  _buildSettingsRow(Icons.lock_outline, 'Change Password',
-                      'Update your login password'),
-                  const Divider(height: 1),
-                  _buildSettingsRow(Icons.link, 'Share Code',
-                      'Generate a code to link with therapist',
-                      onTap: () => setState(() => _selectedNavIndex = 3)),
-                ],
-              ),
+          Expanded(
+            child: Column(
+              children: [
+                // Account & Security side by side
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildCard(
+                          'Account',
+                          Icons.person_outline,
+                          Column(
+                            children: [
+                              _buildSettingsRow(Icons.edit, 'Edit Profile',
+                                  'Update your name and avatar',
+                                  onTap: () => _showEditProfileDialog()),
+                              const Divider(height: 1),
+                              _buildSettingsRow(Icons.lock_outline, 'Change Password',
+                                  'Update your login password',
+                                  onTap: () => _showChangePasswordDialog()),
+                              const Divider(height: 1),
+                              _buildSettingsRow(Icons.link, 'Share Code',
+                                  'Generate a code to link with therapist',
+                                  onTap: () => _showShareCodeDialog()),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildCard(
+                          'Notifications',
+                          Icons.notifications_outlined,
+                          Column(
+                            children: [
+                              _buildToggleRow(Icons.message_outlined, 'Message Alerts',
+                                  'New therapist messages', _messageAlerts, (v) {
+                                setState(() => _messageAlerts = v);
+                              }),
+                              const Divider(height: 1),
+                              _buildToggleRow(Icons.emoji_events_outlined, 'Reward Alerts',
+                                  'When child earns a reward', _rewardAlerts, (v) {
+                                setState(() => _rewardAlerts = v);
+                              }),
+                              const Divider(height: 1),
+                              _buildToggleRow(Icons.calendar_today, 'Session Reminders',
+                                  'Upcoming therapy sessions', _sessionReminders, (v) {
+                                setState(() => _sessionReminders = v);
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Security & Account Management
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: _buildCard(
+                          'Security',
+                          Icons.shield_outlined,
+                          Column(
+                            children: [
+                              _buildSettingsRow(Icons.pin, 'Parent Gate PIN',
+                                  'Set or change your 4-digit PIN',
+                                  onTap: () => _showParentPinDialog()),
+                              const Divider(height: 1),
+                              _buildSettingsRow(Icons.fingerprint, 'Biometric Lock',
+                                  'Use fingerprint to access caregiver settings',
+                                  onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Biometric lock coming soon!')),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _buildCard(
+                          'Account Management',
+                          Icons.manage_accounts_rounded,
+                          Column(
+                            children: [
+                              _buildSettingsRow(Icons.logout, 'Log Out',
+                                  'Sign out of your account',
+                                  onTap: () => _showLogoutConfirmDialog()),
+                              const Divider(height: 1),
+                              _buildSettingsRow(Icons.delete_forever, 'Deactivate Account',
+                                  'Permanently deactivate your account',
+                                  iconColor: Colors.red,
+                                  onTap: () => _showDeactivateConfirmDialog()),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 25),
-
-            // Security section
-            _buildCard(
-              'Security',
-              Icons.shield_outlined,
-              Column(
-                children: [
-                  _buildSettingsRow(Icons.pin, 'Parent Gate PIN',
-                      'Set or change your 4-digit PIN'),
-                  const Divider(height: 1),
-                  _buildSettingsRow(Icons.fingerprint, 'Biometric Lock',
-                      'Use fingerprint to access caregiver settings'),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // Notifications
-            _buildCard(
-              'Notifications',
-              Icons.notifications_outlined,
-              Column(
-                children: [
-                  _buildSettingsRow(Icons.message_outlined, 'Message Alerts',
-                      'Get notified for new therapist messages'),
-                  const Divider(height: 1),
-                  _buildSettingsRow(Icons.emoji_events_outlined, 'Reward Alerts',
-                      'Notify when child earns a reward'),
-                  const Divider(height: 1),
-                  _buildSettingsRow(Icons.calendar_today, 'Session Reminders',
-                      'Reminders for upcoming therapy sessions'),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // Danger zone
-            Center(
-              child: TextButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.logout, color: Colors.red, size: 20),
-                label: Text('Log Out',
-                    style: _textStyle(
-                        fontSize: 15,
-                        color: Colors.red,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSettingsRow(IconData icon, String title, String subtitle,
-      {VoidCallback? onTap}) {
+      {VoidCallback? onTap, Color? iconColor}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF6B21A8), size: 22),
+            Icon(icon, color: iconColor ?? const Color(0xFF6B21A8), size: 26),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: _textStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      style: _textStyle(fontSize: 19, fontWeight: FontWeight.w600)),
                   Text(subtitle,
                       style: _textStyle(
-                          fontSize: 12,
+                          fontSize: 15,
                           color: Colors.grey[500]!,
                           fontWeight: FontWeight.w400)),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[400], size: 22),
+            Icon(Icons.chevron_right, color: Colors.grey[400], size: 24),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildToggleRow(IconData icon, String title, String subtitle, bool value,
+      ValueChanged<bool> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFF6B21A8), size: 26),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: _textStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+                Text(subtitle,
+                    style: _textStyle(
+                        fontSize: 15,
+                        color: Colors.grey[500]!,
+                        fontWeight: FontWeight.w400)),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: const Color(0xFF6B21A8),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Settings Dialogs ──────────────────────────────────────────────
+
+  void _showEditProfileDialog() {
+    final nameCtrl = TextEditingController(text: _childName.isEmpty ? 'Thanesh' : _childName);
+    final ageCtrl = TextEditingController(text: '7');
+    final emailCtrl = TextEditingController(
+        text: Supabase.instance.client.auth.currentUser?.email ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Edit Profile', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Center(child: Text(_childAvatar, style: const TextStyle(fontSize: 40))),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Display Name',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ageCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Age',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _childName = nameCtrl.text);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated!')));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6B21A8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Save', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Change Password', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 380,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: TextEditingController(text: '12345678'),
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: 'Current Password',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Password',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password updated!')));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6B21A8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Save', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showShareCodeDialog() {
+    const code = 'EMOLOR-TH7X';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Share Code', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 350,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Share this code with your therapist to link accounts:',
+                  style: _textStyle(fontSize: 16, color: Colors.grey[600]!)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
+                ),
+                child: Text(code,
+                    style: _textStyle(fontSize: 28, fontWeight: FontWeight.w800, color: const Color(0xFF6B21A8)),
+                    textAlign: TextAlign.center),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: _textStyle(fontSize: 16, color: Colors.grey))),
+        ],
+      ),
+    );
+  }
+
+  void _showParentPinDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Parent Gate PIN', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: 350,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Update your 4-digit PIN to protect caregiver settings',
+                  style: _textStyle(fontSize: 16, color: Colors.grey[600]!)),
+              const SizedBox(height: 16),
+              TextField(
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                textAlign: TextAlign.center,
+                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                controller: TextEditingController(text: '1234'),
+                decoration: InputDecoration(
+                  labelText: 'Current PIN',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                textAlign: TextAlign.center,
+                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  hintText: '• • • •',
+                  labelText: 'New PIN',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                textAlign: TextAlign.center,
+                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  hintText: '• • • •',
+                  labelText: 'Confirm New PIN',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  counterText: '',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN saved!')));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6B21A8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Save PIN', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutConfirmDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Log Out', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to sign out?',
+            style: _textStyle(fontSize: 18, color: Colors.grey[700]!)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) context.go('/login');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Log Out', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeactivateConfirmDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            const SizedBox(width: 10),
+            Text('Deactivate Account', style: _textStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.red)),
+          ],
+        ),
+        content: Text(
+            'This will permanently deactivate your account and erase your data. This action cannot be undone.\n\nAre you sure you want to proceed?',
+            style: _textStyle(fontSize: 17, color: Colors.grey[700]!)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // Delete user profile from Supabase
+              try {
+                final userId = Supabase.instance.client.auth.currentUser?.id;
+                if (userId != null) {
+                  await Supabase.instance.client.from('profiles').delete().eq('id', userId);
+                }
+                await Supabase.instance.client.auth.signOut();
+              } catch (_) {}
+              if (mounted) context.go('/login');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Deactivate', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }
