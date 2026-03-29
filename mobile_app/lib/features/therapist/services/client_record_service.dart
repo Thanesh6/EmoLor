@@ -20,47 +20,44 @@ class ClientRecordService {
     final userId = SupabaseService.currentUserId;
     if (userId == null) throw Exception('Not authenticated');
 
-    // 1. Linked caregiver IDs
+    // 1. Linked child IDs from therapist_client_link
     final links = await _client
         .from('therapist_client_link')
-        .select('client_id')
+        .select('child_id')
         .eq('therapist_id', userId) as List;
 
     if (links.isEmpty) return [];
 
-    final caregiverIds = links.map((l) => l['client_id'] as String).toList();
+    final childIds = links.map((l) => l['child_id'] as String).toList();
 
-    // 2. Caregiver profiles
-    final caregiverRows = await _client
-        .from('profiles')
-        .select('user_id, full_name, phone_number, email')
-        .inFilter('user_id', caregiverIds) as List;
-
-    final caregiverMap = <String, Map<String, dynamic>>{};
-    for (final c in caregiverRows) {
-      caregiverMap[c['user_id'] as String] = c;
-    }
-
-    // 3. Children
+    // 2. Child profiles from profiles table
     final children = await _client
-        .from('child_profiles')
-        .select()
-        .inFilter('caregiver_id', caregiverIds)
-        .eq('is_active', true)
-        .order('full_name') as List;
+        .from('profiles')
+        .select('user_id, full_name, date_of_birth, avatar_url')
+        .inFilter('user_id', childIds) as List;
 
     return children.map((ch) {
-      final cgId = ch['caregiver_id'] as String;
-      final cg = caregiverMap[cgId];
+      final dob = ch['date_of_birth'] as String?;
+      int? age;
+      if (dob != null) {
+        final dobDate = DateTime.tryParse(dob);
+        if (dobDate != null) {
+          final now = DateTime.now();
+          age = now.year -
+              dobDate.year -
+              ((now.month < dobDate.month ||
+                      (now.month == dobDate.month && now.day < dobDate.day))
+                  ? 1
+                  : 0);
+        }
+      }
       return ClientSummary(
-        childId: ch['id'] as String,
+        childId: ch['user_id'] as String,
         childName: (ch['full_name'] as String?) ?? 'Child',
-        age: ch['age'] as int?,
+        age: age,
         avatarUrl: ch['avatar_url'] as String?,
-        caregiverId: cgId,
-        caregiverName: (cg?['full_name'] as String?) ?? 'Caregiver',
-        caregiverPhone: cg?['phone_number'] as String?,
-        caregiverEmail: cg?['email'] as String?,
+        caregiverId: '',
+        caregiverName: 'Caregiver',
       );
     }).toList();
   }
@@ -74,25 +71,12 @@ class ClientRecordService {
     if (userId == null) return false;
 
     try {
-      // Get the child's caregiver
-      final child = await _client
-          .from('child_profiles')
-          .select('caregiver_id')
-          .eq('id', childId)
-          .maybeSingle();
-
-      if (child == null) return false;
-
-      final caregiverId = child['caregiver_id'] as String;
-
-      // Verify therapist↔caregiver link
       final link = await _client
           .from('therapist_client_link')
-          .select('id')
+          .select('link_id')
           .eq('therapist_id', userId)
-          .eq('client_id', caregiverId)
+          .eq('child_id', childId)
           .maybeSingle();
-
       return link != null;
     } catch (e) {
       debugPrint('ClientRecordService.isLinkedToChild error: $e');

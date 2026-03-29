@@ -31,26 +31,32 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   // Goals (loaded separately so they can refresh independently)
   List<PerformanceGoal> _goals = [];
 
-  // Week selector
-  late String _selectedWeek;
-  late List<String> _weekOptions;
+  // Day selector
+  late String _selectedDay;
+  late List<String> _dayOptions;
 
-  List<String> _buildWeekOptions() {
+  // Category selector for progress subcategories
+  int _selectedCategory = 0;
+  static const _categories = ['Overview', 'Mood Patterns', 'Activity Insights', 'Time & Engagement'];
+  static const _categoryIcons = [Icons.dashboard, Icons.favorite, Icons.gamepad, Icons.timer];
+
+  static const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  List<String> _buildDayOptions() {
     final now = DateTime.now();
-    final options = <String>['This Week', 'Last Week'];
-    // One more week before last week as date range
-    final weekStart = now.subtract(Duration(days: now.weekday - 1 + 14));
-    final weekEnd = weekStart.add(const Duration(days: 6));
-    String fmt(DateTime d) => '${d.day}/${d.month}/${d.year}';
-    options.add('${fmt(weekStart)} – ${fmt(weekEnd)}');
+    final options = <String>['Today', 'Yesterday'];
+    for (int i = 2; i < 14; i++) {
+      final d = now.subtract(Duration(days: i));
+      options.add('${_monthNames[d.month - 1]} ${d.day}');
+    }
     return options;
   }
 
   @override
   void initState() {
     super.initState();
-    _weekOptions = _buildWeekOptions();
-    _selectedWeek = _weekOptions.first;
+    _dayOptions = _buildDayOptions();
+    _selectedDay = _dayOptions.first;
     _dataFuture = _loadAll();
   }
 
@@ -59,16 +65,16 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     await _loadEmotionPalette();
     await _loadGoals();
 
-    // "This Week" → real data from services, fallback to sample if empty
-    if (_selectedWeek == 'This Week') {
+    // "Today" → real data from services, fallback to sample if empty
+    if (_selectedDay == 'Today') {
       final real = await _service.loadProgress();
       if (!real.isEmpty) return real;
       // Show sample data so dashboard isn't empty initially
       return _buildMockData(0);
     }
 
-    // "Last Week" & previous → mock data
-    return _buildMockData(_selectedWeek == 'Last Week' ? 1 : 2);
+    // "Yesterday" & earlier → mock data
+    return _buildMockData(_selectedDay == 'Yesterday' ? 1 : 2);
   }
 
   /// Generate mock/sample progress data for display
@@ -302,22 +308,22 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   }
 
   Widget _buildEmpty() {
-    final isThisWeek = _selectedWeek == 'This Week';
+    final isToday = _selectedDay == 'Today';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(isThisWeek ? '🎮' : '📊', style: const TextStyle(fontSize: 64)),
+          Text(isToday ? '🎮' : '📊', style: const TextStyle(fontSize: 64)),
           const SizedBox(height: 16),
           Text(
-            isThisWeek ? 'No activities this week yet' : 'No data available',
+            isToday ? 'No activities today yet' : 'No data available',
             style: _poppins(size: 20, weight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
-            isThisWeek
+            isToday
                 ? 'Play some games and your progress will show up here!'
-                : 'No progress was recorded for this period.',
+                : 'No progress was recorded for this date.',
             style: _poppins(size: 15, color: Colors.grey[600]!),
           ),
         ],
@@ -326,6 +332,62 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   }
 
   // ── Main dashboard ──────────────────────────────────────────────
+
+  Widget _buildCategoryChips() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3E8FF),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: List.generate(_categories.length, (i) {
+          final selected = _selectedCategory == i;
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedCategory = i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: selected ? const Color(0xFF6B21A8) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: selected ? [
+                      BoxShadow(
+                        color: const Color(0xFF6B21A8).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ] : null,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_categoryIcons[i], size: 22, color: selected ? Colors.white : const Color(0xFF6B21A8)),
+                      const SizedBox(height: 6),
+                      Text(
+                        _categories[i],
+                        style: _poppins(
+                          size: 13,
+                          weight: selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected ? Colors.white : const Color(0xFF6B21A8),
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
   Widget _buildDashboard(ProgressData data) {
     return SingleChildScrollView(
@@ -351,7 +413,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Weekly overview of your child\'s learning journey',
+                      'Daily overview of your child\'s learning journey',
                       style: _poppins(size: 18, weight: FontWeight.w600, color: Colors.grey[600]!),
                     ),
                   ],
@@ -360,24 +422,24 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
               PopupMenuButton<String>(
                 onSelected: (val) {
                   setState(() {
-                    _selectedWeek = val;
+                    _selectedDay = val;
                     _dataFuture = _loadAll();
                   });
                 },
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 offset: const Offset(0, 50),
-                itemBuilder: (_) => _weekOptions.map((w) => PopupMenuItem(
-                  value: w,
+                itemBuilder: (_) => _dayOptions.map((d) => PopupMenuItem(
+                  value: d,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        w == _selectedWeek ? Icons.check_circle : Icons.circle_outlined,
+                        d == _selectedDay ? Icons.check_circle : Icons.circle_outlined,
                         color: const Color(0xFF6B21A8),
                         size: 20,
                       ),
                       const SizedBox(width: 10),
-                      Text(w, style: _poppins(size: 16, weight: w == _selectedWeek ? FontWeight.w700 : FontWeight.w500)),
+                      Text(d, style: _poppins(size: 16, weight: d == _selectedDay ? FontWeight.w700 : FontWeight.w500)),
                     ],
                   ),
                 )).toList(),
@@ -400,7 +462,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                     children: [
                       const Icon(Icons.calendar_today, color: Color(0xFF6B21A8), size: 22),
                       const SizedBox(width: 10),
-                      Text(_selectedWeek, style: _poppins(size: 18, weight: FontWeight.w600, color: const Color(0xFF6B21A8))),
+                      Text(_selectedDay, style: _poppins(size: 18, weight: FontWeight.w600, color: const Color(0xFF6B21A8))),
                       const SizedBox(width: 8),
                       const Icon(Icons.keyboard_arrow_down, color: Color(0xFF6B21A8), size: 22),
                     ],
@@ -411,85 +473,222 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Summary stats row
-          _buildSummaryRow(data),
-          const SizedBox(height: 28),
-
-          // Emotion Trends chart
-          _buildSection(
-            title: 'Emotion Trends',
-            icon: Icons.insights,
-            child: _buildMoodChart(data.weeklyMoods),
-          ),
+          // Category chips
+          _buildCategoryChips(),
           const SizedBox(height: 24),
 
-          // Activity Completion & Daily Activity side by side
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildSection(
-                    title: 'Activity Completion',
-                    icon: Icons.emoji_events,
-                    child: _buildActivityStats(data),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSection(
-                    title: 'Daily Activity',
-                    icon: Icons.show_chart,
-                    child: _buildDailyActivityChart(data),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Engagement Time & Top Emotions side by side
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _buildSection(
-                    title: 'Engagement Time',
-                    icon: Icons.timer_outlined,
-                    child: _buildEngagementChart(data),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSection(
-                    title: 'Top Emotions',
-                    icon: Icons.favorite,
-                    child: _buildTopEmotionsChart(data),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          if (data.recentCompletions.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            _buildSection(
-              title: 'Recent Activities',
-              icon: Icons.history,
-              child: _buildRecentActivities(data.recentCompletions),
-            ),
-          ],
+          // Category-specific content
+          if (_selectedCategory == 0) ..._buildOverviewContent(data),
+          if (_selectedCategory == 1) ..._buildMoodPatternsContent(data),
+          if (_selectedCategory == 2) ..._buildActivityInsightsContent(data),
+          if (_selectedCategory == 3) ..._buildTimeEngagementContent(data),
         ],
       ),
+    );
+  }
+
+  /// Overview — just the summary stat cards
+  List<Widget> _buildOverviewContent(ProgressData data) {
+    return [
+      _buildSummaryRow(data),
+      const SizedBox(height: 24),
+      // Quick mood snapshot + activity completion side by side
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _buildSection(
+                title: 'Mood This Week',
+                icon: Icons.insights,
+                child: _buildMoodChart(data.weeklyMoods),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildSection(
+                title: 'Top Emotions',
+                icon: Icons.favorite,
+                child: _buildTopEmotionsChart(data),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// Mood Patterns — emotion trends + top emotions + emotion distribution
+  List<Widget> _buildMoodPatternsContent(ProgressData data) {
+    return [
+      _buildSection(
+        title: 'Weekly Mood Trends',
+        icon: Icons.insights,
+        child: _buildMoodChart(data.weeklyMoods),
+      ),
+      const SizedBox(height: 24),
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _buildSection(
+                title: 'Emotion Distribution',
+                icon: Icons.pie_chart,
+                child: _buildTopEmotionsChart(data),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildSection(
+                title: 'Emotion Frequency',
+                icon: Icons.bar_chart,
+                child: _buildEmotionFrequencyBars(data),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// Activity Insights — completion stats + per-activity breakdown
+  List<Widget> _buildActivityInsightsContent(ProgressData data) {
+    return [
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _buildSection(
+                title: 'Activity Completion',
+                icon: Icons.emoji_events,
+                child: _buildActivityStats(data),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildSection(
+                title: 'Daily Activity',
+                icon: Icons.show_chart,
+                child: _buildDailyActivityChart(data),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// Time & Engagement — engagement per game + daily patterns
+  List<Widget> _buildTimeEngagementContent(ProgressData data) {
+    return [
+      _buildSection(
+        title: 'Time Per Game',
+        icon: Icons.timer_outlined,
+        child: _buildEngagementChart(data),
+      ),
+      const SizedBox(height: 24),
+      _buildSection(
+        title: 'Daily Activity Trend',
+        icon: Icons.show_chart,
+        child: _buildDailyActivityChart(data),
+      ),
+    ];
+  }
+
+  /// Recent History — recent activity list (simple layout, no heavy wrapper)
+  List<Widget> _buildRecentHistoryContent(ProgressData data) {
+    if (data.recentCompletions.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Center(
+            child: Column(
+              children: [
+                const Text('🎮', style: TextStyle(fontSize: 48)),
+                const SizedBox(height: 12),
+                Text('No recent activities yet', style: _poppins(size: 18, weight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Text('Activities will appear here after your child plays games',
+                    style: _poppins(size: 14, color: Colors.grey[500]!)),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    return [
+      _buildRecentActivities(data.recentCompletions),
+    ];
+  }
+
+  /// Emotion frequency horizontal bars (uses real data from weeklyMoods)
+  Widget _buildEmotionFrequencyBars(ProgressData data) {
+    // Tally emotions from weekly moods
+    final freq = <String, int>{};
+    for (final day in data.weeklyMoods) {
+      for (final entry in day.entries) {
+        freq[entry.emotionId] = (freq[entry.emotionId] ?? 0) + 1;
+      }
+    }
+
+    // Sample entries if no real data
+    if (freq.isEmpty) {
+      freq['happy'] = 7;
+      freq['calm'] = 5;
+      freq['excited'] = 4;
+      freq['sad'] = 2;
+      freq['angry'] = 1;
+      freq['scared'] = 1;
+    }
+
+    final sorted = freq.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final maxVal = sorted.first.value.toDouble();
+
+    return Column(
+      children: sorted.take(6).map((e) {
+        final fraction = (e.value / maxVal).clamp(0.0, 1.0);
+        final emoji = _emojiForEmotion(e.key);
+        final color = _colorForEmotion(e.key);
+        final name = e.key[0].toUpperCase() + e.key.substring(1);
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 20)),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 70,
+                child: Text(name, style: _poppins(size: 13, weight: FontWeight.w600)),
+              ),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: fraction,
+                    minHeight: 14,
+                    backgroundColor: Colors.grey[100],
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('${e.value}x', style: _poppins(size: 13, weight: FontWeight.w700, color: const Color(0xFF6B21A8))),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
   // ── Summary row ─────────────────────────────────────────────────
 
   Widget _buildSummaryRow(ProgressData data) {
-    final activeDays =
-        data.weeklyMoods.where((d) => d.entries.isNotEmpty).length;
+    final totalMins = data.activityStats.totalTimeSeconds ~/ 60;
+    final hoursStr = totalMins >= 60
+        ? '${(totalMins / 60).toStringAsFixed(1)}'
+        : '$totalMins';
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 600;
@@ -508,9 +707,9 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
             Colors.purple,
           ),
           _summaryCard(
-            '📅',
-            'Active Days',
-            '$activeDays / 7',
+            '⏱️',
+            'Hours Active',
+            hoursStr,
             Colors.green,
           ),
         ];
@@ -587,6 +786,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     required String title,
     required IconData icon,
     required Widget child,
+    Widget? trailing,
   }) {
     return Container(
       width: double.infinity,
@@ -609,7 +809,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
             children: [
               Icon(icon, color: const Color(0xFF6B21A8), size: 26),
               const SizedBox(width: 10),
-              Text(title, style: _poppins(size: 26, weight: FontWeight.w700)),
+              Expanded(child: Text(title, style: _poppins(size: 26, weight: FontWeight.w700))),
+              if (trailing != null) trailing,
             ],
           ),
           const SizedBox(height: 18),
@@ -828,14 +1029,21 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
   // ── Daily Activity Line Chart ─────────────────────────────────
   Widget _buildDailyActivityChart(ProgressData data) {
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    // Sample data - counts per day
-    final counts = data.weeklyMoods.map((d) => d.entries.length.toDouble()).toList();
+    // Use mock counts per day with some sample entries so chart is not empty
+    final counts = List.generate(7, (i) {
+      final real = i < data.weeklyMoods.length ? data.weeklyMoods[i].entries.length.toDouble() : 0.0;
+      // Fallback sample if all zero
+      final samples = [2.0, 3.0, 1.0, 4.0, 2.0, 3.0, 1.0];
+      return real > 0 ? real : samples[i];
+    });
     final maxY = counts.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
 
     return SizedBox(
       height: 200,
       child: LineChart(
         LineChartData(
+          minX: 0,
+          maxX: 6,
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
@@ -849,6 +1057,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
+                interval: 1,
                 getTitlesWidget: (value, _) {
                   final idx = value.toInt();
                   if (idx >= 0 && idx < days.length) {
@@ -870,7 +1079,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
           maxY: maxY + 1,
           lineBarsData: [
             LineChartBarData(
-              spots: List.generate(counts.length, (i) => FlSpot(i.toDouble(), counts[i])),
+              spots: List.generate(7, (i) => FlSpot(i.toDouble(), counts[i])),
               isCurved: true,
               color: const Color(0xFF6B21A8),
               barWidth: 3,
@@ -967,13 +1176,26 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
 
   // ── Top Emotions Pie Chart ────────────────────────────────────
   Widget _buildTopEmotionsChart(ProgressData data) {
-    final emotions = [
-      {'name': 'Happy', 'value': 35.0, 'color': Colors.green, 'emoji': '😊'},
-      {'name': 'Calm', 'value': 25.0, 'color': Colors.blue, 'emoji': '😌'},
-      {'name': 'Excited', 'value': 20.0, 'color': Colors.orange, 'emoji': '🤩'},
-      {'name': 'Sad', 'value': 12.0, 'color': Colors.lightBlue, 'emoji': '😢'},
-      {'name': 'Angry', 'value': 8.0, 'color': Colors.red, 'emoji': '😡'},
-    ];
+    // Tally emotions from weekly moods (real data)
+    final freq = <String, int>{};
+    for (final day in data.weeklyMoods) {
+      for (final entry in day.entries) {
+        freq[entry.emotionId] = (freq[entry.emotionId] ?? 0) + 1;
+      }
+    }
+
+    // Fallback sample data if no real entries
+    if (freq.isEmpty) {
+      freq['happy'] = 7;
+      freq['calm'] = 5;
+      freq['excited'] = 4;
+      freq['sad'] = 2;
+      freq['angry'] = 2;
+    }
+
+    final total = freq.values.fold(0, (a, b) => a + b).toDouble();
+    final sorted = freq.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final top = sorted.take(5).toList();
 
     return Column(
       children: [
@@ -983,12 +1205,14 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
             PieChartData(
               sectionsSpace: 3,
               centerSpaceRadius: 35,
-              sections: emotions.map((e) {
+              sections: top.map((e) {
+                final pct = total > 0 ? (e.value / total * 100) : 0.0;
+                final color = _colorForEmotion(e.key);
                 return PieChartSectionData(
-                  value: e['value'] as double,
-                  color: e['color'] as Color,
+                  value: e.value.toDouble(),
+                  color: color,
                   radius: 40,
-                  title: '${(e['value'] as double).toInt()}%',
+                  title: '${pct.toInt()}%',
                   titleStyle: _poppins(size: 12, weight: FontWeight.w700, color: Colors.white),
                 );
               }).toList(),
@@ -999,14 +1223,15 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
         Wrap(
           spacing: 14,
           runSpacing: 8,
-          children: emotions.map((e) {
+          children: top.map((e) {
+            final pct = total > 0 ? (e.value / total * 100) : 0.0;
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(e['emoji'] as String, style: const TextStyle(fontSize: 16)),
+                Text(_emojiForEmotion(e.key), style: const TextStyle(fontSize: 16)),
                 const SizedBox(width: 4),
                 Text(
-                  '${e['name']} ${(e['value'] as double).toInt()}%',
+                  '${e.key[0].toUpperCase()}${e.key.substring(1)} ${pct.toInt()}%',
                   style: _poppins(size: 14, weight: FontWeight.w600),
                 ),
               ],
@@ -1419,12 +1644,19 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
                 ),
               ),
               if (r.scoreMax > 0)
-                Text(
-                  '${r.scoreValue}/${r.scoreMax}',
-                  style: _poppins(
-                      size: 14,
-                      weight: FontWeight.w700,
-                      color: const Color(0xFF6B21A8)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${(r.scoreValue * 100 / r.scoreMax).round()}%',
+                    style: _poppins(
+                        size: 14,
+                        weight: FontWeight.w700,
+                        color: const Color(0xFF6B21A8)),
+                  ),
                 ),
             ],
           ),

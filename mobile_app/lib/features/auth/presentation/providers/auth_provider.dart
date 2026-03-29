@@ -62,7 +62,9 @@ class AuthNotifier extends AsyncNotifier<User?> {
         accountType: accountType,
         phone: phone,
       );
-      // Supabase session often updates automatically, but we can rely on stream
+      // Email confirmation is pending — user is not signed in yet.
+      // Always resolve loading so the login button is never stuck.
+      state = const AsyncData(null);
     } catch (e, st) {
       state = AsyncError(e, st);
       rethrow;

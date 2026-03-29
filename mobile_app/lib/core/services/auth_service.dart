@@ -33,6 +33,7 @@ class AuthService {
       email: email,
       password: password,
       data: {'full_name': name, 'role': role},
+      emailRedirectTo: 'emolor://login-callback/',
     );
 
     // Supabase returns a user with empty identities when the email is
@@ -172,7 +173,10 @@ class AuthService {
 
   /// Reset password
   Future<void> resetPassword(String email) async {
-    await _client.auth.resetPasswordForEmail(email);
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'emolor://update-password/',
+    );
   }
 
   /// Listen to auth state changes

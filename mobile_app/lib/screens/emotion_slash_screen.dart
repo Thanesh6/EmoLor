@@ -10,6 +10,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emotion Slash — Fruit-Ninja-style game where emotion faces fly across
 /// the screen and the child swipes to slash the ones matching the target.
@@ -388,10 +389,12 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
 
     if (emoji.isTarget) {
       _engine.resetErrors();
+      AudioService.instance.playSfx(SoundEffect.slash);
       _spawnExplosion(emoji.x, emoji.y, emoji.color);
       // Correct slash — advance to next target
       _advanceTarget();
     } else {
+      AudioService.instance.playSfx(SoundEffect.wrong);
       _lives--;
       _levelErrors++;
       _engine.trackError();

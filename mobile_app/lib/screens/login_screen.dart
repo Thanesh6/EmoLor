@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
+import '../core/services/audio_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -18,9 +21,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    AudioService.instance.startBgMusic(BgMusicType.login);
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    AudioService.instance.stopBgMusic();
     super.dispose();
   }
 
@@ -53,6 +63,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             email: email,
             password: password,
           );
+
+      // Clear local data if a different user logged in (new account = fresh start)
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final lastUserId = prefs.getString('last_logged_in_user');
+        if (lastUserId != null && lastUserId != userId) {
+          // Different user → wipe local game data so they start fresh
+          await prefs.clear();
+        }
+        await prefs.setString('last_logged_in_user', userId);
+      }
       // Navigation is handled by AppRouter redirect (via refreshListenable)
     } catch (e) {
       if (!mounted) return; // Guard against disposed widget
@@ -228,8 +250,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 fontWeight:
                                     FontWeight.w500, // Medium legibility
                                 color: const Color(0xFF8B5CF6),
-                                decoration: TextDecoration.underline,
-                                decorationColor: const Color(0xFF8B5CF6),
+                                decoration: TextDecoration.none,
                               ),
                             ),
                           ),
@@ -298,8 +319,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   color:
                                       const Color(0xFF059669), // Emerald Green
                                   fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: const Color(0xFF059669),
+                                  decoration: TextDecoration.none,
                                 ),
                               ),
                             ),

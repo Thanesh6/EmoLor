@@ -209,17 +209,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         });
       }
 
-      // Success — user is now logged in via Supabase session
-      // Show success banner, then let the router redirect to dashboard
+      // Success — email confirmation sent. Stay on page, show top banner only.
       if (mounted) {
         setState(() {
-          _successMessage = 'Account created successfully! Redirecting...';
+          _successMessage =
+              'Verification email sent to ${_emailController.text.trim()}!\nCheck your inbox and click the link to activate your account.';
         });
-
-        Future.delayed(const Duration(seconds: 2), () {
+        // Auto-dismiss banner after 5 seconds, then go to login
+        Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
-            // Navigate to Verification screen
-            context.go('/verification', extra: _emailController.text.trim());
+            setState(() => _successMessage = null);
+            context.go('/login');
           }
         });
       }
@@ -723,8 +723,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                       fontSize: 20,
                                       color: const Color(0xFFC026D3),
                                       fontWeight: FontWeight.w600,
-                                      decoration: TextDecoration.underline,
-                                      decorationColor: const Color(0xFFC026D3),
+                                      decoration: TextDecoration.none,
                                     ),
                                   ),
                                 ),

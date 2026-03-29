@@ -10,6 +10,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emotion Catcher — Emojis rain from the sky and the child moves a basket
 /// left/right to catch the ones matching the target emotion.
@@ -328,10 +329,12 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
 
     if (emoji.isTarget) {
       _engine.resetErrors();
+      AudioService.instance.playSfx(SoundEffect.catchSfx);
       _spawnSparkles(emoji.x, emoji.y, emoji.color);
       // Correct catch — advance to next target
       _advanceTarget();
     } else {
+      AudioService.instance.playSfx(SoundEffect.wrong);
       _lives--;
       _levelErrors++;
       _engine.trackError();

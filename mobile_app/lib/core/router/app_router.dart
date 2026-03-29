@@ -69,8 +69,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = currentPath == '/login' ||
           currentPath == '/register' ||
           currentPath == '/forgot-password' ||
-          currentPath == '/update-password' ||
-          currentPath == '/verification';
+          currentPath.startsWith('/update-password') ||
+          currentPath == '/verification' ||
+          currentPath.startsWith('/login-callback');
 
       // 1. Not Logged In → only allow auth routes
       if (!isLoggedIn) {
@@ -80,8 +81,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // 2. Logged In & on an auth route → redirect to appropriate dashboard
       if (isAuthRoute) {
         try {
-          // If on the verification screen, allow them to stay there
-          if (currentPath == '/verification') {
+          // If on the verification, email callback, or password reset screen, allow them to stay there
+          // Use startsWith for login-callback and update-password because deep links include query params
+          if (currentPath == '/verification' ||
+              currentPath.startsWith('/login-callback') ||
+              currentPath.startsWith('/update-password')) {
             return null;
           }
 
@@ -147,6 +151,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/update-password', // For Deep Link
         builder: (context, state) => const UpdatePasswordScreen(),
+      ),
+      // Email confirmation deep link: emolor://login-callback/?token_hash=...&type=signup
+      GoRoute(
+        path: '/login-callback',
+        builder: (context, state) => const _EmailConfirmCallbackScreen(),
       ),
       // Dashboards
       GoRoute(
@@ -257,3 +266,82 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+/// Handles the emolor://login-callback/ deep link from Supabase email confirmation.
+/// Exchanges the token in the URL for a Supabase session, then go_router
+/// redirects to the appropriate dashboard via its redirect logic.
+class _EmailConfirmCallbackScreen extends StatefulWidget {
+  const _EmailConfirmCallbackScreen();
+
+  @override
+  State<_EmailConfirmCallbackScreen> createState() =>
+      _EmailConfirmCallbackScreenState();
+}
+
+class _EmailConfirmCallbackScreenState
+    extends State<_EmailConfirmCallbackScreen> {
+  String _status = 'Confirming your email…';
+
+  @override
+  void initState() {
+    super.initState();
+    _handleCallback();
+  }
+
+  Future<void> _handleCallback() async {
+    try {
+      // Wait for Supabase to process the deep link token
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Sign out so user is NOT auto-logged-in — they should login manually
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() => _status = '✅ Email confirmed! Please log in.');
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) context.go('/login');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _status = 'Something went wrong. Please log in.');
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) context.go('/login');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFBAE6FD), Color(0xFFE9D5FF)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF6B21A8)),
+              const SizedBox(height: 24),
+              Text(
+                _status,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF6B21A8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

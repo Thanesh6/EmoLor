@@ -4,266 +4,221 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/supabase_service.dart';
 
-/// UCD040 – Link Client Account
-///
-/// Shared service for the linking-code flow:
-/// • **Caregiver side** – generate / list / revoke share codes.
-/// • **Therapist side** – verify a code, preview the child, confirm link.
+/// Linking-code flow between caregiver and therapist.
+/// Actual DB table: `linking_code` (code_id, child_id, code, is_active, expires_at, used_at, used_by)
+/// Actual link table: `therapist_client_link` (link_id, therapist_id, child_id)
 class ClientLinkingService {
   final SupabaseClient _client = SupabaseService.client;
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // ── Caregiver: Generate & manage share codes ──────────────────────────
-  // ═══════════════════════════════════════════════════════════════════════
+  // ── Caregiver: generate a share code ─────────────────────────────────
 
-  /// Generates a new 6-character share code (XXX-XXX) for [childProfileId].
-  /// Previous active codes for the same child are expired automatically.
-  Future<LinkingCode> generateShareCode(String childProfileId) async {
-    final userId = SupabaseService.currentUserId;
-    if (userId == null) throw Exception('Not authenticated');
-
-    // Expire any existing active codes for this child
-    await _client
-        .from('linking_codes')
-        .update({'status': 'expired'})
-        .eq('caregiver_id', userId)
-        .eq('child_profile_id', childProfileId)
-        .eq('status', 'active');
-
-    // Generate unique code
-    String code = _generateCode();
-
-    // Insert (retry on duplicate)
-    Map<String, dynamic>? row;
-    for (var attempt = 0; attempt < 5; attempt++) {
-      try {
-        final result = await _client
-            .from('linking_codes')
-            .insert({
-              'code': code,
-              'caregiver_id': userId,
-              'child_profile_id': childProfileId,
-              'status': 'active',
-            })
-            .select()
-            .single();
-        row = result;
-        break;
-      } catch (e) {
-        // Likely duplicate code – regenerate
-        code = _generateCode();
-      }
-    }
-
-    if (row == null) throw Exception('Failed to generate a unique code');
-
-    return LinkingCode.fromJson(row);
-  }
-
-  /// Returns all codes created by the current caregiver.
-  Future<List<LinkingCode>> getMyCodes() async {
-    final userId = SupabaseService.currentUserId;
-    if (userId == null) return [];
-
-    // Also expire old ones on fetch
+  /// Returns the unique, stable share code for [childId].
+  /// Each profile gets one permanent code. If one already exists and is active,
+  /// it is returned. Otherwise a new deterministic code is generated from the
+  /// user ID and stored.
+  Future<String> generateShareCode(String childId) async {
+    // 1. Check for an existing active code for this child
     try {
-      await _client.rpc('expire_old_linking_codes');
+      final existing = await _client
+          .from('linking_code')
+          .select('code')
+          .eq('child_id', childId)
+          .eq('is_active', true)
+          .maybeSingle();
+      if (existing != null) {
+        return existing['code'] as String;
+      }
     } catch (_) {}
 
-    final rows = await _client
-        .from('linking_codes')
-        .select()
-        .eq('caregiver_id', userId)
-        .order('created_at', ascending: false) as List;
+    // 2. Generate a deterministic code from the user ID so it's always the same
+    final code = _deterministicCode(childId);
 
-    return rows.map((r) => LinkingCode.fromJson(r)).toList();
+    // 3. Try to insert it (or return existing if race condition)
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final result = await _client
+            .from('linking_code')
+            .insert({
+              'child_id': childId,
+              'code': code,
+              'is_active': true,
+              'expires_at': DateTime.now()
+                  .add(const Duration(days: 365))
+                  .toUtc()
+                  .toIso8601String(),
+            })
+            .select('code')
+            .single();
+        return result['code'] as String;
+      } catch (_) {
+        // Code might already exist (race condition) — try fetching again
+        try {
+          final existing = await _client
+              .from('linking_code')
+              .select('code')
+              .eq('child_id', childId)
+              .eq('is_active', true)
+              .maybeSingle();
+          if (existing != null) return existing['code'] as String;
+        } catch (_) {}
+      }
+    }
+    throw Exception('Failed to generate linking code');
   }
 
-  /// Manually revoke (expire) a code.
-  Future<void> revokeCode(String codeId) async {
-    await _client
-        .from('linking_codes')
-        .update({'status': 'expired'}).eq('id', codeId);
+  /// Derives a stable XXX-XXX code from [userId] using its hash.
+  String _deterministicCode(String userId) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    // Use a simple hash of the userId to produce 6 stable characters
+    var hash = userId.hashCode.abs();
+    // Add more entropy from the string itself
+    for (var i = 0; i < userId.length; i++) {
+      hash = (hash * 31 + userId.codeUnitAt(i)) & 0x7FFFFFFF;
+    }
+    final digits = <String>[];
+    var h = hash;
+    for (var i = 0; i < 6; i++) {
+      digits.add(chars[h % chars.length]);
+      h = (h ~/ chars.length) + (h * 7 + 13) & 0x7FFFFFFF;
+    }
+    return '${digits.sublist(0, 3).join()}-${digits.sublist(3, 6).join()}';
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // ── Therapist: Verify & confirm linking ───────────────────────────────
-  // ═══════════════════════════════════════════════════════════════════════
+  // ── Therapist: verify & confirm ───────────────────────────────────────
 
-  /// Validates a code but does NOT consume it yet.
-  /// Returns a preview of the child (name + avatar) or an error.
+  /// Validates [code] and returns a preview without consuming it.
   Future<LinkVerifyResult> verifyCode(String code) async {
     final userId = SupabaseService.currentUserId;
-    if (userId == null) {
-      return LinkVerifyResult.error('Not authenticated');
-    }
+    if (userId == null) return LinkVerifyResult.error('Not authenticated');
 
     final normalized = code.trim().toUpperCase();
 
-    // 1. Look up the code
+    // 1. Find the active code
     final row = await _client
-        .from('linking_codes')
+        .from('linking_code')
         .select()
         .eq('code', normalized)
-        .eq('status', 'active')
+        .eq('is_active', true)
         .maybeSingle();
 
     if (row == null) {
       return LinkVerifyResult.error(
-          'Invalid or expired code. Please ask the Caregiver for a new one.');
+          'Invalid or expired code. Please ask the caregiver for a new one.');
     }
 
     // Check expiry
-    final expiresAt = DateTime.parse(row['expires_at'] as String);
-    if (expiresAt.isBefore(DateTime.now().toUtc())) {
-      // Mark expired
-      await _client
-          .from('linking_codes')
-          .update({'status': 'expired'}).eq('id', row['id']);
-      return LinkVerifyResult.error(
-          'Invalid or expired code. Please ask the Caregiver for a new one.');
+    final expiresAtStr = row['expires_at'] as String?;
+    if (expiresAtStr != null) {
+      final expiresAt = DateTime.parse(expiresAtStr);
+      if (expiresAt.isBefore(DateTime.now().toUtc())) {
+        try {
+          await _client
+              .from('linking_code')
+              .update({'is_active': false}).eq('code_id', row['code_id']);
+        } catch (_) {}
+        return LinkVerifyResult.error(
+            'Code has expired. Please ask the caregiver for a new one.');
+      }
     }
 
-    final childProfileId = row['child_profile_id'] as String;
-    final caregiverId = row['caregiver_id'] as String;
+    final childId = row['child_id'] as String;
 
-    // 2. Check already linked
-    final existingLink = await _client
-        .from('therapist_client_link')
-        .select('id')
-        .eq('therapist_id', userId)
-        .eq('client_id', caregiverId)
-        .maybeSingle();
+    // 2 & 3. In parallel: check already linked + fetch child profile
+    final results = await Future.wait([
+      _client
+          .from('therapist_client_link')
+          .select('link_id')
+          .eq('therapist_id', userId)
+          .eq('child_id', childId)
+          .maybeSingle()
+          .catchError((_) => null),
+      _client
+          .from('profiles')
+          .select('full_name, date_of_birth, avatar_url')
+          .eq('user_id', childId)
+          .maybeSingle()
+          .catchError((_) => null),
+    ]);
 
-    if (existingLink != null) {
+    if (results[0] != null) {
       return LinkVerifyResult.error(
-          'This client is already linked to your account.');
+          'This child is already linked to your account.');
     }
 
-    // 3. Fetch child preview
-    final child = await _client
-        .from('child_profiles')
-        .select('id, full_name, age, avatar_url')
-        .eq('id', childProfileId)
-        .maybeSingle();
-
+    final child = results[1] as Map<String, dynamic>?;
     if (child == null) {
       return LinkVerifyResult.error('Child profile not found.');
     }
 
+    int? age;
+    final dob = child['date_of_birth'] as String?;
+    if (dob != null) {
+      final dobDate = DateTime.tryParse(dob);
+      if (dobDate != null) {
+        final now = DateTime.now();
+        age = now.year -
+            dobDate.year -
+            ((now.month < dobDate.month ||
+                    (now.month == dobDate.month && now.day < dobDate.day))
+                ? 1
+                : 0);
+      }
+    }
+
     return LinkVerifyResult.success(
-      codeId: row['id'] as String,
-      childProfileId: childProfileId,
-      caregiverId: caregiverId,
+      codeId: row['code_id'] as String,
+      childId: childId,
       childName: (child['full_name'] as String?) ?? 'Child',
-      childAge: child['age'] as int?,
+      childAge: age,
       childAvatarUrl: child['avatar_url'] as String?,
     );
   }
 
-  /// Consumes the code and creates the therapist↔caregiver link.
-  /// Call only after a successful [verifyCode] + user confirmation.
+  /// Consumes the code and creates the therapist↔child link.
   Future<void> confirmLink(LinkVerifyResult preview) async {
     final userId = SupabaseService.currentUserId;
     if (userId == null) throw Exception('Not authenticated');
 
-    // 1. Create therapist_client_link
-    await _client.from('therapist_client_link').insert({
-      'therapist_id': userId,
-      'client_id': preview.caregiverId,
-    });
+    await Future.wait([
+      _client.from('therapist_client_link').insert({
+        'therapist_id': userId,
+        'child_id': preview.childId,
+      }),
+      _client.from('linking_code').update({
+        'is_active': false,
+        'used_by': userId,
+        'used_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('code_id', preview.codeId!),
+    ]);
 
-    // 2. Mark code as used
-    await _client.from('linking_codes').update({
-      'status': 'used',
-      'used_by': userId,
-      'used_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', preview.codeId!);
-
-    // 3. Notify caregiver
-    try {
-      await _client.from('notifications').insert({
-        'user_id': preview.caregiverId,
-        'title': '🔗 Therapist Linked',
-        'body':
-            'A therapist has been linked to ${preview.childName}\'s account.',
-        'type': 'client_linked',
-        'is_read': false,
-      });
-    } catch (_) {
-      // Best-effort
-    }
-
-    debugPrint('ClientLinkingService: link confirmed for ${preview.childName}');
+    debugPrint(
+        'ClientLinkingService: linked therapist to child ${preview.childName}');
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // ── UCD041: Unlink Client Account ─────────────────────────────────────
-  // ═══════════════════════════════════════════════════════════════════════
+  // ── Therapist: unlink a client ────────────────────────────────────────
 
-  /// Removes the therapist↔caregiver link, logs the event, and notifies
-  /// the caregiver. The therapist permanently loses access to the child's
-  /// profile and therapy history.
+  /// Removes the therapist↔child link from `therapist_client_link`.
+  /// Uses the currently authenticated therapist's ID and the child's [childId].
   Future<void> unlinkClient({
     required String caregiverId,
     required String childName,
+    required String childId,
   }) async {
-    final userId = SupabaseService.currentUserId;
-    if (userId == null) throw Exception('Not authenticated');
+    final therapistId = SupabaseService.currentUserId;
+    if (therapistId == null) throw Exception('Not authenticated');
 
-    // 1. Fetch therapist display name for the notification
-    String therapistName = 'Your therapist';
-    try {
-      final profile = await _client
-          .from('profiles')
-          .select('full_name')
-          .eq('user_id', userId)
-          .maybeSingle();
-      if (profile != null && profile['full_name'] != null) {
-        therapistName = profile['full_name'] as String;
-      }
-    } catch (_) {}
-
-    // 2. Delete the relationship record
     await _client
         .from('therapist_client_link')
         .delete()
-        .eq('therapist_id', userId)
-        .eq('client_id', caregiverId);
-
-    // 3. Log the dissociation event for audit
-    try {
-      await _client.from('audit_log').insert({
-        'user_id': userId,
-        'action': 'client_unlinked',
-        'details':
-            'Therapist $therapistName unlinked from caregiver $caregiverId '
-                '(child: $childName)',
-      });
-    } catch (_) {
-      // Best-effort – audit table may not exist yet
-    }
-
-    // 4. Notify the caregiver
-    try {
-      await _client.from('notifications').insert({
-        'user_id': caregiverId,
-        'title': '🔗 Therapist Disconnected',
-        'body': '$therapistName has disconnected from your profile.',
-        'type': 'client_unlinked',
-        'is_read': false,
-      });
-    } catch (_) {
-      // Best-effort
-    }
+        .eq('therapist_id', therapistId)
+        .eq('child_id', childId);
 
     debugPrint(
-        'ClientLinkingService: unlinked from caregiver $caregiverId ($childName)');
+        'ClientLinkingService: unlinked therapist from child $childName');
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
-  /// Generates a random XXX-XXX code using unambiguous characters.
   String _generateCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rng = Random.secure();
@@ -273,65 +228,15 @@ class ClientLinkingService {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ── Data classes ─────────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Data classes ──────────────────────────────────────────────────────────
 
-@immutable
-class LinkingCode {
-  final String id;
-  final String code;
-  final String caregiverId;
-  final String childProfileId;
-  final String status; // active | used | expired
-  final DateTime createdAt;
-  final DateTime expiresAt;
-  final String? usedBy;
-  final DateTime? usedAt;
-
-  const LinkingCode({
-    required this.id,
-    required this.code,
-    required this.caregiverId,
-    required this.childProfileId,
-    required this.status,
-    required this.createdAt,
-    required this.expiresAt,
-    this.usedBy,
-    this.usedAt,
-  });
-
-  bool get isActive => status == 'active';
-  bool get isExpired =>
-      status == 'expired' || expiresAt.isBefore(DateTime.now().toUtc());
-
-  factory LinkingCode.fromJson(Map<String, dynamic> json) {
-    return LinkingCode(
-      id: json['id'] as String,
-      code: json['code'] as String,
-      caregiverId: json['caregiver_id'] as String,
-      childProfileId: json['child_profile_id'] as String,
-      status: json['status'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      expiresAt: DateTime.parse(json['expires_at'] as String),
-      usedBy: json['used_by'] as String?,
-      usedAt: json['used_at'] != null
-          ? DateTime.parse(json['used_at'] as String)
-          : null,
-    );
-  }
-}
-
-/// Result of verifying a linking code.
 @immutable
 class LinkVerifyResult {
   final bool isValid;
   final String? errorMessage;
 
-  // Preview fields (only set when isValid == true)
   final String? codeId;
-  final String? childProfileId;
-  final String? caregiverId;
+  final String? childId;
   final String? childName;
   final int? childAge;
   final String? childAvatarUrl;
@@ -340,8 +245,7 @@ class LinkVerifyResult {
     required this.isValid,
     this.errorMessage,
     this.codeId,
-    this.childProfileId,
-    this.caregiverId,
+    this.childId,
     this.childName,
     this.childAge,
     this.childAvatarUrl,
@@ -349,8 +253,7 @@ class LinkVerifyResult {
 
   factory LinkVerifyResult.success({
     required String codeId,
-    required String childProfileId,
-    required String caregiverId,
+    required String childId,
     required String childName,
     int? childAge,
     String? childAvatarUrl,
@@ -358,8 +261,7 @@ class LinkVerifyResult {
     return LinkVerifyResult._(
       isValid: true,
       codeId: codeId,
-      childProfileId: childProfileId,
-      caregiverId: caregiverId,
+      childId: childId,
       childName: childName,
       childAge: childAge,
       childAvatarUrl: childAvatarUrl,

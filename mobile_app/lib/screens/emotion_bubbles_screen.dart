@@ -10,6 +10,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emotion Bubbles Pop — Colored bubbles float up, child taps the one
 /// matching the target emotion-color. Adaptive difficulty via AdaptiveEngine.
@@ -169,11 +170,23 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
 
   void _spawnBubbles() {
     _bubbles.clear();
-    // Always include the target at least once
+    // Heuristic: more target copies when errors accumulate
+    // 0 errors → 1 copy, 1 error → 2 copies, 2 errors → 3 copies, 3+ → fill half
+    final targetCopies = _levelErrors == 0
+        ? 1
+        : _levelErrors == 1
+            ? 2
+            : _levelErrors == 2
+                ? 3
+                : max(3, (_numBubbles / 2).ceil());
+
+    // Start with the required number of target copies (capped by total bubbles)
+    final selected = <Map<String, dynamic>>[
+      ...List.generate(min(targetCopies, _numBubbles), (_) => _targetEmotion),
+    ];
+    // Fill remaining slots with distractors
     final pool = List<Map<String, dynamic>>.from(_emotions);
     pool.shuffle(_rng);
-    // Ensure target is in the set
-    final selected = <Map<String, dynamic>>[_targetEmotion];
     for (final e in pool) {
       if (selected.length >= _numBubbles) break;
       if (e['name'] != _targetEmotion['name']) selected.add(e);
@@ -227,6 +240,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
 
     if (bubble.emotionName == _targetEmotion['name']) {
       // Correct!
+      AudioService.instance.playSfx(SoundEffect.pop);
       setState(() {
         bubble.popped = true;
         _feedbackCorrect = true;
@@ -243,6 +257,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       );
     } else {
       // Wrong — track per-level error and reduce bubbles adaptively
+      AudioService.instance.playSfx(SoundEffect.wrong);
       setState(() {
         bubble.popped = true;
         _feedbackCorrect = false;

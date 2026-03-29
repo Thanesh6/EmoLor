@@ -5,9 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/services/emotion_colour_mapping.dart';
 import '../core/services/emotion_journal_service.dart';
 import '../core/services/star_service.dart';
-import '../features/caregiver/presentation/screens/chat_tab.dart';
 import '../features/caregiver/presentation/screens/progress_dashboard_screen.dart';
 import '../features/caregiver/presentation/widgets/new_goal_dialog.dart';
+import '../features/caregiver/services/goal_service.dart';
 import '../features/child/services/child_rewards_service.dart';
 import '../features/child/services/completion_service.dart';
 import '../features/child/models/completion_record.dart';
@@ -34,6 +34,8 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
   late String _childName;
   String _childAvatar = '🐱';
   late AnimationController _glowCtrl;
+
+  String? _childUserId; // child's Supabase user_id for linking codes
 
   // ── Real-time data from services ──
   int _totalStars = 0;
@@ -93,6 +95,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         return ts.isAfter(weekStartDate);
       }).length;
 
+      // Load user-created goals (must be outside setState — it's async)
+      final serviceGoals = await GoalService.getAllGoals();
+
       if (mounted) {
         setState(() {
           _totalStars = stars;
@@ -104,12 +109,14 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
           _gameFreq = gameFreq;
           _recentCompletions = completions.take(4).toList();
           _recentJournal = journal.reversed.take(10).toList();
-          // Build real goals based on actual progress
-          _activeGoals = [
-            {'label': 'Earn 50 stars', 'current': stars.clamp(0, 50), 'target': 50, 'color': 'orange', 'emoji': '⭐'},
-            {'label': 'Complete 20 activities', 'current': completions.length.clamp(0, 20), 'target': 20, 'color': 'blue', 'emoji': '🎮'},
-            {'label': 'Explore all 8 emotions', 'current': emotionFreq.length.clamp(0, 8), 'target': 8, 'color': 'green', 'emoji': '🗣️'},
-          ];
+          _activeGoals = serviceGoals.map((g) => <String, dynamic>{
+            'id': g.id,
+            'label': '${g.category.label} — ${g.target} ${g.duration.label}',
+            'current': 0,
+            'target': g.target,
+            'color': 'purple',
+            'emoji': g.category.emoji,
+          }).toList();
         });
       }
     } catch (e) {
@@ -132,18 +139,20 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
       if (userId == null) return;
       // Try to load linked child profile
       final link = await Supabase.instance.client
-          .from('caregiver_child_link')
+          .from('family_links')
           .select('child_id')
           .eq('caregiver_id', userId)
           .maybeSingle();
       if (link != null) {
+        final childId = link['child_id'] as String;
         final childProfile = await Supabase.instance.client
             .from('profiles')
             .select('full_name, avatar_url')
-            .eq('user_id', link['child_id'])
+            .eq('user_id', childId)
             .maybeSingle();
         if (mounted && childProfile != null) {
           setState(() {
+            _childUserId = childId;
             final name = childProfile['full_name'] as String?;
             if (name != null && name.isNotEmpty) _childName = name;
             final av = childProfile['avatar_url'] as String?;
@@ -291,7 +300,23 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         },
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'CAREGIVER PORTAL',
+                        style: _textStyle(
+                            fontSize: 13,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
                     // Nav Items — equal spacing
                     Expanded(
@@ -351,9 +376,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.85),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                            border: Border.all(color: Colors.red.shade300.withValues(alpha: 0.6)),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -383,7 +408,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                     : _selectedNavIndex == 2
                         ? _buildGoalsRewardsTab()
                         : _selectedNavIndex == 3
-                            ? const ChatTab()
+                            ? _buildMessagesTab()
                             : _selectedNavIndex == 4
                                 ? _buildMyChildTab()
                                 : _selectedNavIndex == 5
@@ -393,6 +418,64 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Messages Tab (coming soon) ──────────────────────────────────────
+
+  Widget _buildMessagesTab() {
+    return Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Coming soon banner at top
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3E8FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.construction_rounded, color: Color(0xFF6B21A8), size: 26),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Coming Soon!',
+                          style: _textStyle(fontSize: 20, fontWeight: FontWeight.w700, color: const Color(0xFF6B21A8))),
+                      Text('Messaging and chat features are under development.',
+                          style: _textStyle(fontSize: 15, color: Colors.grey[600]!, fontWeight: FontWeight.w400)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Messages',
+              style: _textStyle(fontSize: 34, fontWeight: FontWeight.w700, color: const Color(0xFF6B21A8))),
+          const SizedBox(height: 4),
+          Text('Chat with your child\'s therapist',
+              style: _textStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey[600]!)),
+          const Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('💬', style: TextStyle(fontSize: 72)),
+                  SizedBox(height: 16),
+                  Text('Messaging coming soon', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Color(0xFF6B21A8))),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -712,13 +795,13 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 29),
-            const SizedBox(width: 15),
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(width: 14),
             Flexible(
               child: Text(
                 label,
                 style: _textStyle(
-                  fontSize: 29,
+                  fontSize: 22,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   color: Colors.white,
                 ),
@@ -1037,11 +1120,22 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => const NewGoalDialog(),
-                  );
+                onPressed: () async {
+                  final saved = await NewGoalDialog.show(context);
+                  if (saved == true) {
+                    final serviceGoals = await GoalService.getAllGoals();
+                    if (mounted) {
+                      setState(() {
+                        _activeGoals = serviceGoals.map((g) => <String, dynamic>{
+                          'label': '${g.category.label} — ${g.target} ${g.duration.label}',
+                          'current': 0,
+                          'target': g.target,
+                          'color': 'purple',
+                          'emoji': g.category.emoji,
+                        }).toList();
+                      });
+                    }
+                  }
                 },
                 icon: const Icon(Icons.add_circle_outline, size: 24),
                 label: Text('Create New Goal',
@@ -1100,8 +1194,14 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                               '$current/$target',
                               color,
                               g['emoji'] as String,
-                              onRemove: () {
-                                setState(() => _activeGoals.removeAt(i));
+                              onRemove: () async {
+                                final goalId = g['id'] as String?;
+                                if (goalId != null) {
+                                  await GoalService.deleteGoal(goalId);
+                                }
+                                if (mounted) {
+                                  setState(() => _activeGoals.removeAt(i));
+                                }
                               },
                             );
                           }).toList(),
@@ -1165,7 +1265,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
 
   Widget _buildGoalRow(
       String label, double progress, String progressText, Color color, String emoji,
-      {VoidCallback? onRemove}) {
+      {Future<void> Function()? onRemove}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
@@ -1200,7 +1300,32 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                         if (onRemove != null) ...[
                           const SizedBox(width: 8),
                           GestureDetector(
-                            onTap: onRemove,
+                            onTap: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  title: Text('Remove Goal?', style: _textStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                                  content: Text('Are you sure you want to remove this goal?',
+                                      style: _textStyle(fontSize: 16, color: Colors.grey[700]!)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: Text('Cancel', style: _textStyle(fontSize: 16, color: Colors.grey)),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      child: Text('Remove', style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) await onRemove!();
+                            },
                             child: Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
@@ -1422,46 +1547,42 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
                               Expanded(
                                 child: GridView.count(
                                   crossAxisCount: 2,
-                                  mainAxisSpacing: 10,
-                                  crossAxisSpacing: 10,
-                                  childAspectRatio: 2.6,
-                                  physics: const NeverScrollableScrollPhysics(),
+                                  mainAxisSpacing: 8,
+                                  crossAxisSpacing: 8,
+                                  childAspectRatio: 1.0,
                                   children: _emotionList.map((e) {
                                     final color =
                                         EmotionColourMapping.colorFor(e['name']!);
                                     final isDark = color.computeLuminance() < 0.4;
+                                    final textColor = isDark ? Colors.white : Colors.black87;
                                     return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: color,
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(16),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: color.withValues(alpha: 0.4),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 3),
+                                            color: color.withValues(alpha: 0.45),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 4),
                                           ),
                                         ],
                                       ),
-                                      child: Row(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Text(e['emoji']!,
-                                              style:
-                                                  const TextStyle(fontSize: 32)),
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              e['name']!,
-                                              style: TextStyle(
-                                                fontSize: 22,
-                                                fontWeight: FontWeight.w700,
-                                                color: isDark
-                                                    ? Colors.white
-                                                    : Colors.black87,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(fontSize: 36)),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            e['name']!,
+                                            style: GoogleFonts.fredoka(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w700,
+                                              color: textColor,
                                             ),
+                                            overflow: TextOverflow.ellipsis,
+                                            textAlign: TextAlign.center,
                                           ),
                                         ],
                                       ),
@@ -1889,43 +2010,45 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         title: Text('Edit Profile', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
         content: SizedBox(
           width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
-                  borderRadius: BorderRadius.circular(20),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80, height: 80,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Center(child: Text(_childAvatar, style: const TextStyle(fontSize: 40))),
                 ),
-                child: Center(child: Text(_childAvatar, style: const TextStyle(fontSize: 40))),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Display Name',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Display Name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: ageCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Age',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ageCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Age',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [
@@ -2000,7 +2123,6 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
   }
 
   void _showShareCodeDialog() {
-    const code = 'EMOLOR-TH7X';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2011,19 +2133,24 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Share this code with your therapist to link accounts:',
-                  style: _textStyle(fontSize: 16, color: Colors.grey[600]!)),
-              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF3E8FF),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
                 ),
-                child: Text(code,
-                    style: _textStyle(fontSize: 28, fontWeight: FontWeight.w800, color: const Color(0xFF6B21A8)),
-                    textAlign: TextAlign.center),
+                child: Row(
+                  children: [
+                    const Icon(Icons.construction_rounded, color: Color(0xFF6B21A8), size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text('Coming Soon!\nTherapist linking via share code is under development.',
+                          style: _textStyle(fontSize: 15, color: const Color(0xFF6B21A8))),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -2043,51 +2170,53 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         title: Text('Parent Gate PIN', style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
         content: SizedBox(
           width: 350,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Update your 4-digit PIN to protect caregiver settings',
-                  style: _textStyle(fontSize: 16, color: Colors.grey[600]!)),
-              const SizedBox(height: 16),
-              TextField(
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                textAlign: TextAlign.center,
-                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
-                controller: TextEditingController(text: '1234'),
-                decoration: InputDecoration(
-                  labelText: 'Current PIN',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  counterText: '',
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Update your 4-digit PIN to protect caregiver settings',
+                    style: _textStyle(fontSize: 16, color: Colors.grey[600]!)),
+                const SizedBox(height: 16),
+                TextField(
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                  controller: TextEditingController(text: '1234'),
+                  decoration: InputDecoration(
+                    labelText: 'Current PIN',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    counterText: '',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                textAlign: TextAlign.center,
-                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
-                decoration: InputDecoration(
-                  hintText: '• • • •',
-                  labelText: 'New PIN',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  counterText: '',
+                const SizedBox(height: 12),
+                TextField(
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    hintText: '• • • •',
+                    labelText: 'New PIN',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    counterText: '',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                textAlign: TextAlign.center,
-                style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
-                decoration: InputDecoration(
-                  hintText: '• • • •',
-                  labelText: 'Confirm New PIN',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  counterText: '',
+                const SizedBox(height: 12),
+                TextField(
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: _textStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    hintText: '• • • •',
+                    labelText: 'Confirm New PIN',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    counterText: '',
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [

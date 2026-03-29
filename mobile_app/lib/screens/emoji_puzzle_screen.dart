@@ -9,6 +9,7 @@ import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emoji Puzzle — A jigsaw-style game where children drag emoji pieces
 /// into the correct grid positions to complete a large emoji image.
@@ -113,6 +114,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   void _onPiecePlaced(int pieceIndex, int slotIndex) {
     if (pieceIndex == slotIndex) {
       // Correct placement!
+      AudioService.instance.playSfx(SoundEffect.snap);
       setState(() {
         _boardSlots[slotIndex] = pieceIndex;
         _trayPieces.remove(pieceIndex);
@@ -126,6 +128,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
       }
     } else {
       // Wrong slot — bounce back and track error
+      AudioService.instance.playSfx(SoundEffect.wrong);
       setState(() {
         _levelErrors++;
         _draggedPiece = null;
@@ -135,6 +138,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   }
 
   void _onPuzzleComplete() {
+    AudioService.instance.playSfx(SoundEffect.complete);
     setState(() => _showComplete = true);
     _sessionStars++;
 
@@ -384,14 +388,14 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                       color: placedPiece != null
                           ? color.withValues(alpha: 0.15)
                           : isHintSlot
-                              ? const Color(0xFFEF4444).withValues(alpha: 0.22)
+                              ? const Color(0xFF22C55E).withValues(alpha: 0.22)
                               : isHovered
                                   ? color.withValues(alpha: 0.25)
                                   : Colors.white.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isHintSlot
-                            ? const Color(0xFFEF4444)
+                            ? const Color(0xFF22C55E)
                             : isHovered
                                 ? color
                                 : placedPiece != null
@@ -403,7 +407,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                           ? [
                               BoxShadow(
                                   color: (isHintSlot
-                                          ? const Color(0xFFEF4444)
+                                          ? const Color(0xFF22C55E)
                                           : color)
                                       .withValues(alpha: 0.3),
                                   blurRadius: 12)

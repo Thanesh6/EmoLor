@@ -97,9 +97,9 @@ class _ScheduleTabState extends State<ScheduleTab> {
                     const SizedBox(width: 14),
                     Text('Schedule',
                         style: GoogleFonts.poppins(
-                            fontSize: 22,
+                            fontSize: 26,
                             fontWeight: FontWeight.w700,
-                            color: Colors.black87)),
+                            color: const Color(0xFF1E3A8A))),
                     const Spacer(),
                     // Schedule new session button
                     ElevatedButton.icon(

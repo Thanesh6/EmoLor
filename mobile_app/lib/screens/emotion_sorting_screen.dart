@@ -9,6 +9,7 @@ import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/models/activity_save_state.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emotion Sorting — Children drag emoji faces into the correct
 /// category boxes (Feelings, Needs, Actions, Responses).
@@ -167,6 +168,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
     final item = _currentItems[itemIndex];
     if (item['category'] == categoryName) {
       // Correct!
+      AudioService.instance.playSfx(SoundEffect.snap);
       setState(() {
         _itemSorted[itemIndex] = true;
         _sortedCorrectly++;
@@ -179,6 +181,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
       }
     } else {
       // Wrong — shake and track error
+      AudioService.instance.playSfx(SoundEffect.wrong);
       setState(() {
         _roundErrors++;
         _lastWrongItemIndex = itemIndex;
@@ -193,6 +196,7 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
   }
 
   void _onRoundComplete() {
+    AudioService.instance.playSfx(SoundEffect.complete);
     setState(() => _showRoundComplete = true);
     _sessionStars++;
 
@@ -519,16 +523,16 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                       color: isHovered
                           ? color.withValues(alpha: 0.25)
                           : isHinted
-                              ? color.withValues(alpha: 0.18)
+                              ? const Color(0xFF22C55E).withValues(alpha: 0.15)
                               : color.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isHovered
                             ? color
                             : isHinted
-                                ? color.withValues(alpha: 0.8)
+                                ? const Color(0xFF16A34A)
                                 : color.withValues(alpha: 0.4),
-                        width: isHovered ? 4 : isHinted ? 3.5 : 2.5,
+                        width: isHovered ? 4 : isHinted ? 4 : 2.5,
                       ),
                       boxShadow: isHovered
                           ? [
@@ -539,9 +543,9 @@ class _EmotionSortingScreenState extends State<EmotionSortingScreen>
                           : isHinted
                               ? [
                                   BoxShadow(
-                                      color: color.withValues(alpha: 0.35),
-                                      blurRadius: 12,
-                                      spreadRadius: 2)
+                                      color: const Color(0xFF22C55E).withValues(alpha: 0.4),
+                                      blurRadius: 14,
+                                      spreadRadius: 3)
                                 ]
                               : [],
                     ),

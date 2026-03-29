@@ -8,6 +8,7 @@ import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 import '../features/child/services/activity_progress_service.dart';
 import '../core/services/emotion_journal_service.dart';
+import '../core/services/audio_service.dart';
 
 /// Emoji Spell — A spelling game where children see an emoji and
 /// tap scrambled letters to spell the emotion name.
@@ -147,6 +148,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     final expectedLetter = _currentWord[_typedSoFar.length];
 
     if (tappedLetter == expectedLetter) {
+      AudioService.instance.playSfx(SoundEffect.spell);
       setState(() {
         _typedSoFar += tappedLetter;
         _letterUsed[index] = true;
@@ -158,6 +160,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
       }
     } else {
       // Wrong letter — shake
+      AudioService.instance.playSfx(SoundEffect.wrong);
       setState(() => _showWrong = true);
       _shakeController.forward(from: 0);
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -167,6 +170,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
   }
 
   void _onWordComplete() {
+    AudioService.instance.playSfx(SoundEffect.complete);
     setState(() => _showCorrect = true);
     _bounceController.forward(from: 0);
 

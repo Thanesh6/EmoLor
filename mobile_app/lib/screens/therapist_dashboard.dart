@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/caregiver/presentation/screens/chat_tab.dart';
 import '../features/therapist/presentation/screens/sessions_hub_tab.dart';
 import '../features/therapist/presentation/screens/schedule_session_screen.dart';
 import '../features/therapist/presentation/screens/my_clients_screen.dart';
 import '../features/therapist/presentation/screens/therapist_engagement_tab.dart';
+import '../features/therapist/presentation/screens/therapist_assessments_tab.dart';
+import '../features/therapist/presentation/screens/therapist_settings_tab.dart';
 import '../features/therapist/services/therapist_session_service.dart';
 
 class TherapistDashboard extends StatefulWidget {
@@ -15,14 +18,50 @@ class TherapistDashboard extends StatefulWidget {
   State<TherapistDashboard> createState() => _TherapistDashboardState();
 }
 
-class _TherapistDashboardState extends State<TherapistDashboard> {
+class _TherapistDashboardState extends State<TherapistDashboard>
+    with SingleTickerProviderStateMixin {
   int _selectedNavIndex = 0;
   int _pendingCount = 0;
+  late AnimationController _glowCtrl;
+  String _therapistName = 'Therapist';
 
   @override
   void initState() {
     super.initState();
+    _glowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
     _loadPendingCount();
+    _loadTherapistName();
+  }
+
+  Future<void> _loadTherapistName() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      final metaName = user?.userMetadata?['full_name'] as String?;
+      if (metaName != null && metaName.isNotEmpty) {
+        if (mounted) setState(() => _therapistName = metaName);
+        return;
+      }
+      if (user != null) {
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('full_name')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        final name = profile?['full_name'] as String?;
+        if (name != null && name.isNotEmpty && mounted) {
+          setState(() => _therapistName = name);
+        }
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _glowCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPendingCount() async {
@@ -97,7 +136,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
     FontWeight fontWeight = FontWeight.w600,
     Color color = Colors.black87,
   }) {
-    return GoogleFonts.poppins(
+    return GoogleFonts.baloo2(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -107,6 +146,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -140,30 +180,34 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
                 ),
                 child: Column(
                   children: [
-                    // Logo
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child:
-                              const Text('🏥', style: TextStyle(fontSize: 30)),
-                        ),
-                        const SizedBox(width: 15),
-                        Text(
-                          'EmoLor',
-                          style: _textStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    // Glowing EMOLOR title
+                    Center(
+                      child: AnimatedBuilder(
+                        animation: _glowCtrl,
+                        builder: (context, _) {
+                          final glow = 8.0 + _glowCtrl.value * 12.0;
+                          return Text(
+                            'EMOLOR',
+                            style: GoogleFonts.fredoka(
+                              fontSize: 52,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.white.withValues(alpha: 0.6 + _glowCtrl.value * 0.4),
+                                  blurRadius: glow,
+                                ),
+                                Shadow(
+                                  color: const Color(0xFFBFDBFE).withValues(alpha: 0.5),
+                                  blurRadius: glow + 4,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
@@ -179,87 +223,71 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
                             fontWeight: FontWeight.w500),
                       ),
                     ),
-                    const SizedBox(height: 35),
+                    const SizedBox(height: 16),
 
-                    // Nav Items
-                    _buildNavItem(
-                        Icons.dashboard,
-                        'Dashboard',
-                        _selectedNavIndex == 0,
-                        () => setState(() => _selectedNavIndex = 0)),
-                    _buildNavItem(
-                        Icons.people,
-                        'Patients',
-                        _selectedNavIndex == 1,
-                        () => setState(() => _selectedNavIndex = 1)),
-                    _buildNavItem(
-                        Icons.calendar_month,
-                        'Sessions',
-                        _selectedNavIndex == 2,
-                        () => setState(() => _selectedNavIndex = 2),
-                        badgeCount: _pendingCount),
-                    _buildNavItem(
-                        Icons.assessment,
-                        'Reports',
-                        _selectedNavIndex == 3,
-                        () => setState(() => _selectedNavIndex = 3)),
-                    _buildNavItem(Icons.psychology, 'Assessments',
-                        _selectedNavIndex == 4, null),
-                    _buildNavItem(
-                        Icons.chat_bubble_outline,
-                        'Messages',
-                        _selectedNavIndex == 5,
-                        () => setState(() => _selectedNavIndex = 5)),
-                    _buildNavItem(Icons.settings, 'Settings',
-                        _selectedNavIndex == 6, null),
+                    // Nav Items — equal spacing
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildNavItem(
+                              Icons.home_rounded,
+                              'Home',
+                              _selectedNavIndex == 0,
+                              () => setState(() => _selectedNavIndex = 0)),
+                          _buildNavItem(
+                              Icons.people,
+                              'Patients',
+                              _selectedNavIndex == 1,
+                              () => setState(() => _selectedNavIndex = 1)),
+                          _buildNavItem(
+                              Icons.calendar_month,
+                              'Sessions',
+                              _selectedNavIndex == 2,
+                              () => setState(() => _selectedNavIndex = 2),
+                              badgeCount: _pendingCount),
+                          _buildNavItem(
+                              Icons.assessment,
+                              'Reports',
+                              _selectedNavIndex == 3,
+                              () => setState(() => _selectedNavIndex = 3)),
+                          _buildNavItem(Icons.psychology, 'Assessments',
+                              _selectedNavIndex == 4,
+                              () => setState(() => _selectedNavIndex = 4)),
+                          _buildNavItem(
+                              Icons.chat_bubble_outline,
+                              'Messages',
+                              _selectedNavIndex == 5,
+                              () => setState(() => _selectedNavIndex = 5)),
+                          _buildNavItem(Icons.settings, 'Settings',
+                              _selectedNavIndex == 6,
+                              () => setState(() => _selectedNavIndex = 6)),
+                        ],
+                      ),
+                    ),
 
-                    const Spacer(),
-
-                    // Profile — tappable to navigate to profile screen
+                    // Logout button
                     GestureDetector(
-                      onTap: () => context.push('/profile'),
+                      onTap: () async {
+                        await Supabase.instance.client.auth.signOut();
+                        if (context.mounted) context.go('/login');
+                      },
                       child: Container(
-                        padding: const EdgeInsets.all(15),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                         ),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Container(
-                              width: 45,
-                              height: 45,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Center(
-                                child: Text('👩‍⚕️',
-                                    style: TextStyle(fontSize: 25)),
-                              ),
+                            const Icon(Icons.logout_rounded, color: Colors.white, size: 22),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Logout',
+                              style: _textStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Therapist',
-                                    style: _textStyle(
-                                        fontSize: 15, color: Colors.white),
-                                  ),
-                                  Text(
-                                    'View Profile',
-                                    style: _textStyle(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                        fontWeight: FontWeight.w400),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right,
-                                color: Colors.white70, size: 22),
                           ],
                         ),
                       ),
@@ -278,188 +306,121 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
                             ? const MyClientsScreen()
                             : _selectedNavIndex == 3
                                 ? const TherapistEngagementTab()
-                                : SingleChildScrollView(
-                                    padding: const EdgeInsets.all(35),
+                                : _selectedNavIndex == 4
+                                    ? const TherapistAssessmentsTab()
+                                    : _selectedNavIndex == 6
+                                        ? const TherapistSettingsTab()
+                                        : Padding(
+                                    padding: const EdgeInsets.fromLTRB(28, 16, 28, 16),
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         // Header
                                         Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  'Good Morning, Dr. Johnson! 👋',
-                                                  style: _textStyle(
-                                                    fontSize: 30,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        const Color(0xFF1E40AF),
-                                                  ),
+                                                  'Good Morning, $_therapistName! 👋',
+                                                  style: _textStyle(fontSize: 26, fontWeight: FontWeight.w700, color: const Color(0xFF1E3A8A)),
                                                 ),
-                                                const SizedBox(height: 5),
                                                 Text(
-                                                  'You have 4 sessions scheduled today',
-                                                  style: _textStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.grey[600]!),
+                                                  'Here\'s your practice overview for today',
+                                                  style: _textStyle(fontSize: 14, color: Colors.grey[600]!),
                                                 ),
                                               ],
                                             ),
                                             ElevatedButton.icon(
                                               onPressed: () {
-                                                Navigator.of(context).push(
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        const ScheduleSessionScreen(),
-                                                  ),
-                                                );
+                                                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ScheduleSessionScreen()));
                                               },
-                                              icon: const Icon(Icons.add,
-                                                  size: 22),
-                                              label: Text('New Session',
-                                                  style: _textStyle(
-                                                      fontSize: 15,
-                                                      color: Colors.white)),
+                                              icon: const Icon(Icons.add, size: 22, color: Colors.white),
+                                              label: Text('New Session', style: _textStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w700)),
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor:
-                                                    const Color(0xFF1E40AF),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 25,
-                                                        vertical: 18),
-                                                shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12)),
+                                                backgroundColor: const Color(0xFF1E40AF),
+                                                foregroundColor: Colors.white,
+                                                padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                               ),
                                             ),
                                           ],
                                         ),
 
-                                        const SizedBox(height: 35),
+                                        const SizedBox(height: 12),
 
                                         // Stats Cards
                                         Row(
                                           children: [
-                                            _buildStatCard(
-                                                '👥',
-                                                'Active Patients',
-                                                '12',
-                                                const Color(0xFF1E40AF)),
-                                            const SizedBox(width: 20),
-                                            _buildStatCard(
-                                                '📅',
-                                                'Sessions Today',
-                                                '4',
-                                                const Color(0xFF059669)),
-                                            const SizedBox(width: 20),
-                                            _buildStatCard(
-                                                '📊',
-                                                'Avg. Progress',
-                                                '73%',
-                                                const Color(0xFFD97706)),
-                                            const SizedBox(width: 20),
-                                            _buildStatCard(
-                                                '📝',
-                                                'Pending Reports',
-                                                '3',
-                                                const Color(0xFFDC2626)),
+                                            _buildStatCard('👥', 'Active Patients', '12', const Color(0xFF1E40AF)),
+                                            const SizedBox(width: 14),
+                                            _buildStatCard('📅', 'Sessions Today', '4', const Color(0xFF059669)),
+                                            const SizedBox(width: 14),
+                                            _buildStatCard('📊', 'Avg. Progress', '73%', const Color(0xFFD97706)),
+                                            const SizedBox(width: 14),
+                                            _buildStatCard('📝', 'Pending Reports', '3', const Color(0xFFDC2626)),
                                           ],
                                         ),
 
-                                        const SizedBox(height: 35),
+                                        const SizedBox(height: 12),
 
-                                        // Main Content Row
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            // Left Column - Patients
-                                            Expanded(
-                                              flex: 3,
-                                              child: Column(
-                                                children: [
-                                                  // Patient Progress
-                                                  _buildCard(
-                                                    'Patient Overview',
-                                                    Icons.people,
-                                                    Column(
-                                                      children: _patients
-                                                          .map((p) =>
-                                                              _buildPatientRow(
-                                                                  p))
-                                                          .toList(),
-                                                    ),
+                                        // Main Content Row — fills remaining space
+                                        Expanded(
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                                            children: [
+                                              // Left — Patient Overview
+                                              Expanded(
+                                                flex: 3,
+                                                child: _buildCard(
+                                                  'Patient Overview',
+                                                  Icons.people,
+                                                  Column(
+                                                    children: _patients.map((p) => _buildPatientRow(p)).toList(),
                                                   ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
 
-                                            const SizedBox(width: 25),
+                                              const SizedBox(width: 18),
 
-                                            // Right Column - Schedule
-                                            Expanded(
-                                              flex: 2,
-                                              child: Column(
-                                                children: [
-                                                  // Today's Schedule
-                                                  _buildCard(
-                                                    "Today's Schedule",
-                                                    Icons.calendar_today,
-                                                    Column(
-                                                      children: _todaySchedule
-                                                          .map((s) =>
-                                                              _buildScheduleItem(
-                                                                  s))
-                                                          .toList(),
+                                              // Right — Schedule + Quick Actions (equal height)
+                                              Expanded(
+                                                flex: 2,
+                                                child: Column(
+                                                  children: [
+                                                    Expanded(
+                                                      flex: 1,
+                                                      child: _buildCard(
+                                                        "Today's Schedule",
+                                                        Icons.calendar_today,
+                                                        Column(
+                                                          children: _todaySchedule.map((s) => _buildScheduleItem(s)).toList(),
+                                                        ),
+                                                      ),
                                                     ),
-                                                  ),
-
-                                                  const SizedBox(height: 25),
-
-                                                  // Quick Actions
-                                                  _buildCard(
-                                                    'Quick Actions',
-                                                    Icons.flash_on,
-                                                    Column(
-                                                      children: [
-                                                        _buildQuickAction(
-                                                            '📋',
-                                                            'Create Assessment',
-                                                            const Color(
-                                                                0xFF1E40AF)),
-                                                        _buildQuickAction(
-                                                            '📊',
-                                                            'Generate Report',
-                                                            const Color(
-                                                                0xFF059669)),
-                                                        _buildQuickAction(
-                                                            '💬',
-                                                            'Send Message',
-                                                            const Color(
-                                                                0xFFD97706),
-                                                            onTap: () =>
-                                                                setState(() =>
-                                                                    _selectedNavIndex =
-                                                                        5)),
-                                                        _buildQuickAction(
-                                                            '📁',
-                                                            'View All Records',
-                                                            const Color(
-                                                                0xFF7C3AED)),
-                                                      ],
+                                                    const SizedBox(height: 14),
+                                                    Expanded(
+                                                      flex: 1,
+                                                      child: _buildCard(
+                                                        'Quick Actions',
+                                                        Icons.flash_on,
+                                                        Column(
+                                                          children: [
+                                                            _buildQuickAction('📋', 'Create Assessment', const Color(0xFF1E40AF)),
+                                                            _buildQuickAction('📊', 'Generate Report', const Color(0xFF059669)),
+                                                            _buildQuickAction('💬', 'Send Message', const Color(0xFFD97706),
+                                                                onTap: () => setState(() => _selectedNavIndex = 5)),
+                                                            _buildQuickAction('📁', 'View All Records', const Color(0xFF7C3AED)),
+                                                          ],
+                                                        ),
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -478,21 +439,21 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         decoration: BoxDecoration(
           color: isActive ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(icon, color: Colors.white, size: 24),
+            Icon(icon, color: Colors.white, size: 26),
             const SizedBox(width: 15),
             Expanded(
               child: Text(
                 label,
                 style: _textStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                   color: Colors.white,
                 ),
@@ -523,7 +484,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
   Widget _buildStatCard(String emoji, String title, String value, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
@@ -546,7 +507,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
               ),
               child: Text(emoji, style: const TextStyle(fontSize: 28)),
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 14),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -554,11 +515,11 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
                   Text(
                     value,
                     style: _textStyle(
-                        fontSize: 28, fontWeight: FontWeight.w700, color: color),
+                        fontSize: 38, fontWeight: FontWeight.w700, color: const Color(0xFF1E3A8A)),
                   ),
                   Text(
                     title,
-                    style: _textStyle(fontSize: 14, color: Colors.grey[600]!),
+                    style: _textStyle(fontSize: 15, color: Colors.grey[600]!),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -572,7 +533,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
 
   Widget _buildCard(String title, IconData icon, Widget child) {
     return Container(
-      padding: const EdgeInsets.all(25),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -589,20 +550,20 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF1E40AF), size: 24),
+              Icon(icon, color: const Color(0xFF1E40AF), size: 26),
               const SizedBox(width: 12),
               Text(
                 title,
-                style: _textStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                style: _textStyle(fontSize: 22, fontWeight: FontWeight.w700),
               ),
-              const Spacer(),
-              Text('View All',
-                  style:
-                      _textStyle(fontSize: 14, color: const Color(0xFF1E40AF))),
             ],
           ),
-          const SizedBox(height: 20),
-          child,
+          const SizedBox(height: 14),
+          Expanded(
+            child: SingleChildScrollView(
+              child: child,
+            ),
+          ),
         ],
       ),
     );
@@ -610,8 +571,8 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
 
   Widget _buildPatientRow(Map<String, dynamic> patient) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey[50],
         borderRadius: BorderRadius.circular(15),
@@ -620,8 +581,8 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
       child: Row(
         children: [
           Container(
-            width: 55,
-            height: 55,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -633,7 +594,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
             ),
             child: Center(
               child:
-                  Text(patient['avatar'], style: const TextStyle(fontSize: 30)),
+                  Text(patient['avatar'], style: const TextStyle(fontSize: 32)),
             ),
           ),
           const SizedBox(width: 18),
@@ -643,14 +604,14 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
               children: [
                 Text(patient['name'],
                     style:
-                        _textStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                        _textStyle(fontSize: 19, fontWeight: FontWeight.w700)),
                 Row(
                   children: [
-                    Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
+                    Icon(Icons.schedule, size: 15, color: Colors.grey[500]),
                     const SizedBox(width: 5),
                     Text('Last: ${patient['lastSession']}',
                         style:
-                            _textStyle(fontSize: 13, color: Colors.grey[500]!)),
+                            _textStyle(fontSize: 14, color: Colors.grey[500]!)),
                     const SizedBox(width: 15),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -661,7 +622,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
                       ),
                       child: Text(patient['mood'],
                           style: _textStyle(
-                              fontSize: 12, color: patient['color'])),
+                              fontSize: 13, color: patient['color'])),
                     ),
                   ],
                 ),
@@ -673,23 +634,23 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
             children: [
               Text('${(patient['progress'] * 100).toInt()}%',
                   style: _textStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                       color: patient['color'])),
               const SizedBox(height: 8),
               SizedBox(
-                width: 100,
+                width: 110,
                 child: LinearProgressIndicator(
                   value: patient['progress'],
                   backgroundColor: Colors.grey[200],
                   valueColor: AlwaysStoppedAnimation<Color>(patient['color']),
-                  minHeight: 6,
+                  minHeight: 7,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
             ],
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 12),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios, size: 18),
             color: Colors.grey[400],
@@ -703,8 +664,8 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
   Widget _buildScheduleItem(Map<String, dynamic> session) {
     final isCompleted = session['status'] == 'completed';
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: isCompleted ? Colors.grey[50] : const Color(0xFFF0F9FF),
         borderRadius: BorderRadius.circular(12),
@@ -717,7 +678,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: isCompleted
                   ? Colors.grey[200]
@@ -734,7 +695,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
               ),
             ),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -770,7 +731,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),

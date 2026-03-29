@@ -217,6 +217,7 @@ class _ClientRecordScreenState extends State<ClientRecordScreen>
       await _linkingService.unlinkClient(
         caregiverId: widget.caregiverId,
         childName: widget.childName,
+        childId: widget.childId,
       );
 
       if (!mounted) return;

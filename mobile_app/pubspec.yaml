@@ -36,6 +36,9 @@ dependencies:
   confetti: ^0.7.0
   flutter_svg: ^2.0.9
 
+  # Audio – background music and sound effects
+  audioplayers: ^6.0.0
+
   # Accessibility – Text-to-Speech (UCD015)
   flutter_tts: ^4.2.0
 

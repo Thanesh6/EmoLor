@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // NEW
 import '../features/auth/presentation/providers/auth_provider.dart'; // NEW
 import '../core/services/star_service.dart';
+import '../core/services/audio_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'play_screen.dart';
 import 'draw_screen.dart';
@@ -56,6 +57,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
       _fetchChildName();
     }
     _pulseController.repeat(reverse: true);
+    AudioService.instance.startBgMusic(BgMusicType.dashboard);
   }
 
 
@@ -108,6 +110,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
   @override
   void dispose() {
     _pulseController.dispose();
+    AudioService.instance.stopBgMusic();
     super.dispose();
   }
 
