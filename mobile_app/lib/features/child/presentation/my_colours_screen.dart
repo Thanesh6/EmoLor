@@ -10,27 +10,38 @@ import '../domain/models/emotion.dart';
 /// Left/right arrows to navigate. Colour picker always visible.
 /// No time limits, no penalties, gentle experience.
 class MyColoursScreen extends ConsumerStatefulWidget {
-  const MyColoursScreen({super.key});
+  /// When true, screen runs as a Phase-2 onboarding step:
+  ///   * back button hidden (forces child to pick)
+  ///   * after the child taps Save on the LAST emotion, [onFinished] fires
+  ///     automatically — there is no separate "I'm done!" button.
+  final bool isOnboarding;
+  final VoidCallback? onFinished;
+
+  const MyColoursScreen({
+    super.key,
+    this.isOnboarding = false,
+    this.onFinished,
+  });
 
   @override
   ConsumerState<MyColoursScreen> createState() => _MyColoursScreenState();
 }
 
 class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
-  // 12 soft, autism-friendly palette colours
+  // Core rainbow + neutrals so children have enough range to express each
+  // feeling without being overwhelmed by a huge grid.
   static const List<_PaletteEntry> _palette = [
     _PaletteEntry(Color(0xFFEF4444), 'Red'),
     _PaletteEntry(Color(0xFFF97316), 'Orange'),
-    _PaletteEntry(Color(0xFFFBBF24), 'Amber'),
     _PaletteEntry(Color(0xFFFFE66D), 'Yellow'),
-    _PaletteEntry(Color(0xFF84CC16), 'Lime'),
     _PaletteEntry(Color(0xFF22C55E), 'Green'),
     _PaletteEntry(Color(0xFF4ECDC4), 'Teal'),
-    _PaletteEntry(Color(0xFF06B6D4), 'Cyan'),
-    _PaletteEntry(Color(0xFF74B9FF), 'Sky'),
-    _PaletteEntry(Color(0xFF8B5CF6), 'Violet'),
-    _PaletteEntry(Color(0xFFBB6BD9), 'Purple'),
+    _PaletteEntry(Color(0xFF74B9FF), 'Blue'),
+    _PaletteEntry(Color(0xFF8B5CF6), 'Purple'),
     _PaletteEntry(Color(0xFFEC4899), 'Pink'),
+    _PaletteEntry(Color(0xFF8B4513), 'Brown'),
+    _PaletteEntry(Color(0xFF9CA3AF), 'Gray'),
+    _PaletteEntry(Color(0xFF000000), 'Black'),
   ];
 
   /// Index of the currently displayed emotion (0..7).
@@ -38,6 +49,16 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
 
   /// Live preview colour the child is considering (null = current saved).
   Color? _previewColour;
+
+  /// Indices whose colour the child has saved in this session — drives
+  /// the green progress dots up top.
+  final Set<int> _savedIndices = <int>{};
+
+  /// Set briefly when the child taps Save with a colour that another
+  /// emotion already owns. Flashes the Save button red so they know to
+  /// pick a different swatch. Auto-clears after a short delay or as soon
+  /// as a new colour is tapped.
+  bool _duplicateReject = false;
 
   TextStyle _cute({
     double size = 20,
@@ -60,97 +81,65 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
     });
   }
 
-  Future<void> _saveColour(Emotion emotion) async {
+  Future<void> _saveColour(Emotion emotion, {required int total}) async {
     if (_previewColour == null) return;
 
     final svc = ref.read(emotionServiceProvider.notifier);
     final dup = svc.findDuplicateColour(_previewColour!, excludeId: emotion.id);
 
+    // Reject duplicates outright — every one of the 8 emotions must get
+    // its OWN colour before the child can move on. Flash the Save button
+    // red as an inline cue instead of slamming a top-banner down.
     if (dup != null) {
-      final proceed = await _showDuplicateWarning(dup);
-      if (proceed != true) return;
+      setState(() {
+        _duplicateReject = true;
+      });
+      // Auto-clear the red state after a short beat so the button
+      // relaxes back to its normal colour on its own.
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (!mounted) return;
+        setState(() => _duplicateReject = false);
+      });
+      return;
     }
 
     await svc.updateEmotionColor(emotion.id, _previewColour!);
 
     if (!mounted) return;
 
-    _showTopBanner(
-      '${emotion.emoji}  ${emotion.name} colour saved!',
-      _previewColour!,
-    );
-    setState(() => _previewColour = null);
-  }
+    // Mark this emotion as saved so its progress dot turns green.
+    _savedIndices.add(_currentIndex);
 
-  void _showTopBanner(String message, Color bgColor) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (ctx) => _TopBanner(
-        message: message,
-        bgColor: bgColor,
-        onDone: () => entry.remove(),
-      ),
-    );
-    overlay.insert(entry);
-  }
+    // In Phase-2 onboarding, finish ONLY once every emotion has a
+    // unique saved colour. Otherwise, hop to the next emotion that still
+    // needs one so the child keeps filling the set in order, regardless
+    // of which index they started tweaking.
+    if (widget.isOnboarding) {
+      if (_savedIndices.length >= total && widget.onFinished != null) {
+        widget.onFinished!();
+        return;
+      }
 
-  Future<bool?> _showDuplicateWarning(Emotion other) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(29)),
-        backgroundColor: Colors.white,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 432),
-          child: Padding(
-            padding: const EdgeInsets.all(29),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('\u{1F914}', style: TextStyle(fontSize: 48)),
-                const SizedBox(height: 10),
-                Text('Same Colour',
-                    style: _cute(size: 26, color: Colors.black87)),
-                const SizedBox(height: 10),
-                Text(
-                  'You already used this colour for ${other.emoji} ${other.name}.\nUse it again?',
-                  textAlign: TextAlign.center,
-                  style: _cute(
-                      size: 18, weight: FontWeight.w500, color: Colors.black54),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: Text('Pick Another',
-                            style: _cute(size: 18, color: Colors.grey)),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _previewColour,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(19)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text("Yes!", style: _cute(size: 18)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+      int next = _currentIndex;
+      for (int step = 1; step <= total; step++) {
+        final candidate = (_currentIndex + step) % total;
+        if (!_savedIndices.contains(candidate)) {
+          next = candidate;
+          break;
+        }
+      }
+      setState(() {
+        _previewColour = null;
+        _currentIndex = next;
+      });
+      return;
+    }
+
+    // Non-onboarding (standalone) view stays put so the child can tweak
+    // a single colour without auto-advancing.
+    setState(() {
+      _previewColour = null;
+    });
   }
 
   // ------------------- BUILD -------------------
@@ -179,43 +168,55 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
           child: Column(
             children: [
               _buildHeader(),
-              const SizedBox(height: 20),
+              if (widget.isOnboarding) ...[
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    'Give every feeling its own colour — all 8 must be different to finish.',
+                    textAlign: TextAlign.center,
+                    style: _cute(
+                      size: 16,
+                      weight: FontWeight.w600,
+                      color: Colors.black.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
               // Progress dots
               _buildProgressDots(emotions.length),
-              const SizedBox(height: 12),
-              // Main content: emotion display + colour picker
+              const SizedBox(height: 8),
+              // Main content: sized to fit the remaining viewport so nothing
+              // scrolls — tablet real-estate is generous, this just snaps
+              // the emotion card + picker into one visible frame.
               Expanded(
-                child: SingleChildScrollView(
+                child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      const SizedBox(height: 4),
                       // Emotion card with arrows
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Left arrow
                           _buildArrowButton(Icons.chevron_left_rounded,
                               () => _goPrev(emotions.length)),
                           const SizedBox(width: 16),
-                          // Big emotion display
                           _buildEmotionDisplay(emotion, displayColour),
                           const SizedBox(width: 16),
-                          // Right arrow
                           _buildArrowButton(Icons.chevron_right_rounded,
                               () => _goNext(emotions.length)),
                         ],
                       ),
-                      const SizedBox(height: 20),
                       // Instruction
                       Text(
                         'Pick a colour for ${emotion.name}',
                         style: _cute(
-                            size: 26,
+                            size: 24,
                             weight: FontWeight.w600,
                             color: Colors.black87),
                       ),
-                      const SizedBox(height: 16),
                       // Colour picker
                       _buildColourPicker(emotion),
                     ],
@@ -250,29 +251,32 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
               const Text('\u{1F3A8}', style: TextStyle(fontSize: 46)),
             ],
           ),
-          // Back button pinned to left
-          Positioned(
-            left: 12,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(13),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+          // Back button pinned to left (hidden during Phase-2 onboarding)
+          if (!widget.isOnboarding)
+            Positioned(
+              left: 12,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.arrow_back_rounded,
+                      color: Color(0xFF6B21A8), size: 31),
                 ),
-                child: const Icon(Icons.arrow_back_rounded,
-                    color: Color(0xFF6B21A8), size: 31),
               ),
             ),
-          ),
+          // No "I'm done!" button — onboarding auto-finishes after the
+          // final emotion's colour is saved.
         ],
       ),
     );
@@ -283,15 +287,28 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(total, (i) {
         final isActive = i == _currentIndex;
+        final isSaved = _savedIndices.contains(i);
+        // Saved → green. Active (but unsaved) → solid white. Idle → faded.
+        final Color dotColor = isSaved
+            ? const Color(0xFF22C55E)
+            : (isActive ? Colors.white : Colors.white.withValues(alpha: 0.4));
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           width: isActive ? 28 : 12,
           height: 12,
           decoration: BoxDecoration(
-            color:
-                isActive ? Colors.white : Colors.white.withValues(alpha: 0.4),
+            color: dotColor,
             borderRadius: BorderRadius.circular(5),
+            boxShadow: isSaved
+                ? [
+                    BoxShadow(
+                      color:
+                          const Color(0xFF22C55E).withValues(alpha: 0.45),
+                      blurRadius: 6,
+                    ),
+                  ]
+                : null,
           ),
         );
       }),
@@ -317,16 +334,16 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
   Widget _buildEmotionDisplay(Emotion emotion, Color displayColour) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      width: 350,
-      height: 350,
+      width: 280,
+      height: 280,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(45),
+        borderRadius: BorderRadius.circular(38),
         boxShadow: [
           BoxShadow(
             color: displayColour.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -336,8 +353,8 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
           // Big coloured circle with emoji
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            width: 175,
-            height: 175,
+            width: 140,
+            height: 140,
             decoration: BoxDecoration(
               color: displayColour,
               shape: BoxShape.circle,
@@ -345,16 +362,16 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
               boxShadow: [
                 BoxShadow(
                   color: displayColour.withValues(alpha: 0.5),
-                  blurRadius: 14,
+                  blurRadius: 12,
                 ),
               ],
             ),
             child: Center(
-              child: Text(emotion.emoji, style: const TextStyle(fontSize: 93)),
+              child: Text(emotion.emoji, style: const TextStyle(fontSize: 74)),
             ),
           ),
-          const SizedBox(height: 14),
-          Text(emotion.name, style: _cute(size: 49, color: Colors.black87)),
+          const SizedBox(height: 10),
+          Text(emotion.name, style: _cute(size: 38, color: Colors.black87)),
         ],
       ),
     );
@@ -389,7 +406,10 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
                   emotion.color.toARGB32() == entry.color.toARGB32() &&
                       _previewColour == null;
               return GestureDetector(
-                onTap: () => setState(() => _previewColour = entry.color),
+                onTap: () => setState(() {
+                  _previewColour = entry.color;
+                  _duplicateReject = false;
+                }),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: isChosen ? 64 : 56,
@@ -419,25 +439,49 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen> {
             }).toList(),
           ),
           const SizedBox(height: 18),
-          // Save button
+          // Save button — flashes red when the picked colour is already
+          // taken by another emotion, otherwise mirrors the preview swatch.
           SizedBox(
             width: 240,
-            child: ElevatedButton.icon(
-              onPressed:
-                  _previewColour != null ? () => _saveColour(emotion) : null,
-              icon: const Text('\u{1F4BE}', style: TextStyle(fontSize: 24)),
-              label: Text('Save',
-                  style: _cute(
-                      size: 24,
-                      color:
-                          _previewColour != null ? Colors.white : Colors.grey)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _previewColour ?? Colors.grey.shade300,
-                disabledBackgroundColor: Colors.grey.shade200,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22)),
-                elevation: _previewColour != null ? 4 : 0,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              decoration: _duplicateReject
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFDC2626)
+                              .withValues(alpha: 0.55),
+                          blurRadius: 14,
+                        ),
+                      ],
+                    )
+                  : const BoxDecoration(),
+              child: ElevatedButton.icon(
+                onPressed: _previewColour != null
+                    ? () => _saveColour(emotion,
+                        total: ref.read(emotionServiceProvider).length)
+                    : null,
+                icon: Text(
+                  _duplicateReject ? '\u274C' : '\u{1F4BE}',
+                  style: const TextStyle(fontSize: 24),
+                ),
+                label: Text('Save',
+                    style: _cute(
+                        size: 24,
+                        color: _previewColour != null
+                            ? Colors.white
+                            : Colors.grey)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _duplicateReject
+                      ? const Color(0xFFDC2626)
+                      : (_previewColour ?? Colors.grey.shade300),
+                  disabledBackgroundColor: Colors.grey.shade200,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22)),
+                  elevation: _previewColour != null ? 4 : 0,
+                ),
               ),
             ),
           ),
@@ -453,100 +497,3 @@ class _PaletteEntry {
   const _PaletteEntry(this.color, this.label);
 }
 
-/// Slides in from the top, holds for 2 s, then slides out.
-class _TopBanner extends StatefulWidget {
-  final String message;
-  final Color bgColor;
-  final VoidCallback onDone;
-
-  const _TopBanner({
-    required this.message,
-    required this.bgColor,
-    required this.onDone,
-  });
-
-  @override
-  State<_TopBanner> createState() => _TopBannerState();
-}
-
-class _TopBannerState extends State<_TopBanner>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<Offset> _slide;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _slide = Tween<Offset>(
-      begin: const Offset(0, -1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-
-    _ctrl.forward();
-
-    Future.delayed(const Duration(milliseconds: 2200), () async {
-      if (mounted) {
-        await _ctrl.reverse();
-        widget.onDone();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Determine text color based on background luminance
-    final textColor =
-        widget.bgColor.computeLuminance() > 0.4 ? Colors.black87 : Colors.white;
-
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SlideTransition(
-        position: _slide,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                decoration: BoxDecoration(
-                  color: widget.bgColor,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.bgColor.withValues(alpha: 0.5),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  widget.message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

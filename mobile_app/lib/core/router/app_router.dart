@@ -11,11 +11,14 @@ import '../../screens/verification_screen.dart';
 import '../../screens/forgot_password_screen.dart';
 import '../../screens/update_password_screen.dart';
 import '../../screens/child_dashboard.dart'; // Child Dashboard
-import '../../screens/caregiver_dashboard.dart';
+import '../../screens/analytics_dashboard.dart';
 import '../../screens/orgz_child_dashboard.dart';
 import '../../screens/therapist_dashboard.dart';
 import '../../features/child_profile/presentation/child_profile_selection_screen.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
+import '../../features/child/presentation/how_i_feel_screen.dart';
+import '../../features/child/presentation/my_colours_screen.dart';
+import '../../features/child/presentation/set_goals_screen.dart';
 
 import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/child/presentation/browse_activities_screen.dart';
@@ -123,7 +126,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         } catch (e) {
           debugPrint('Error fetching role in redirect: $e');
         }
-        return '/child-dashboard'; // Default for caregivers (single child)
+        return '/child/home'; // Default for caregivers (single child)
       }
 
       return null;
@@ -158,10 +161,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const _EmailConfirmCallbackScreen(),
       ),
       // Dashboards
-      GoRoute(
-        path: '/child-dashboard',
-        builder: (context, state) => const ChildDashboard(),
-      ),
+      //
+      // NOTE: the old '/child-dashboard' path has been removed — it pointed
+      // at the same ChildDashboard widget as '/child/home' but with no
+      // `extra`, which silently hid the Switch Account button for org
+      // caregivers. Everything now routes through '/child/home'.
       GoRoute(
         path: '/child-profiles',
         builder: (context, state) => const ChildProfileSelectionScreen(),
@@ -180,11 +184,121 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      // Goal-setting screen — shown right after profile selection,
+      // before the mood check-in. Both goals are optional (child can skip).
+      GoRoute(
+        path: '/child/set-goals',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final childName = extra?['childName'] as String?;
+          final showSwitch = extra?['showSwitch'] == true;
+          return SetGoalsScreen(
+            childName: childName,
+            onBack: () {
+              if (showSwitch) {
+                context.go('/orgz-child-dashboard');
+              } else {
+                context.go('/child-profiles');
+              }
+            },
+            onContinue: () {
+              context.go('/how-i-feel-start', extra: {
+                'childName': childName,
+                'showSwitch': showSwitch,
+              });
+            },
+          );
+        },
+      ),
+      // Phase 1 — "How do you feel today?" shown right after goal setup.
+      GoRoute(
+        path: '/how-i-feel-start',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final childName = extra?['childName'] as String?;
+          final showSwitch = extra?['showSwitch'] == true;
+          return HowIFeelScreen(
+            mode: HowIFeelMode.start,
+            childName: childName,
+            // Back goes to the profile picker the child came from —
+            // org accounts return to /orgz-child-dashboard, otherwise
+            // to /child-profiles.
+            onBack: () {
+              if (showSwitch) {
+                context.go('/orgz-child-dashboard');
+              } else {
+                context.go('/child-profiles');
+              }
+            },
+            onContinue: (_) async {
+              // Move to Phase 2 — My Colours setup.
+              if (context.mounted) {
+                context.go('/my-colours-setup', extra: {
+                  'childName': childName,
+                  'showSwitch': showSwitch,
+                });
+              }
+            },
+          );
+        },
+      ),
+      // Phase 2 — "My Colours" onboarding picker before the dashboard.
+      GoRoute(
+        path: '/my-colours-setup',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final childName = extra?['childName'] as String?;
+          final showSwitch = extra?['showSwitch'] == true;
+          return MyColoursScreen(
+            isOnboarding: true,
+            onFinished: () {
+              // Enter the main dashboard.
+              context.go('/child/home', extra: {
+                'childName': childName,
+                'showSwitch': showSwitch,
+              });
+            },
+          );
+        },
+      ),
+      // Post-session — "How are you feeling now?" shown before logout /
+      // switch / goal-time end.
+      GoRoute(
+        path: '/how-i-feel-end',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final childName = extra?['childName'] as String?;
+          // Action to perform after the child picks their mood.
+          // Options: 'logout' (sign out), 'switch' (go to org dashboard),
+          // 'back-to-profiles' (go to profile selection).
+          final action = (extra?['action'] as String?) ?? 'logout';
+          return HowIFeelScreen(
+            mode: HowIFeelMode.end,
+            childName: childName,
+            onContinue: (_) async {
+              if (!context.mounted) return;
+              switch (action) {
+                case 'switch':
+                  context.go('/orgz-child-dashboard');
+                  break;
+                case 'back-to-profiles':
+                  context.go('/child-profiles');
+                  break;
+                case 'logout':
+                default:
+                  await Supabase.instance.client.auth.signOut();
+                  // GoRouter redirect will take them to /login.
+                  break;
+              }
+            },
+          );
+        },
+      ),
       GoRoute(
         path: '/caregiver-dashboard',
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
-          return CaregiverDashboard(
+          return AnalyticsDashboard(
             childName: extra?['childName'] as String?,
             showSwitchAccount: extra?['showSwitch'] == true,
           );
@@ -193,6 +307,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/orgz-child-dashboard',
         builder: (context, state) => const OrgzChildDashboard(),
+      ),
+      // Centre analytics dashboard — accessed from child dashboard via PIN gate.
+      // Uses the NEW AnalyticsDashboard (full tabbed UI, PDF export).
+      GoRoute(
+        path: '/centre-dashboard',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return AnalyticsDashboard(
+            childName: extra?['childName'] as String?,
+            showSwitchAccount: extra?['showSwitch'] == true,
+          );
+        },
       ),
       GoRoute(
         path: '/therapist-dashboard',

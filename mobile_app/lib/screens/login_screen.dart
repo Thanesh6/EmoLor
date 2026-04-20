@@ -23,14 +23,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    AudioService.instance.startBgMusic(BgMusicType.login);
+    // Ensure no background music plays on the login page.
+    AudioService.instance.stopBgMusic();
   }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    AudioService.instance.stopBgMusic();
     super.dispose();
   }
 

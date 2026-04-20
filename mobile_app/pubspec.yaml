@@ -71,3 +71,6 @@ flutter:
   # Add assets if needed
   assets:
     - assets/images/
+    - assets/audio/
+    - assets/audio/sfx/
+    - assets/audio/animals/

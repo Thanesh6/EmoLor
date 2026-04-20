@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'emotion_slash_screen.dart';
 import 'emoji_spelling_screen.dart';
-import 'emotion_sorting_screen.dart';
+import 'animal_sound_screen.dart';
 import 'emotion_bubbles_screen.dart';
 import 'emoji_puzzle_screen.dart';
 import 'emotion_catcher_screen.dart';
+import 'emo_match_screen.dart';
 
 class PlayScreen extends StatefulWidget {
   const PlayScreen({super.key});
@@ -40,11 +41,11 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       'screen': const EmojiSpellingScreen()
     },
     {
-      'name': 'EMOSORT',
-      'emoji': '🗂️',
-      'color': const Color(0xFFBB6BD9),
-      'desc': 'Sort the Emoji',
-      'screen': const EmotionSortingScreen()
+      'name': 'EMOMATCH',
+      'emoji': '🌟',
+      'color': const Color(0xFFE67E22),
+      'desc': 'Match the Item',
+      'screen': const EmoMatchScreen()
     },
     {
       'name': 'EMOSLASH',
@@ -59,6 +60,13 @@ class _PlayScreenState extends State<PlayScreen> with TickerProviderStateMixin {
       'color': const Color(0xFF5D9CEC),
       'desc': 'Catch the Emoji',
       'screen': const EmotionCatcherScreen()
+    },
+    {
+      'name': 'ANIMATCH',
+      'emoji': '🐾',
+      'color': const Color(0xFFBB6BD9),
+      'desc': 'Match the Sound',
+      'screen': const AnimalSoundScreen()
     },
   ];
 

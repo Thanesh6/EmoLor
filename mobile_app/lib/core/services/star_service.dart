@@ -28,6 +28,8 @@ class StarService {
   static const emotionSorting = 'emotion_sorting';
   static const emotionSlash = 'emotion_slash';
   static const emotionCatcher = 'emotion_catcher';
+  static const animalSound = 'animal_sound';
+  static const emoMatch = 'emo_match';
 
   static final List<String> allGames = [
     emotionPath,
@@ -45,6 +47,8 @@ class StarService {
     emotionSorting,
     emotionSlash,
     emotionCatcher,
+    animalSound,
+    emoMatch,
   ];
 
   /// Add [stars] earned from [game]. Stars accumulate without cap.

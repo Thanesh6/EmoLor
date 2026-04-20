@@ -78,4 +78,10 @@ class CompletionService {
     final encoded = jsonEncode(records.map((r) => r.toJson()).toList());
     await prefs.setString(_listKey, encoded);
   }
+
+  /// Clear all completion history (used by Reset Game feature).
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_listKey);
+  }
 }

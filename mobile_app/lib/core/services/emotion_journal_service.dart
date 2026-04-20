@@ -131,4 +131,11 @@ class EmotionJournalService {
     }
     return breakdown;
   }
+
+  /// Clear all journal entries for the current user (used by Reset Game feature).
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = SupabaseService.currentUserId ?? 'anon';
+    await prefs.remove('${_storageKey}_$userId');
+  }
 }

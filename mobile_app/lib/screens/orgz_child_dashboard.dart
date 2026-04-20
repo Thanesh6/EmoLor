@@ -25,12 +25,18 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
   final _ageController = TextEditingController();
   String? _selectedAvatar;
   bool _isCreating = false;
+  // Inline error for the name field (e.g. duplicate). Null = no error.
+  String? _nameError;
 
   final List<String> _avatarOptions = [
     '👧', '👦', '🧒', '👶',
     '🦄', '🐻', '🐼', '🐨',
     '🦊', '🐱', '🐶', '🐰',
   ];
+
+  // Profiles render 5-per-row; the outer SingleChildScrollView handles
+  // overflow, so there's no artificial cap on how many we show.
+  static const int _profilesPerRow = 5;
 
   @override
   void initState() {
@@ -62,14 +68,26 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
     }
   }
 
+  /// Returns an error string if the given name is empty or already taken by
+  /// another child under this caregiver; null means the name is fine.
+  String? _validateName(String raw) {
+    final name = raw.trim();
+    if (name.isEmpty) return 'Please enter a name';
+    final lowered = name.toLowerCase();
+    if (_profiles.any((p) => p.name.trim().toLowerCase() == lowered)) {
+      return 'That name is already used';
+    }
+    return null;
+  }
+
   Future<void> _createChild() async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name'), backgroundColor: Colors.orange),
-      );
+    final err = _validateName(name);
+    if (err != null) {
+      setState(() => _nameError = err);
       return;
     }
+    setState(() => _nameError = null);
 
     setState(() => _isCreating = true);
     try {
@@ -94,10 +112,11 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
           _showCreateForm = false;
           _isCreating = false;
         });
-        // Navigate to child dashboard
-        context.go('/child/home', extra: {
+        // Enter the phased onboarding (Set Goals → How I Feel → My Colours → Dashboard).
+        context.go('/child/set-goals', extra: {
           'showSwitch': true,
           'childName': profile.name,
+          'profileId': profile.profileId,
         });
       }
     } catch (e) {
@@ -113,10 +132,227 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
     }
   }
 
+  /// Shows a bottom sheet listing all profiles; tapping one asks for
+  /// confirmation then removes the family_link.
+  void _openQuickDelete() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.55,
+          maxChildSize: 0.85,
+          minChildSize: 0.35,
+          builder: (_, scrollCtrl) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(26)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 48,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete_forever_rounded,
+                            color: Color(0xFFDC2626), size: 32),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Delete a Profile',
+                          style: GoogleFonts.baloo2(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF1F2937),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Tap a profile to remove it. This cannot be undone.',
+                      style: GoogleFonts.baloo2(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      itemCount: _profiles.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) {
+                        final p = _profiles[i];
+                        final avatarIsEmoji = p.avatarUrl != null &&
+                            p.avatarUrl!.length <= 2;
+                        return Material(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(18),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () async {
+                              Navigator.pop(sheetCtx);
+                              await _confirmAndDelete(p);
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFFEDE9FE),
+                                      border: Border.all(
+                                          color: const Color(0xFF6B21A8),
+                                          width: 2),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: avatarIsEmoji
+                                        ? Text(p.avatarUrl!,
+                                            style: const TextStyle(
+                                                fontSize: 30))
+                                        : Text(
+                                            p.name[0].toUpperCase(),
+                                            style: GoogleFonts.baloo2(
+                                              fontSize: 24,
+                                              fontWeight: FontWeight.w800,
+                                              color:
+                                                  const Color(0xFF6B21A8),
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          p.name,
+                                          style: GoogleFonts.baloo2(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w700,
+                                            color:
+                                                const Color(0xFF1F2937),
+                                          ),
+                                        ),
+                                        if (p.age != null)
+                                          Text(
+                                            'Age ${p.age}',
+                                            style: GoogleFonts.baloo2(
+                                              fontSize: 16,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.delete_outline_rounded,
+                                      color: Color(0xFFDC2626), size: 28),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmAndDelete(ChildProfile profile) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Text('Delete ${profile.name}?',
+            style: GoogleFonts.baloo2(
+                fontSize: 24, fontWeight: FontWeight.w800)),
+        content: Text(
+          'This profile will be removed from your account. '
+          'You can always re-add it later.',
+          style: GoogleFonts.baloo2(fontSize: 17),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(d, false),
+            child: Text('Cancel',
+                style: GoogleFonts.baloo2(
+                    fontSize: 17, color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 22, vertical: 12),
+            ),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text('Delete',
+                style: GoogleFonts.baloo2(
+                    fontSize: 17,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await _profileService.deleteChildProfile(profile.userId);
+      if (!mounted) return;
+      setState(() {
+        _profiles.removeWhere((p) => p.profileId == profile.profileId);
+        // If everything is gone, go back to the create form.
+        if (_profiles.isEmpty) _showCreateForm = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _selectChild(ChildProfile profile) {
-    context.go('/child/home', extra: {
+    // Enter the phased onboarding (Set Goals → How I Feel → My Colours → Dashboard).
+    context.go('/child/set-goals', extra: {
       'showSwitch': true,
       'childName': profile.name,
+      'profileId': profile.profileId,
     });
   }
 
@@ -141,14 +377,72 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
         child: SafeArea(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator(color: Colors.white))
-              : Column(
+              : Stack(
                   children: [
-                    _buildHeader(),
-                    Expanded(
-                      child: _showCreateForm
-                          ? _buildCreateForm()
-                          : _buildProfileList(),
+                    Column(
+                      children: [
+                        _buildHeader(),
+                        Expanded(
+                          child: _showCreateForm
+                              ? _buildCreateForm()
+                              : _buildProfileList(),
+                        ),
+                      ],
                     ),
+                    // Bottom-left: Logout (+10% bigger than the old header one)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      child: GestureDetector(
+                        onTap: _confirmLogout,
+                        child: Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                            border: Border.all(
+                                color: const Color(0xFFFF6B6B), width: 2.5),
+                          ),
+                          child: const Icon(Icons.logout_rounded,
+                              color: Color(0xFFFF6B6B), size: 31),
+                        ),
+                      ),
+                    ),
+                    // Bottom-right: Quick delete — only useful when there
+                    // are existing profiles to remove.
+                    if (_profiles.isNotEmpty && !_showCreateForm)
+                      Positioned(
+                        bottom: 20,
+                        right: 20,
+                        child: GestureDetector(
+                          onTap: _openQuickDelete,
+                          child: Container(
+                            padding: const EdgeInsets.all(15),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.12),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                              border: Border.all(
+                                  color: const Color(0xFFDC2626), width: 2.5),
+                            ),
+                            child: const Icon(Icons.delete_forever_rounded,
+                                color: Color(0xFFDC2626), size: 31),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
         ),
@@ -158,61 +452,35 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 2),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Logout button — 20% bigger
-          GestureDetector(
-            onTap: () => _confirmLogout(),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-                border: Border.all(color: const Color(0xFFFF6B6B), width: 2.5),
-              ),
-              child: const Icon(Icons.logout_rounded,
-                  color: Color(0xFFFF6B6B), size: 28),
-            ),
-          ),
-          const Spacer(),
-          // Title — 45% bigger, purple
-          Text(
-            'EMOLOR',
-            style: GoogleFonts.baloo2(
-              fontSize: 46,
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFF6B21A8),
-              shadows: const [
-                Shadow(
-                    offset: Offset(1, 1),
-                    blurRadius: 3,
-                    color: Colors.black12),
-              ],
-            ),
-          ),
-          const Spacer(),
-          // Placeholder for symmetry
-          const SizedBox(width: 56),
+          // Title — coloured-letter blocks (same style as login page)
+          _buildLetterBlock('E', const Color(0xFF00B4D8)),
+          _buildLetterBlock('M', const Color(0xFFE9C46A)),
+          _buildLetterBlock('O', const Color(0xFF9B5DE5)),
+          _buildLetterBlock('L', const Color(0xFF00BB56)),
+          _buildLetterBlock('O', const Color(0xFFE5383B)),
+          _buildLetterBlock('R', const Color(0xFFF15BB5)),
         ],
       ),
     );
   }
 
   Widget _buildProfileList() {
-    return Center(
+    // Each circle (140px) + spacing (40px) → 5 per row = 860px wide.
+    const double circleSize = 140;
+    const double gap = 40;
+    const double rowWidth =
+        (circleSize * _profilesPerRow) + (gap * (_profilesPerRow - 1));
+
+    return Align(
+      alignment: Alignment.topCenter,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
         child: Column(
           children: [
-            const SizedBox(height: 34),
             Text(
               "Who's Playing Today?",
               style: GoogleFonts.baloo2(
@@ -224,7 +492,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Select a child to start playing',
               style: GoogleFonts.baloo2(
@@ -233,19 +501,59 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 50),
-            // Circular profile avatars in a wrap
-            Wrap(
-              spacing: 40,
-              runSpacing: 34,
-              alignment: WrapAlignment.center,
-              children: [
-                ..._profiles.map((profile) => _buildCircularProfile(profile)),
-                // Add profile button
-                _buildAddProfileCircle(),
-              ],
+            const SizedBox(height: 28),
+            // Profile grid — 5 per row, spills onto new rows, scrolls
+            // vertically via the outer SingleChildScrollView. No cap.
+            SizedBox(
+              width: rowWidth,
+              child: Wrap(
+                spacing: gap,
+                runSpacing: 34,
+                alignment: WrapAlignment.start,
+                children: [
+                  ..._profiles.map((profile) => _buildCircularProfile(profile)),
+                  // Add profile button always last.
+                  _buildAddProfileCircle(),
+                ],
+              ),
             ),
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Coloured letter block — same style as the login page EMOLOR title.
+  Widget _buildLetterBlock(String letter, Color color) {
+    return Container(
+      width: 60,
+      height: 60,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(11),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            offset: Offset(0, 3),
+            blurRadius: 3,
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: GoogleFonts.fredoka(
+          fontSize: 38,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          shadows: const [
+            Shadow(
+              offset: Offset(1, 1),
+              blurRadius: 2,
+              color: Colors.black26,
+            ),
           ],
         ),
       ),
@@ -519,17 +827,59 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                   controller: _nameController,
                   style: GoogleFonts.baloo2(fontSize: 25),
                   textCapitalization: TextCapitalization.words,
+                  // Re-validate on every keystroke so the red state clears
+                  // the moment the name is no longer a duplicate.
+                  onChanged: (v) {
+                    final err = v.trim().isEmpty ? null : _validateName(v);
+                    if (err != _nameError) {
+                      setState(() => _nameError = err);
+                    }
+                  },
                   decoration: InputDecoration(
                     hintText: 'e.g. Thanesh',
                     hintStyle: GoogleFonts.baloo2(fontSize: 22, color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFF6B21A8), size: 30),
+                    prefixIcon: Icon(
+                      Icons.person_rounded,
+                      color: _nameError != null
+                          ? const Color(0xFFDC2626)
+                          : const Color(0xFF6B21A8),
+                      size: 30,
+                    ),
                     filled: true,
-                    fillColor: const Color(0xFFF5F3FF),
+                    fillColor: _nameError != null
+                        ? const Color(0xFFFEE2E2)
+                        : const Color(0xFFF5F3FF),
+                    errorText: _nameError,
+                    errorStyle: GoogleFonts.baloo2(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFDC2626)),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                    focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
-                        borderSide: const BorderSide(color: Color(0xFF6B21A8), width: 2)),
+                        borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: _nameError != null
+                          ? const BorderSide(
+                              color: Color(0xFFDC2626), width: 2)
+                          : BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                          color: _nameError != null
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFF6B21A8),
+                          width: 2),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFDC2626), width: 2)),
+                    focusedErrorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: const BorderSide(
+                            color: Color(0xFFDC2626), width: 2)),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                   ),
                 ),
@@ -656,29 +1006,47 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(23)),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 46, vertical: 28),
+        titlePadding:
+            const EdgeInsets.fromLTRB(28, 28, 28, 14),
+        contentPadding:
+            const EdgeInsets.fromLTRB(28, 0, 28, 10),
+        actionsPadding:
+            const EdgeInsets.fromLTRB(18, 6, 18, 18),
         title: Text('Log Out?',
-            style: GoogleFonts.fredoka(fontWeight: FontWeight.bold)),
+            style: GoogleFonts.fredoka(
+                fontSize: 26, fontWeight: FontWeight.bold)),
         content: Text(
           'Are you sure you want to log out?',
-          style: GoogleFonts.fredoka(fontSize: 16),
+          style: GoogleFonts.fredoka(fontSize: 18.4),
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            ),
             onPressed: () => Navigator.pop(dialogContext),
-            child:
-                Text('Cancel', style: GoogleFonts.fredoka(color: Colors.grey)),
+            child: Text('Cancel',
+                style:
+                    GoogleFonts.fredoka(color: Colors.grey, fontSize: 18.4)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () async {
               Navigator.pop(dialogContext);
               await ref.read(authProvider.notifier).signOut();
             },
             child: Text('Log Out',
-                style: GoogleFonts.fredoka(color: Colors.white)),
+                style:
+                    GoogleFonts.fredoka(color: Colors.white, fontSize: 18.4)),
           ),
         ],
       ),

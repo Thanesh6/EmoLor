@@ -46,8 +46,13 @@ class _ChildProfileSelectionScreenState
   }
 
   void _selectProfile(ChildProfile profile) {
-    // Navigate to child home screen with selected profile
-    context.go('/child/home', extra: profile);
+    // Onboarding flow:
+    //   Set Goals → How I Feel → My Colours → Dashboard.
+    context.go('/child/set-goals', extra: {
+      'childName': profile.name,
+      'showSwitch': false,
+      'profileId': profile.profileId,
+    });
   }
 
   void _createNewProfile() {

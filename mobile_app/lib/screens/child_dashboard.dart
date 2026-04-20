@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // NEW
-import '../features/auth/presentation/providers/auth_provider.dart'; // NEW
-import '../core/services/star_service.dart';
-import '../core/services/audio_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../features/auth/presentation/providers/auth_provider.dart';
+import '../core/widgets/parent_gate_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'play_screen.dart';
 import 'draw_screen.dart';
 import 'express_cards_screen.dart';
 import '../features/child/presentation/my_colours_screen.dart';
 import 'rewards_screen.dart';
-import '../core/widgets/parent_gate_dialog.dart';
+import '../core/services/bg_music_player.dart';
+import '../core/services/star_service.dart';
+import '../features/caregiver/services/goal_notification_service.dart';
 
 class ChildDashboard extends ConsumerStatefulWidget {
   final bool showSwitchAccount;
@@ -57,7 +58,34 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
       _fetchChildName();
     }
     _pulseController.repeat(reverse: true);
-    AudioService.instance.startBgMusic(BgMusicType.dashboard);
+    BgMusicPlayer.instance.play();
+    _startActiveTimeGoal();
+  }
+
+  Future<void> _startActiveTimeGoal() async {
+    final goal = await GoalNotificationService.getActiveTimeGoal();
+    if (goal == null || !mounted) return;
+    GoalNotificationService.instance.startTimeGoal(
+      context: context,
+      targetMinutes: goal.target,
+      goalId: goal.id,
+      childName: _resolvedChildName ?? widget.childName,
+    );
+  }
+
+  Future<void> _checkStarGoals() async {
+    final starGoals = await GoalNotificationService.getActiveStarGoals();
+    if (starGoals.isEmpty || !mounted) return;
+    final currentStars = await StarService.getTotalStars();
+    for (final goal in starGoals) {
+      if (!mounted) return;
+      await GoalNotificationService.instance.checkStarGoal(
+        context: context,
+        currentStars: currentStars,
+        targetStars: goal.target,
+        goalId: goal.id,
+      );
+    }
   }
 
 
@@ -100,17 +128,21 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
     }
   }
 
-  Future<void> _openScreenAndRefresh(Widget screen) async {
+  Future<void> _openScreenAndRefresh(Widget screen, {bool checkStars = false}) async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => screen),
     );
+    if (checkStars && mounted) {
+      await _checkStarGoals();
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    AudioService.instance.stopBgMusic();
+    BgMusicPlayer.instance.stop();
+    GoalNotificationService.instance.stopTimeGoal();
     super.dispose();
   }
 
@@ -320,7 +352,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                         const Color(0xFFEF4444),
                       ],
                       shadowColor: Colors.orange,
-                      onTap: () => _openScreenAndRefresh(const PlayScreen()),
+                      onTap: () => _openScreenAndRefresh(const PlayScreen(), checkStars: true),
                     ),
                     _buildActionButton(
                       emoji: '🖌️',
@@ -330,7 +362,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                         const Color(0xFF3B82F6),
                       ],
                       shadowColor: Colors.blue,
-                      onTap: () => _openScreenAndRefresh(const DrawScreen()),
+                      onTap: () => _openScreenAndRefresh(const DrawScreen(), checkStars: true),
                     ),
                     _buildActionButton(
                       emoji: '🗣️',
@@ -468,56 +500,60 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                       ),
                     ),
                   ),
-                // Caregiver button
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => ParentGateDialog(
-                        onSuccess: () {
-                          context.push('/caregiver-dashboard', extra: {
-                            'childName': _resolvedChildName,
-                            'showSwitch': widget.showSwitchAccount,
-                          });
-                        },
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6B21A8), Color(0xFF4C1D95)],
-                      ),
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.purple.withValues(alpha: 0.4),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                      border: Border.all(color: Colors.white, width: 2),
+              // Dashboard button — PIN protected
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (_) => ParentGateDialog(
+                      onSuccess: () async {
+                        await context.push('/centre-dashboard', extra: {
+                          'childName': _resolvedChildName,
+                          'showSwitch': widget.showSwitchAccount,
+                        });
+                        // Refresh goals upon return
+                        if (mounted) {
+                          _startActiveTimeGoal();
+                        }
+                      },
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.family_restroom,
-                            color: Colors.white, size: 25),
-                        const SizedBox(width: 7),
-                        Text(
-                          'Caregiver',
-                          style: GoogleFonts.fredoka(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF6B21A8), Color(0xFF4C1D95)],
                     ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.purple.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.dashboard_rounded,
+                          color: Colors.white, size: 25),
+                      const SizedBox(width: 7),
+                      Text(
+                        'Dashboard',
+                        style: GoogleFonts.fredoka(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
               ],
             ),
           ),

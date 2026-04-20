@@ -364,6 +364,12 @@ class GoalService {
     await _saveAll(all);
   }
 
+  /// Clear all goals (used by Reset Game feature).
+  static Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_storageKey);
+  }
+
   // ── Private helpers ──────────────────────────────────────────────
 
   static Future<List<PerformanceGoal>> _loadAll() async {

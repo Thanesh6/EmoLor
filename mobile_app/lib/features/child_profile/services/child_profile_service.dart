@@ -103,16 +103,21 @@ class ChildProfileService {
     return ChildProfile.fromJson(response);
   }
 
-  /// Delete a child profile (remove family_link — profile row can stay)
+  /// Delete a child profile (remove family_link — profile row can stay).
+  /// Uses SECURITY DEFINER RPC to bypass RLS restrictions.
   Future<void> deleteChildProfile(String childUserId) async {
     final userId = SupabaseService.currentUserId;
     if (userId == null) throw Exception('User not authenticated');
 
-    await _client
-        .from('family_links')
-        .delete()
-        .eq('caregiver_id', userId)
-        .eq('child_id', childUserId);
+    final result = await _client.rpc('delete_child_profile', params: {
+      'p_caregiver_id': userId,
+      'p_child_user_id': childUserId,
+    });
+
+    final deleted = (result is int) ? result : int.tryParse(result.toString()) ?? 0;
+    if (deleted == 0) {
+      throw Exception('No profile was deleted — link not found');
+    }
   }
 
   /// Get child profiles linked to a therapist via therapist_client_link

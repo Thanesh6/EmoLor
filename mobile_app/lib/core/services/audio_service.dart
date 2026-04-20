@@ -18,6 +18,7 @@ class AudioService {
   final AudioPlayer _bgPlayer = AudioPlayer();
   final AudioPlayer _sfxPlayer = AudioPlayer();
   bool _bgRunning = false;
+  BgMusicType? _currentBgType;
 
   // ─── WAV builder ──────────────────────────────────────────────────────────
 
@@ -290,11 +291,15 @@ class AudioService {
 
   // ─── Public API ───────────────────────────────────────────────────────────
 
-  /// Start looping background music. Safe to call if already running.
+  /// Start looping background music. Safe to call while already running —
+  /// if the same [type] is already playing this is a no-op; if a *different*
+  /// type is running it swaps tracks (fixes the child dashboard silently
+  /// inheriting the login theme).
   Future<void> startBgMusic(BgMusicType type) async {
-    if (_bgRunning) return;
+    if (_bgRunning && _currentBgType == type) return;
     _bgRunning = true;
-    await _bgPlayer.stop(); // clear any stale state
+    _currentBgType = type;
+    await _bgPlayer.stop(); // clear any stale/previous track
     await _bgPlayer.setReleaseMode(ReleaseMode.loop);
     final wav = type == BgMusicType.login
         ? (_bgLoginWav ??= _buildBgLogin())
@@ -305,6 +310,7 @@ class AudioService {
   /// Stop background music.
   Future<void> stopBgMusic() async {
     _bgRunning = false;
+    _currentBgType = null;
     await _bgPlayer.stop();
   }
 

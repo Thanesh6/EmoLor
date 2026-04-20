@@ -501,6 +501,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
               child: _buildSection(
                 title: 'Mood This Week',
                 icon: Icons.insights,
+                subtitle:
+                    'Emotions expressed on the week — positive vs negative shifts',
                 child: _buildMoodChart(data.weeklyMoods),
               ),
             ),
@@ -524,6 +526,8 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
       _buildSection(
         title: 'Weekly Mood Trends',
         icon: Icons.insights,
+        subtitle:
+            'Emotions expressed on the week — positive vs negative shifts',
         child: _buildMoodChart(data.weeklyMoods),
       ),
       const SizedBox(height: 24),
@@ -786,6 +790,7 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
     required String title,
     required IconData icon,
     required Widget child,
+    String? subtitle,
     Widget? trailing,
   }) {
     return Container(
@@ -813,6 +818,19 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
               if (trailing != null) trailing,
             ],
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 36),
+              child: Text(
+                subtitle,
+                style: _poppins(
+                    size: 14,
+                    weight: FontWeight.w500,
+                    color: Colors.grey[600]!),
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           child,
         ],
@@ -822,86 +840,205 @@ class _ProgressDashboardScreenState extends State<ProgressDashboardScreen> {
 
   // ── Mood bar chart ──────────────────────────────────────────────
 
+  // Positive vs negative emotion classification
+  static const Set<String> _positiveEmotionIds = {
+    'joy', 'trust', 'anticipation', 'surprise',
+    'happy', 'calm', 'excited',
+  };
+  static const Set<String> _negativeEmotionIds = {
+    'fear', 'sadness', 'disgust', 'anger',
+    'sad', 'angry', 'scared',
+  };
+
+  /// Weekly dual-line chart: positive vs negative emotion frequency per day.
+  /// X-axis: Day 1 → Day 7, Y-axis: frequency (0–10).
   Widget _buildMoodChart(List<DailyMood> week) {
-    final hasAnyMoods = week.any((d) => d.entries.isNotEmpty);
-    if (!hasAnyMoods) {
-      return _buildSampleEmotionBars();
+    // Tally positive/negative counts per day from real data
+    final positiveCounts = List<double>.filled(7, 0);
+    final negativeCounts = List<double>.filled(7, 0);
+    for (int i = 0; i < 7 && i < week.length; i++) {
+      for (final entry in week[i].entries) {
+        final id = entry.emotionId.toLowerCase();
+        if (_positiveEmotionIds.contains(id)) {
+          positiveCounts[i]++;
+        } else if (_negativeEmotionIds.contains(id)) {
+          negativeCounts[i]++;
+        }
+      }
     }
 
-    return SizedBox(
-      height: 220,
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: 5,
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                final day = week[group.x.toInt()];
-                final dominant = day.dominantEmotion;
-                if (dominant == null) return null;
-                return BarTooltipItem(
-                  '${_emojiForEmotion(dominant)} ${dominant[0].toUpperCase()}${dominant.substring(1)}',
-                  _poppins(
-                      size: 13, weight: FontWeight.w600, color: Colors.white),
-                );
-              },
-            ),
-          ),
-          titlesData: FlTitlesData(
-            show: true,
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  final idx = value.toInt();
-                  if (idx >= 0 && idx < week.length) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        week[idx].dayLabel,
-                        style: _poppins(size: 13, weight: FontWeight.w600),
-                      ),
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
+    // If no real data, use illustrative mock samples so the chart is readable.
+    final hasAnyData =
+        positiveCounts.any((v) => v > 0) || negativeCounts.any((v) => v > 0);
+    if (!hasAnyData) {
+      final pos = [3.0, 5.0, 4.0, 7.0, 6.0, 8.0, 9.0];
+      final neg = [6.0, 5.0, 4.0, 3.0, 4.0, 2.0, 1.0];
+      for (int i = 0; i < 7; i++) {
+        positiveCounts[i] = pos[i];
+        negativeCounts[i] = neg[i];
+      }
+    }
+
+    const posColor = Color(0xFF22C55E); // green
+    const negColor = Color(0xFFEF4444); // red
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Legend
+        Row(
+          children: [
+            _legendDot(posColor, 'Positive'),
+            const SizedBox(width: 18),
+            _legendDot(negColor, 'Negative'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 220,
+          child: LineChart(
+            LineChartData(
+              minX: 0,
+              maxX: 6,
+              minY: 0,
+              maxY: 10,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: 5,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: Colors.grey[200]!,
+                  strokeWidth: 1,
+                ),
               ),
-            ),
-            leftTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
-          gridData: const FlGridData(show: false),
-          borderData: FlBorderData(show: false),
-          barGroups: List.generate(week.length, (i) {
-            final day = week[i];
-            final dominant = day.dominantEmotion;
-            final barColor = dominant != null
-                ? _colorForEmotion(dominant)
-                : Colors.grey[300]!;
-            return BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: day.intensity,
-                  color: barColor,
-                  width: 20,
-                  borderRadius: BorderRadius.circular(6),
-                  backDrawRodData: BackgroundBarChartRodData(
+              titlesData: FlTitlesData(
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, _) {
+                      final idx = value.toInt();
+                      if (idx >= 0 && idx < 7) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Day ${idx + 1}',
+                            style: _poppins(
+                                size: 12, weight: FontWeight.w600),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 32,
+                    getTitlesWidget: (value, _) {
+                      // Only draw labels at 0, 1, 5, 10
+                      if (value == 0 ||
+                          value == 1 ||
+                          value == 5 ||
+                          value == 10) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Text(
+                            value.toInt().toString(),
+                            style: _poppins(
+                                size: 12, weight: FontWeight.w600),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipItems: (spots) => spots.map((s) {
+                    final isPos = s.barIndex == 0;
+                    return LineTooltipItem(
+                      '${isPos ? "Positive" : "Negative"}: ${s.y.toInt()}',
+                      _poppins(
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: Colors.white),
+                    );
+                  }).toList(),
+                ),
+              ),
+              lineBarsData: [
+                // Positive line
+                LineChartBarData(
+                  spots: List.generate(
+                      7, (i) => FlSpot(i.toDouble(), positiveCounts[i])),
+                  isCurved: true,
+                  color: posColor,
+                  barWidth: 3,
+                  dotData: FlDotData(
                     show: true,
-                    toY: 5,
-                    color: Colors.grey[100]!,
+                    getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                      radius: 4.5,
+                      color: posColor,
+                      strokeWidth: 2,
+                      strokeColor: Colors.white,
+                    ),
+                  ),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: posColor.withValues(alpha: 0.12),
+                  ),
+                ),
+                // Negative line
+                LineChartBarData(
+                  spots: List.generate(
+                      7, (i) => FlSpot(i.toDouble(), negativeCounts[i])),
+                  isCurved: true,
+                  color: negColor,
+                  barWidth: 3,
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                      radius: 4.5,
+                      color: negColor,
+                      strokeWidth: 2,
+                      strokeColor: Colors.white,
+                    ),
+                  ),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: negColor.withValues(alpha: 0.1),
                   ),
                 ),
               ],
-            );
-          }),
+            ),
+          ),
         ),
-      ),
+      ],
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label,
+            style: _poppins(size: 13, weight: FontWeight.w600)),
+      ],
     );
   }
 
