@@ -127,6 +127,7 @@ class _MyColoursScreenState extends ConsumerState<MyColoursScreen>
       }).toList();
 
       await ref.read(emotionServiceProvider.notifier).saveAllColors(updated);
+      await EmotionService.markAllAssigned();
     } catch (e) {
       debugPrint('MyColoursScreen._saveAndFinish: $e');
     } finally {
