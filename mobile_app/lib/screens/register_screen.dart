@@ -38,7 +38,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final List<Map<String, String>> _roles = [
     {'label': 'Caregiver (Parent / Guardian)', 'value': 'caregiver'},
     {'label': 'Organization / Centre', 'value': 'organization'},
-    {'label': 'Therapist', 'value': 'therapist'},
   ];
 
   // Extended Avatar List
@@ -140,7 +139,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     // Privacy policy agreement
-    if (_selectedRole != 'therapist' && !_agreedToPolicy) {
+    if (!_agreedToPolicy) {
       setState(() {
         _errorMessage = '\u26a0\ufe0f Please accept the Privacy Policy!';
       });
@@ -278,8 +277,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
                       // Register Container
                       Container(
-                        constraints: BoxConstraints(
-                            maxWidth: _selectedRole == 'therapist' ? 520 : 800),
+                        constraints: const BoxConstraints(maxWidth: 800),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 30, vertical: 15),
                         margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -587,43 +585,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ],
                               ),
                               const SizedBox(height: 10),
-                            ] else ...[
-                              // --- THERAPIST FORM ---
-                              _buildStyledField(
-                                  controller: _nameController,
-                                  hint: 'Name',
-                                  icon: Icons.person_outline),
-                              const SizedBox(height: 10),
-                              _buildStyledField(
-                                  controller: _emailController,
-                                  hint: 'Email',
-                                  icon: Icons.email_outlined,
-                                  inputType: TextInputType.emailAddress),
-                              const SizedBox(height: 10),
-                              _buildStyledField(
-                                  controller: _passwordController,
-                                  hint: 'Password (8+ chars)',
-                                  icon: Icons.lock_outline,
-                                  isPassword: true,
-                                  isObscured: _obscurePassword,
-                                  toggleObscure: () => setState(() =>
-                                      _obscurePassword = !_obscurePassword)),
-                              const SizedBox(height: 10),
-                              _buildStyledField(
-                                  controller: _confirmPasswordController,
-                                  hint: 'Confirm Password',
-                                  icon: Icons.lock_outline,
-                                  isPassword: true,
-                                  isObscured: _obscureConfirmPassword,
-                                  toggleObscure: () => setState(() =>
-                                      _obscureConfirmPassword =
-                                          !_obscureConfirmPassword)),
-                              const SizedBox(height: 10),
                             ],
 
-                            // Privacy Policy Checkbox (apply to caregiver and org)
-                            if (_selectedRole != 'therapist')
-                              Row(
+                            // Privacy Policy Checkbox
+                            Row(
                                 children: [
                                   Checkbox(
                                     value: _agreedToPolicy,

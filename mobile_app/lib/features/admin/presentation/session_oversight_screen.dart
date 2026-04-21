@@ -135,7 +135,7 @@ class _SessionOversightScreenState extends State<SessionOversightScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              'This will notify both the therapist and caregiver. '
+              'This will notify the caregiver. '
               'Please provide a reason:',
               style: GoogleFonts.poppins(fontSize: 13),
             ),
@@ -144,7 +144,7 @@ class _SessionOversightScreenState extends State<SessionOversightScreen>
               controller: reasonCtrl,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'e.g., Therapist account suspended',
+                hintText: 'e.g., Session cancelled by admin',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -253,7 +253,7 @@ class _SessionOversightScreenState extends State<SessionOversightScreen>
                 controller: _searchCtrl,
                 onSubmitted: (_) => _onSearch(),
                 decoration: InputDecoration(
-                  hintText: 'Search by therapist, caregiver, child, or title…',
+                  hintText: 'Search by caregiver, child, or title…',
                   hintStyle: GoogleFonts.poppins(fontSize: 14),
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: _searchCtrl.text.isNotEmpty
@@ -540,11 +540,6 @@ class _SessionCard extends StatelessWidget {
               spacing: 16,
               runSpacing: 4,
               children: [
-                _ParticipantChip(
-                  icon: Icons.psychology,
-                  label: session.therapistName ?? 'Therapist',
-                  color: Colors.indigo,
-                ),
                 if (session.caregiverName != null)
                   _ParticipantChip(
                     icon: Icons.person_outline,

@@ -350,7 +350,7 @@ class _ChatTabState extends State<ChatTab> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Link with a therapist or client to start chatting.',
+              'No conversations yet.',
               style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[500]),
             ),
           ],
@@ -375,14 +375,11 @@ class _ChatTabState extends State<ChatTab> {
             itemBuilder: (context, index) {
               final c = _contacts[index];
               final name = (c['full_name'] as String?) ?? 'Contact';
-              final role = (c['role'] as String?) ?? '';
               final avatar = c['avatar_url'] as String?;
               return ListTile(
                 leading: CircleAvatar(
                   radius: 24,
-                  backgroundColor: role == 'therapist'
-                      ? const Color(0xFF1E40AF)
-                      : const Color(0xFF6B21A8),
+                  backgroundColor: const Color(0xFF6B21A8),
                   backgroundImage: avatar != null ? NetworkImage(avatar) : null,
                   child: avatar == null
                       ? Text(
@@ -397,7 +394,7 @@ class _ChatTabState extends State<ChatTab> {
                 title: Text(name,
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                 subtitle: Text(
-                  role == 'therapist' ? 'Therapist' : 'Caregiver',
+                  'Caregiver',
                   style: GoogleFonts.poppins(
                       fontSize: 13, color: Colors.grey[600]),
                 ),
@@ -417,7 +414,6 @@ class _ChatTabState extends State<ChatTab> {
 
   Widget _buildChatView() {
     final contactName = (_activeContact?['full_name'] as String?) ?? 'Contact';
-    final contactRole = (_activeContact?['role'] as String?) ?? '';
 
     return Column(
       children: [
@@ -442,9 +438,7 @@ class _ChatTabState extends State<ChatTab> {
               ),
               CircleAvatar(
                 radius: 20,
-                backgroundColor: contactRole == 'therapist'
-                    ? const Color(0xFF1E40AF)
-                    : const Color(0xFF6B21A8),
+                backgroundColor: const Color(0xFF6B21A8),
                 child: Text(
                   contactName.isNotEmpty ? contactName[0].toUpperCase() : '?',
                   style: GoogleFonts.poppins(
@@ -462,7 +456,7 @@ class _ChatTabState extends State<ChatTab> {
                         style: GoogleFonts.poppins(
                             fontSize: 16, fontWeight: FontWeight.w600)),
                     Text(
-                      contactRole == 'therapist' ? 'Therapist' : 'Caregiver',
+                      'Caregiver',
                       style: GoogleFonts.poppins(
                           fontSize: 12, color: Colors.grey[600]),
                     ),

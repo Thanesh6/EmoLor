@@ -261,9 +261,7 @@ class _ConversationViewScreenState
           ),
           CircleAvatar(
             radius: 20,
-            backgroundColor: widget.contactRole == 'therapist'
-                ? const Color(0xFF1E40AF)
-                : const Color(0xFF6B21A8),
+            backgroundColor: const Color(0xFF6B21A8),
             child: Text(
               widget.contactName.isNotEmpty
                   ? widget.contactName[0].toUpperCase()
@@ -286,7 +284,7 @@ class _ConversationViewScreenState
                       fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  widget.contactRole == 'therapist' ? 'Therapist' : 'Caregiver',
+                  'Caregiver',
                   style: GoogleFonts.poppins(
                       fontSize: 12, color: Colors.grey[600]),
                 ),

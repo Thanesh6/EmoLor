@@ -51,8 +51,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     switch (role) {
       case 'caregiver':
         return 'Caregiver';
-      case 'therapist':
-        return 'Therapist';
       case 'admin':
         return 'Administrator';
       default:

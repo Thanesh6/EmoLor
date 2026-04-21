@@ -20,7 +20,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   List<Map<String, dynamic>> _filteredUsers = [];
   bool _isLoading = true;
   String? _errorMessage;
-  String _filterRole = 'all'; // all | caregiver | therapist | child
+  String _filterRole = 'all'; // all | caregiver | child
 
   @override
   void initState() {
@@ -168,8 +168,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     switch (role) {
       case 'caregiver':
         return 'Caregiver';
-      case 'therapist':
-        return 'Therapist';
       case 'child':
         return 'Child';
       case 'admin':
@@ -183,8 +181,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     switch (role) {
       case 'caregiver':
         return const Color(0xFF0EA5E9);
-      case 'therapist':
-        return const Color(0xFF8B5CF6);
       case 'child':
         return const Color(0xFFFB923C);
       case 'admin':
@@ -198,8 +194,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     switch (role) {
       case 'caregiver':
         return Icons.family_restroom;
-      case 'therapist':
-        return Icons.medical_services_outlined;
       case 'child':
         return Icons.child_care;
       case 'admin':
@@ -286,8 +280,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                                 value: 'all', child: Text('All Roles')),
                             DropdownMenuItem(
                                 value: 'caregiver', child: Text('Caregivers')),
-                            DropdownMenuItem(
-                                value: 'therapist', child: Text('Therapists')),
                             DropdownMenuItem(
                                 value: 'child', child: Text('Children')),
                             DropdownMenuItem(

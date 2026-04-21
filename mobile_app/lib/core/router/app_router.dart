@@ -13,7 +13,6 @@ import '../../screens/update_password_screen.dart';
 import '../../screens/child_dashboard.dart'; // Child Dashboard
 import '../../screens/analytics_dashboard.dart';
 import '../../screens/orgz_child_dashboard.dart';
-import '../../screens/therapist_dashboard.dart';
 import '../../features/child_profile/presentation/child_profile_selection_screen.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
 import '../../features/child/presentation/how_i_feel_screen.dart';
@@ -29,10 +28,6 @@ import '../../features/profile/presentation/link_account_screen.dart';
 import '../../features/caregiver/presentation/screens/request_session_screen.dart';
 import '../../features/caregiver/presentation/screens/conversation_view_screen.dart';
 import '../../features/caregiver/models/chat_message.dart';
-import '../../features/caregiver/models/session_request.dart';
-import '../../features/therapist/presentation/screens/session_response_screen.dart';
-import '../../features/therapist/presentation/screens/schedule_session_screen.dart';
-import '../../shared/models/scheduled_session.dart';
 
 /// A ChangeNotifier that listens to Supabase auth state changes.
 /// Used as GoRouter's refreshListenable so redirect is re-evaluated
@@ -120,7 +115,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             }
           }
 
-          if (role == 'therapist') return '/therapist-dashboard';
           if (role == 'caregiver' && accountType == 'organization') {
             return '/orgz-child-dashboard';
           }
@@ -326,10 +320,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/therapist-dashboard',
-        builder: (context, state) => const TherapistDashboard(),
-      ),
-      GoRoute(
         path: '/admin-dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
       ),
@@ -363,30 +353,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             conversation: extra['conversation'] as Conversation,
             contactName: extra['contactName'] as String,
             contactRole: extra['contactRole'] as String,
-          );
-        },
-      ),
-      // UCD033 – Respond To Session Invitation
-      GoRoute(
-        path: '/session-response',
-        builder: (context, state) {
-          final request = state.extra as SessionRequest;
-          return SessionResponseScreen(request: request);
-        },
-      ),
-      // UCD034 – Schedule Session
-      GoRoute(
-        path: '/schedule-session',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          return ScheduleSessionScreen(
-            prefilledDate: extra?['prefilledDate'] as DateTime?,
-            prefilledSlot: extra?['prefilledSlot'] as SessionTimeSlot?,
-            prefilledCaregiverId: extra?['prefilledCaregiverId'] as String?,
-            prefilledChildProfileId:
-                extra?['prefilledChildProfileId'] as String?,
-            prefilledTitle: extra?['prefilledTitle'] as String?,
-            sessionRequestId: extra?['sessionRequestId'] as String?,
           );
         },
       ),

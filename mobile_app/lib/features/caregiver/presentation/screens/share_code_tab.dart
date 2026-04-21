@@ -103,7 +103,7 @@ class _ShareCodeTabState extends State<ShareCodeTab> {
         title: Text('Revoke Code?',
             style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
         content: Text(
-            'This will invalidate code ${code.code}. The therapist will no longer be able to use it.',
+            'This will invalidate code ${code.code}. It can no longer be used to link accounts.',
             style: GoogleFonts.poppins(fontSize: 14)),
         actions: [
           TextButton(
@@ -199,7 +199,7 @@ class _ShareCodeTabState extends State<ShareCodeTab> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Generate a code and share it with your child\'s therapist to link accounts.',
+            'Generate a code and share it to link child accounts.',
             style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
           ),
           const SizedBox(height: 20),

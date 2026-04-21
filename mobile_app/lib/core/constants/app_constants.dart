@@ -19,7 +19,6 @@ class AppConstants {
 
   // User Roles (Children don't have auth accounts, only profiles)
   static const String roleCaregiver = 'caregiver';
-  static const String roleTherapist = 'therapist';
   static const String roleAdmin = 'admin';
 
   // Admin Gate – only this email + password can access the admin dashboard.
@@ -42,7 +41,6 @@ class AppConstants {
   static const String routeCommConfig = '/comm-config';
   static const String routeSessionOversight = '/session-oversight';
   static const String routeClientRecord = '/client-record';
-  static const String routeTherapist = '/therapist';
   static const String routeAdmin = '/admin';
 
   // Storage Keys

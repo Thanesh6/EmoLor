@@ -172,7 +172,7 @@ class _ConversationListScreenState
           ),
           const SizedBox(height: 4),
           Text(
-            'Link with a therapist or client to start chatting.',
+            'No conversations yet.',
             style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[500]),
             textAlign: TextAlign.center,
           ),
@@ -237,9 +237,7 @@ class _ConversationTile extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 26,
-            backgroundColor: contactRole == 'therapist'
-                ? const Color(0xFF1E40AF)
-                : const Color(0xFF6B21A8),
+            backgroundColor: const Color(0xFF6B21A8),
             child: Text(
               name.isNotEmpty ? name[0].toUpperCase() : '?',
               style: GoogleFonts.poppins(
@@ -298,7 +296,7 @@ class _ConversationTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             )
           : Text(
-              contactRole == 'therapist' ? 'Therapist' : 'Caregiver',
+              'Caregiver',
               style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[500]),
             ),
       trailing: Column(
