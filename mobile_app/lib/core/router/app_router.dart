@@ -16,7 +16,6 @@ import '../../screens/orgz_child_dashboard.dart';
 import '../../features/child_profile/presentation/child_profile_selection_screen.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
 import '../../features/child/presentation/how_i_feel_screen.dart';
-import '../../features/child/presentation/my_colours_screen.dart';
 import '../../features/child/presentation/set_goals_screen.dart';
 
 import '../../features/child/services/child_session_service.dart';
@@ -230,32 +229,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               }
             },
             onContinue: (_) async {
-              // Move to Phase 2 — My Colours setup.
+              // Go straight to the dashboard — colours are picked gradually
+              // during the session flow inside HowIFeelScreen itself.
               if (context.mounted) {
-                context.go('/my-colours-setup', extra: {
+                context.go('/child/home', extra: {
                   'childName': childName,
                   'showSwitch': showSwitch,
                 });
               }
-            },
-          );
-        },
-      ),
-      // Phase 2 — "My Colours" onboarding picker before the dashboard.
-      GoRoute(
-        path: '/my-colours-setup',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>?;
-          final childName = extra?['childName'] as String?;
-          final showSwitch = extra?['showSwitch'] == true;
-          return MyColoursScreen(
-            isOnboarding: true,
-            onFinished: () {
-              // Enter the main dashboard.
-              context.go('/child/home', extra: {
-                'childName': childName,
-                'showSwitch': showSwitch,
-              });
             },
           );
         },

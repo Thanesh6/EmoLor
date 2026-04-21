@@ -8,7 +8,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'play_screen.dart';
 import 'draw_screen.dart';
 import 'express_cards_screen.dart';
-import '../features/child/presentation/my_colours_screen.dart';
 import 'rewards_screen.dart';
 import '../core/services/bg_music_player.dart';
 import '../core/services/star_service.dart';
@@ -379,22 +378,11 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                   ],
                 ),
                 const SizedBox(height: 24),
-                // Bottom row: My Colors, Rewards
+                // Bottom row: Rewards (My Colors removed — colours are picked
+                // gradually inside the How I Feel session flow)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(width: 40),
-                    _buildActionButton(
-                      emoji: '🎨',
-                      label: 'My Colors',
-                      gradientColors: [
-                        const Color(0xFFF472B6),
-                        const Color(0xFFEC4899),
-                      ],
-                      shadowColor: Colors.pink,
-                      onTap: () =>
-                          _openScreenAndRefresh(const MyColoursScreen()),
-                    ),
                     _buildActionButton(
                       emoji: '🎁',
                       label: 'Rewards',
@@ -405,7 +393,6 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                       shadowColor: Colors.teal,
                       onTap: () => _openScreenAndRefresh(const RewardsScreen()),
                     ),
-                    const SizedBox(width: 40),
                   ],
                 ),
               ],

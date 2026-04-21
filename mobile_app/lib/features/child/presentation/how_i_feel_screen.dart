@@ -559,17 +559,18 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
         ),
         const SizedBox(height: 20),
 
-        // 12-colour palette grid
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
+        // 12-colour palette — constrained width keeps circles compact
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
             child: GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 6,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1,
               ),
               itemCount: _palette.length,
               itemBuilder: (context, i) {
@@ -591,7 +592,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                           : [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 4)],
                     ),
                     child: isChosen
-                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 26)
+                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 22)
                         : null,
                   ),
                 );
