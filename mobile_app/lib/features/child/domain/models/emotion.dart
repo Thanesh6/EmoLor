@@ -5,12 +5,16 @@ class Emotion {
   final String name;
   final Color color;
   final String emoji;
+  final String valence;     // 'positive' | 'negative'
+  final int plutchikOrder;  // 1-8
 
   const Emotion({
     required this.id,
     required this.name,
     required this.color,
     required this.emoji,
+    this.valence = 'positive',
+    this.plutchikOrder = 1,
   });
 
   Emotion copyWith({
@@ -18,12 +22,16 @@ class Emotion {
     String? name,
     Color? color,
     String? emoji,
+    String? valence,
+    int? plutchikOrder,
   }) {
     return Emotion(
       id: id ?? this.id,
       name: name ?? this.name,
       color: color ?? this.color,
       emoji: emoji ?? this.emoji,
+      valence: valence ?? this.valence,
+      plutchikOrder: plutchikOrder ?? this.plutchikOrder,
     );
   }
 
@@ -33,15 +41,19 @@ class Emotion {
       'name': name,
       'color': color.toARGB32(),
       'emoji': emoji,
+      'valence': valence,
+      'plutchikOrder': plutchikOrder,
     };
   }
 
   factory Emotion.fromJson(Map<String, dynamic> json) {
     return Emotion(
-      id: json['id'],
-      name: json['name'],
-      color: Color(json['color']),
-      emoji: json['emoji'],
+      id: json['id'] as String,
+      name: json['name'] as String,
+      color: Color(json['color'] as int),
+      emoji: json['emoji'] as String,
+      valence: (json['valence'] as String?) ?? 'positive',
+      plutchikOrder: (json['plutchikOrder'] as int?) ?? 1,
     );
   }
 }

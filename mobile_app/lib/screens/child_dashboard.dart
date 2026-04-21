@@ -70,6 +70,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
       targetMinutes: goal.target,
       goalId: goal.id,
       childName: _resolvedChildName ?? widget.childName,
+      showSwitch: widget.showSwitchAccount,
     );
   }
 

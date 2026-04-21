@@ -11,6 +11,7 @@ import '../features/caregiver/presentation/widgets/new_goal_dialog.dart';
 import '../features/caregiver/services/goal_service.dart';
 import '../features/caregiver/services/pdf_report_service.dart';
 import '../features/child/services/child_rewards_service.dart';
+import '../features/child/services/child_session_service.dart';
 import '../features/child/services/completion_service.dart';
 import '../features/child/models/completion_record.dart';
 
@@ -49,6 +50,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
   List<CompletionRecord> _recentCompletions = [];
   List<Map<String, dynamic>> _recentJournal = [];
   List<Map<String, dynamic>> _activeGoals = [];
+
+  List<Map<String, dynamic>> _childSessions = [];
 
   // ── Progress tab category selector ──
   int _selectedProgressCategory = 0;
@@ -139,6 +142,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
 
       // Load user-created goals (must be outside setState — it's async)
       final serviceGoals = await GoalService.getAllGoals();
+      final childSessions = await ChildSessionService.getRecentSessions(limit: 30);
 
       // ── Extended analytics ──
       final activeDayKeys = completions.map((c) {
@@ -444,6 +448,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
             for (final e in gameTime7Days.entries) e.key: (e.value / 60).round(),
           };
 
+          _childSessions = childSessions;
           _isLoading = false;
         });
       }
@@ -1391,6 +1396,152 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
+  Widget _buildPrePostChart() {
+    // Last 7 sessions that have BOTH pre and post emotions
+    final completeSessions = _childSessions
+        .where((s) =>
+            s['pre_emotion_name'] != null && s['post_emotion_name'] != null)
+        .take(7)
+        .toList()
+        .reversed
+        .toList();
+
+    if (completeSessions.isEmpty) {
+      // Show sample data so chart is always visible
+      return _buildChartCard(
+        '🔄 Emotion Shift',
+        'How feelings changed after each session (last 7 sessions)',
+        height: 220,
+        child: Center(
+          child: Text(
+            'No session data yet.\nComplete a session to see shifts here!',
+            textAlign: TextAlign.center,
+            style: _textStyle(fontSize: 15, color: Colors.grey[500]!),
+          ),
+        ),
+      );
+    }
+
+    // Build side-by-side bar groups: left=pre, right=post
+    // Y-axis maps valence: positive=1, negative=-1 (shifted to 0..2 for chart)
+    double valenceScore(String? valence) {
+      if (valence == 'positive') return 2.0;
+      if (valence == 'negative') return 0.5;
+      return 1.25;
+    }
+
+    final barGroups = completeSessions.asMap().entries.map((entry) {
+      final i = entry.key;
+      final s = entry.value;
+      final preColor = EmotionColourMapping.colorFor(
+          s['pre_emotion_name'] as String? ?? 'Happy');
+      final postColor = EmotionColourMapping.colorFor(
+          s['post_emotion_name'] as String? ?? 'Happy');
+      return BarChartGroupData(
+        x: i,
+        barRods: [
+          BarChartRodData(
+            toY: valenceScore(s['pre_emotion_valence'] as String?),
+            color: preColor,
+            width: 18,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+          ),
+          BarChartRodData(
+            toY: valenceScore(s['post_emotion_valence'] as String?),
+            color: postColor,
+            width: 18,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+          ),
+        ],
+        barsSpace: 4,
+      );
+    }).toList();
+
+    return _buildChartCard(
+      '🔄 Emotion Shift',
+      'How feelings changed after each session (last 7 sessions)',
+      height: 240,
+      child: Column(
+        children: [
+          // Legend
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildLegendItem('Before', const Color(0xFF6B7280)),
+              const SizedBox(width: 20),
+              _buildLegendItem('After', const Color(0xFF10B981)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+                alignment: BarChartAlignment.spaceAround,
+                maxY: 2.5,
+                minY: 0,
+                barTouchData: BarTouchData(
+                  enabled: true,
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => const Color(0xFF1F2937),
+                    getTooltipItem: (group, _, rod, rodIndex) {
+                      final s = completeSessions[group.x];
+                      final emotionName = rodIndex == 0
+                          ? s['pre_emotion_name'] as String? ?? '?'
+                          : s['post_emotion_name'] as String? ?? '?';
+                      final label = rodIndex == 0 ? 'Before' : 'After';
+                      return BarTooltipItem(
+                        '$label: $emotionName',
+                        const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                      );
+                    },
+                  ),
+                ),
+                barGroups: barGroups,
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) => FlLine(
+                      color: Colors.grey.withValues(alpha: 0.15), strokeWidth: 1),
+                ),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 52,
+                      getTitlesWidget: (v, _) {
+                        if (v == 2.0) return Text('😊 +', style: _textStyle(fontSize: 11, color: Colors.grey[600]!));
+                        if (v == 0.5) return Text('😔 −', style: _textStyle(fontSize: 11, color: Colors.grey[600]!));
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, _) {
+                        final idx = v.toInt();
+                        if (idx < 0 || idx >= completeSessions.length) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('S${idx + 1}',
+                              style: _textStyle(fontSize: 12, color: Colors.grey[600]!)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProgressTab() {
     final now = DateTime.now();
     // The 7 games on the Play screen + the Draw activity. Both bar chart
@@ -1500,22 +1651,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       color: Colors.white,
       shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
     );
-    const _positiveSliceColors = [
-      Color(0xFF10B981), Color(0xFF3B82F6), Color(0xFFF59E0B),
-      Color(0xFF8B5CF6), Color(0xFF06B6D4), Color(0xFFEC4899),
-      Color(0xFF84CC16),
-    ];
-    const _negativeSliceColors = [
-      Color(0xFFEF4444), Color(0xFFB45309), Color(0xFF9B5DE5),
-      Color(0xFF78716C), Color(0xFFFB923C), Color(0xFF0EA5E9),
-      Color(0xFF6B7280),
-    ];
+
 
     final pieSectionsPositive = positiveEmotionsData.asMap().entries.map((en) {
-      final idx = en.key;
       final e = en.value;
       final value = e.value.toDouble();
-      final color = _positiveSliceColors[idx % _positiveSliceColors.length];
+      final color = EmotionColourMapping.colorFor(e.key);
       final percentage = totalPositive > 0
           ? ((value / totalPositive) * 100).toStringAsFixed(0)
           : '0';
@@ -1526,10 +1667,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     }).toList();
 
     final pieSectionsNegative = negativeEmotionsData.asMap().entries.map((en) {
-      final idx = en.key;
       final e = en.value;
       final value = e.value.toDouble();
-      final color = _negativeSliceColors[idx % _negativeSliceColors.length];
+      final color = EmotionColourMapping.colorFor(e.key);
       final percentage = totalNegative > 0
           ? ((value / totalNegative) * 100).toStringAsFixed(0)
           : '0';
@@ -1556,8 +1696,29 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
             .first
             .key
         : 'Happy';
-    String summaryInsight =
-        'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
+
+    // Build insight from child_sessions data
+    String summaryInsight;
+    if (_childSessions.isNotEmpty) {
+      final complete = _childSessions
+          .where((s) => s['pre_emotion_name'] != null && s['post_emotion_name'] != null)
+          .toList();
+      int improved = 0;
+      for (final s in complete) {
+        final pre = s['pre_emotion_valence'] as String? ?? '';
+        final post = s['post_emotion_valence'] as String? ?? '';
+        if (pre == 'negative' && post == 'positive') improved++;
+        if (pre == 'negative' && post == 'negative') {} // no change
+        if (pre == 'positive') improved++; // stayed positive = good
+      }
+      final pct = complete.isNotEmpty ? (improved / complete.length * 100).toInt() : 0;
+      summaryInsight = 'Based on ${_childSessions.length} sessions this week, '
+          '$_childName\'s emotional state improved or stayed positive in $pct% of sessions. '
+          '${_mostPlayedGame7D != "—" ? "Most engaged with $_mostPlayedGame7D." : ""} '
+          'Keep up the great work with EmoLor!';
+    } else {
+      summaryInsight = 'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
+    }
 
     // Create line chart data for positive and negative emotions. Dots
     // on every day + a soft fill beneath each line echo the Engagement
@@ -2011,6 +2172,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                             strokeWidth: 1)),
                   )),
                 ),
+                const SizedBox(height: 14),
+                _buildPrePostChart(),
                 const SizedBox(height: 14),
                 Container(
                   width: double.infinity,

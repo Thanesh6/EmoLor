@@ -128,7 +128,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 0, 0),
+                        padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
                         child: IconButton(
                           onPressed: widget.onBack,
                           icon: const Icon(Icons.arrow_back_ios_rounded,
@@ -137,21 +137,21 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                       ),
                     )
                   else
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 4),
 
-                  // ── Header ────────────────────────────────────
+                  // ── Header (moved up, 15% bigger) ─────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       children: [
                         Text('🎯',
-                            style: const TextStyle(fontSize: 44),
+                            style: const TextStyle(fontSize: 50),
                             textAlign: TextAlign.center),
                         const SizedBox(height: 6),
                         Text(
                           'Set Goals for $name',
                           style: GoogleFonts.fredoka(
-                            fontSize: 30,
+                            fontSize: 35,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                             shadows: const [
@@ -167,7 +167,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                         Text(
                           'Enable at least one goal to continue',
                           style: GoogleFonts.baloo2(
-                            fontSize: 14,
+                            fontSize: 16,
                             color: Colors.white60,
                             fontWeight: FontWeight.w500,
                           ),
@@ -176,7 +176,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 22),
 
                   // ── Side-by-side goal cards ───────────────────
                   Expanded(
@@ -224,8 +224,8 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 10),
-                  // Drum-roll pickers
+                  const SizedBox(height: 14),
+                  // Drum-roll pickers (scaled up to fill the card)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -239,11 +239,11 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                         formatItem: (i) => i.toString().padLeft(2, '0'),
                       ),
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 36),
+                        padding: const EdgeInsets.only(bottom: 50),
                         child: Text(
                           ' : ',
                           style: GoogleFonts.baloo2(
-                            fontSize: 28,
+                            fontSize: 40,
                             fontWeight: FontWeight.w900,
                             color: color,
                           ),
@@ -259,19 +259,19 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   if (_timeEnabled && _totalMinutes == 0)
                     Text(
                       'Set at least 1 minute',
                       style: GoogleFonts.baloo2(
-                          fontSize: 11, color: Colors.red[400]),
+                          fontSize: 12, color: Colors.red[400]),
                       textAlign: TextAlign.center,
                     ),
                   const Spacer(),
                   Text(
                     '💡 When time is up, you\'ll be asked how you feel before leaving.',
                     style: GoogleFonts.baloo2(
-                      fontSize: 11,
+                      fontSize: 15,
                       color: Colors.grey[500],
                     ),
                     textAlign: TextAlign.center,
@@ -298,34 +298,35 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
         Text(
           label,
           style: GoogleFonts.baloo2(
-            fontSize: 12,
-            color: Colors.grey[500],
-            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Container(
-          width: 64,
-          height: 130,
+          width: 100,
+          height: 220,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withValues(alpha: 0.25)),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.28), width: 1.5),
           ),
           child: Stack(
             alignment: Alignment.center,
             children: [
               // Centre highlight stripe
               Container(
-                height: 40,
+                height: 56,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
               ListWheelScrollView.useDelegate(
                 controller: controller,
-                itemExtent: 40,
+                itemExtent: 56,
                 diameterRatio: 1.4,
                 physics: const FixedExtentScrollPhysics(),
                 onSelectedItemChanged: onChanged,
@@ -335,7 +336,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                     child: Text(
                       formatItem(index),
                       style: GoogleFonts.baloo2(
-                        fontSize: 22,
+                        fontSize: 32,
                         fontWeight: FontWeight.w800,
                         color: color,
                       ),
@@ -366,45 +367,46 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 12),
-                  // Big number input
+                  const SizedBox(height: 14),
+                  // Big number input — scaled to fill card
                   Container(
-                    width: 140,
+                    width: 210,
+                    height: 150,
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.07),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                          color: color.withValues(alpha: 0.3), width: 2),
+                          color: color.withValues(alpha: 0.32), width: 2.5),
                     ),
                     child: TextField(
                       controller: _starCtrl,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.baloo2(
-                        fontSize: 36,
+                        fontSize: 56,
                         fontWeight: FontWeight.w900,
                         color: color,
                       ),
                       decoration: InputDecoration(
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(
-                            vertical: 12, horizontal: 8),
+                            vertical: 10, horizontal: 8),
                         hintText: '10',
                         hintStyle: GoogleFonts.baloo2(
-                          fontSize: 36,
+                          fontSize: 56,
                           color: color.withValues(alpha: 0.35),
                         ),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 10),
                   Text(
                     'stars ⭐',
                     style: GoogleFonts.baloo2(
-                      fontSize: 16,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w600,
+                      fontSize: 20,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   if (_starsEnabled && _starTarget <= 0) ...[
@@ -412,14 +414,14 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                     Text(
                       'Enter a number above 0',
                       style: GoogleFonts.baloo2(
-                          fontSize: 11, color: Colors.red[400]),
+                          fontSize: 12, color: Colors.red[400]),
                     ),
                   ],
                   const Spacer(),
                   Text(
                     '✅ You can keep playing after reaching the star goal.',
                     style: GoogleFonts.baloo2(
-                      fontSize: 11,
+                      fontSize: 15,
                       color: Colors.grey[500],
                     ),
                     textAlign: TextAlign.center,
@@ -437,8 +439,9 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
   Widget _buildStartButton() {
     return Column(
       children: [
+        // Narrower, centered start button (not full-width)
         SizedBox(
-          width: double.infinity,
+          width: 320,
           child: ElevatedButton(
             onPressed: (_isSaving || !_canStart) ? null : _save,
             style: ElevatedButton.styleFrom(
@@ -448,9 +451,9 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
               disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
               foregroundColor: Colors.white,
               disabledForegroundColor: Colors.white38,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 28),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                  borderRadius: BorderRadius.circular(24)),
               elevation: _canStart ? 6 : 0,
               shadowColor: _canStart
                   ? const Color(0xFF10B981).withValues(alpha: 0.5)
@@ -538,8 +541,8 @@ class _GoalCard extends StatelessWidget {
           // Header row
           Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 8),
+              Text(emoji, style: const TextStyle(fontSize: 30)),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,7 +550,7 @@ class _GoalCard extends StatelessWidget {
                     Text(
                       title,
                       style: GoogleFonts.baloo2(
-                        fontSize: 16,
+                        fontSize: 21,
                         fontWeight: FontWeight.w800,
                         color: const Color(0xFF1F2937),
                       ),
@@ -555,7 +558,7 @@ class _GoalCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: GoogleFonts.baloo2(
-                        fontSize: 11,
+                        fontSize: 14,
                         color: Colors.grey[500],
                         fontWeight: FontWeight.w500,
                       ),

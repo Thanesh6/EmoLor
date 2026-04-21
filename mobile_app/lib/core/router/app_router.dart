@@ -20,6 +20,7 @@ import '../../features/child/presentation/how_i_feel_screen.dart';
 import '../../features/child/presentation/my_colours_screen.dart';
 import '../../features/child/presentation/set_goals_screen.dart';
 
+import '../../features/child/services/child_session_service.dart';
 import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/child/presentation/browse_activities_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -192,6 +193,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final childName = extra?['childName'] as String?;
           final showSwitch = extra?['showSwitch'] == true;
+          final profileId = extra?['profileId'] as String?;
+          if (profileId != null) {
+            ChildSessionService.saveChildProfileId(profileId);
+          }
           return SetGoalsScreen(
             childName: childName,
             onBack: () {

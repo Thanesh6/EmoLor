@@ -13,8 +13,8 @@ import 'goal_service.dart';
 ///   target 6–10 min  → alerts at 5, 1 min left
 ///   target 2–5 min   → alert at 1 min left
 ///   target ≤ 1 min   → only "Time's Up!"
-/// On time-up: shows a countdown banner, then navigates to profile selection
-/// after 5 seconds.
+/// On time-up: shows a countdown banner, then navigates to the post-session
+/// mood screen ("How do you feel now?").
 ///
 /// **Star Goal** — call [checkStarGoal] whenever stars change.
 /// Milestones: 50%, 80%, 100%.
@@ -36,11 +36,15 @@ class GoalNotificationService {
 
   // ── Time Goal ────────────────────────────────────────────────────
 
+  /// [showSwitch] — true when the child is under an organisation account.
+  /// When time is up, [showSwitch] decides whether to return to
+  /// /orgz-child-dashboard (true) or /child-profiles (false).
   void startTimeGoal({
     required BuildContext context,
     required int targetMinutes,
     required String goalId,
     String? childName,
+    bool showSwitch = false,
   }) {
     stopTimeGoal();
 
@@ -48,6 +52,9 @@ class GoalNotificationService {
     _elapsedMinutes = 0;
     _goalId = goalId;
     _firedTimeAlerts.clear();
+
+    // The action tells /how-i-feel-end which screen to go to afterwards.
+    final returnAction = showSwitch ? 'switch' : 'back-to-profiles';
 
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
       _elapsedMinutes++;
@@ -71,7 +78,7 @@ class GoalNotificationService {
             if (context.mounted) {
               context.go('/how-i-feel-end', extra: {
                 'childName': childName,
-                'action': 'back-to-profiles',
+                'action': returnAction,
               });
             }
           },
@@ -142,7 +149,7 @@ class GoalNotificationService {
           message:
               '🏆 Goal Complete! All $targetStars stars collected! You\'re a star!',
           alertType: GoalAlertType.starComplete,
-          holdDuration: const Duration(seconds: 30), // will be dismissed manually
+          holdDuration: const Duration(seconds: 30),
         );
       }
       await GoalService.updateProgress(goalId, currentStars);
