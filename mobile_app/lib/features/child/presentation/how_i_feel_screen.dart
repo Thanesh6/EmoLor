@@ -514,23 +514,23 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
             children: [
               if (isExtra)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFF6B21A8).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   child: Text(
                     'Bonus round! 🎨',
-                    style: _cute(size: 15, weight: FontWeight.w700, color: const Color(0xFF6B21A8)),
+                    style: _cute(size: 20, weight: FontWeight.w700, color: const Color(0xFF6B21A8)),
                   ),
                 ),
-              if (isExtra) const SizedBox(height: 8),
+              if (isExtra) const SizedBox(height: 12),
               Text(title,
-                  style: _cute(size: 30, weight: FontWeight.w900, color: const Color(0xFF1B2541)),
+                  style: _cute(size: 38, weight: FontWeight.w900, color: const Color(0xFF1B2541)),
                   textAlign: TextAlign.center),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(subtitle,
-                  style: _cute(size: 20, weight: FontWeight.w600, color: Colors.black54),
+                  style: _cute(size: 26, weight: FontWeight.w600, color: Colors.black54),
                   textAlign: TextAlign.center),
             ],
           ),
@@ -539,22 +539,22 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
         // Big colour preview circle with emoji
         AnimatedContainer(
           duration: const Duration(milliseconds: 280),
-          width: 130,
-          height: 130,
+          width: 180,
+          height: 180,
           decoration: BoxDecoration(
             color: _pickedColor ?? _unassignedBg,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 5),
+            border: Border.all(color: Colors.white, width: 6),
             boxShadow: [
               BoxShadow(
                 color: (_pickedColor ?? _unassignedBg).withValues(alpha: 0.5),
-                blurRadius: 28,
-                spreadRadius: 4,
+                blurRadius: 36,
+                spreadRadius: 6,
               ),
             ],
           ),
           child: Center(
-            child: Text(emotion.emoji, style: const TextStyle(fontSize: 60)),
+            child: Text(emotion.emoji, style: const TextStyle(fontSize: 86)),
           ),
         ),
         const SizedBox(height: 20),
@@ -606,8 +606,8 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
           child: SizedBox(
-            width: 340,
-            height: 64,
+            width: 380,
+            height: 72,
             child: ElevatedButton.icon(
               onPressed: _pickedColor == null || _busy ? null : onConfirm,
               style: ElevatedButton.styleFrom(
@@ -622,7 +622,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                   : const Icon(Icons.check_rounded, size: 28),
               label: Text(
                 isExtra ? 'Save & Continue →' : "That's my colour! ✓",
-                style: _cute(size: 22, weight: FontWeight.w800),
+                style: _cute(size: 26, weight: FontWeight.w800),
               ),
             ),
           ),

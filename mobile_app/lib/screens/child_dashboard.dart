@@ -331,71 +331,72 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
             ),
           ),
 
-          // 5 Action Buttons - 3 top + 2 bottom, all uniform large size
+          // 4 Action Buttons — 2×2 grid, evenly spaced
           Positioned(
             top: 180,
             left: 0,
             right: 0,
             bottom: 80,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Top row: Play, Draw, Express
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildActionButton(
-                      emoji: '🎮',
-                      label: 'Play',
-                      gradientColors: [
-                        const Color(0xFFFB923C),
-                        const Color(0xFFEF4444),
-                      ],
-                      shadowColor: Colors.orange,
-                      onTap: () => _openScreenAndRefresh(const PlayScreen(), checkStars: true),
-                    ),
-                    _buildActionButton(
-                      emoji: '🖌️',
-                      label: 'Draw',
-                      gradientColors: [
-                        const Color(0xFF60A5FA),
-                        const Color(0xFF3B82F6),
-                      ],
-                      shadowColor: Colors.blue,
-                      onTap: () => _openScreenAndRefresh(const DrawScreen(), checkStars: true),
-                    ),
-                    _buildActionButton(
-                      emoji: '🗣️',
-                      label: 'Express',
-                      gradientColors: [
-                        const Color(0xFFA78BFA),
-                        const Color(0xFF8B5CF6),
-                      ],
-                      shadowColor: Colors.purple,
-                      onTap: () =>
-                          _openScreenAndRefresh(const ExpressCardsScreen()),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Bottom row: Rewards (My Colors removed — colours are picked
-                // gradually inside the How I Feel session flow)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildActionButton(
-                      emoji: '🎁',
-                      label: 'Rewards',
-                      gradientColors: [
-                        const Color(0xFF34D399),
-                        const Color(0xFF10B981),
-                      ],
-                      shadowColor: Colors.teal,
-                      onTap: () => _openScreenAndRefresh(const RewardsScreen()),
-                    ),
-                  ],
-                ),
-              ],
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Row 1: Play, Draw
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildActionButton(
+                        emoji: '🎮',
+                        label: 'Play',
+                        gradientColors: [
+                          const Color(0xFFFB923C),
+                          const Color(0xFFEF4444),
+                        ],
+                        shadowColor: Colors.orange,
+                        onTap: () => _openScreenAndRefresh(const PlayScreen(), checkStars: true),
+                      ),
+                      _buildActionButton(
+                        emoji: '🖌️',
+                        label: 'Draw',
+                        gradientColors: [
+                          const Color(0xFF60A5FA),
+                          const Color(0xFF3B82F6),
+                        ],
+                        shadowColor: Colors.blue,
+                        onTap: () => _openScreenAndRefresh(const DrawScreen(), checkStars: true),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  // Row 2: Express, Rewards
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildActionButton(
+                        emoji: '🗣️',
+                        label: 'Express',
+                        gradientColors: [
+                          const Color(0xFFA78BFA),
+                          const Color(0xFF8B5CF6),
+                        ],
+                        shadowColor: Colors.purple,
+                        onTap: () =>
+                            _openScreenAndRefresh(const ExpressCardsScreen()),
+                      ),
+                      _buildActionButton(
+                        emoji: '🎁',
+                        label: 'Rewards',
+                        gradientColors: [
+                          const Color(0xFF34D399),
+                          const Color(0xFF10B981),
+                        ],
+                        shadowColor: Colors.teal,
+                        onTap: () => _openScreenAndRefresh(const RewardsScreen()),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
