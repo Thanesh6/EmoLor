@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/goal_service.dart';
 import 'reward_picker_modal.dart';
@@ -8,10 +7,10 @@ import 'reward_picker_modal.dart';
 ///
 /// Allows a caregiver to:
 /// 1. Select a Goal Category (Time Spent, Activity Completion, …)
-/// 2. Define a Target (numeric)
-/// 3. Choose a Duration (Today / This Week / This Month)
+/// 2. Pick a Target via a roller / wheel widget
+/// 3. Choose a Duration (Today / This Week / This Month) — **required**
 /// 4. Optionally link a Reward
-/// 5. Save — validates that target > 0
+/// 5. Save — validates that duration is chosen and target > 0
 class NewGoalDialog extends StatefulWidget {
   const NewGoalDialog({super.key});
 
@@ -29,31 +28,52 @@ class NewGoalDialog extends StatefulWidget {
 }
 
 class _NewGoalDialogState extends State<NewGoalDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _targetController = TextEditingController(text: '');
-
   GoalCategory _selectedCategory = GoalCategory.activityCompletion;
-  GoalDuration _selectedDuration = GoalDuration.thisWeek;
+
+  /// null = user has not yet selected a duration (field is required).
+  GoalDuration? _selectedDuration;
+
   RewardOption? _selectedReward;
   bool _saving = false;
   String? _errorMessage;
 
+  /// Whether to show the red error border on the duration chips.
+  bool _durationError = false;
+
+  // ── Roller ──────────────────────────────────────────────────────
+  static const int _minTarget = 1;
+  static const int _maxTarget = 100;
+
+  int _targetValue = 5;
+  late final FixedExtentScrollController _rollerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rollerController =
+        FixedExtentScrollController(initialItem: _targetValue - _minTarget);
+  }
+
   @override
   void dispose() {
-    _targetController.dispose();
+    _rollerController.dispose();
     super.dispose();
   }
 
   // ── Save ────────────────────────────────────────────────────────
 
   Future<void> _save() async {
-    setState(() => _errorMessage = null);
+    setState(() {
+      _errorMessage = null;
+      _durationError = false;
+    });
 
-    if (!_formKey.currentState!.validate()) return;
-
-    final target = int.tryParse(_targetController.text.trim()) ?? 0;
-    if (target <= 0) {
-      setState(() => _errorMessage = 'Please set a valid target number.');
+    // Duration is required — user must explicitly pick one.
+    if (_selectedDuration == null) {
+      setState(() {
+        _errorMessage = 'Please select a duration for this goal.';
+        _durationError = true;
+      });
       return;
     }
 
@@ -62,14 +82,13 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
     try {
       await GoalService.createGoal(
         category: _selectedCategory,
-        target: target,
-        duration: _selectedDuration,
+        target: _targetValue,
+        duration: _selectedDuration!,
         linkedReward: _selectedReward?.title,
       );
 
       if (!mounted) return;
 
-      // Show success snackbar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -110,21 +129,19 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
     double size = 14,
     FontWeight weight = FontWeight.w400,
     Color color = Colors.black87,
-  }) {
-    return GoogleFonts.poppins(
-        fontSize: size, fontWeight: weight, color: color);
-  }
+  }) =>
+      GoogleFonts.poppins(fontSize: size, fontWeight: weight, color: color);
 
-  String _targetHint() {
+  String _targetUnit() {
     switch (_selectedCategory) {
       case GoalCategory.timeSpent:
-        return 'e.g. 15 (minutes)';
+        return 'minutes';
       case GoalCategory.activityCompletion:
-        return 'e.g. 3 (activities)';
+        return 'activities';
       case GoalCategory.moodLogging:
-        return 'e.g. 5 (entries)';
+        return 'entries';
       case GoalCategory.starCollection:
-        return 'e.g. 20 (stars)';
+        return 'stars';
     }
   }
 
@@ -135,27 +152,32 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
       context,
       currentRewardId: _selectedReward?.id,
     );
-    if (picked != null) {
-      setState(() => _selectedReward = picked);
-    }
+    if (picked != null) setState(() => _selectedReward = picked);
   }
 
-  void _clearReward() {
-    setState(() => _selectedReward = null);
-  }
+  void _clearReward() => setState(() => _selectedReward = null);
 
   // ── Build ────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      // clipBehavior clips the gradient to the rounded corners
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 640),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Form(
-            key: _formKey,
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 700),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              // Same gradient used in profile_screen.dart
+              colors: [Color(0xFFE0F2FE), Color(0xFFF3E8FF)],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -200,9 +222,10 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                         selected: selected,
                         onSelected: _saving
                             ? null
-                            : (_) => setState(() => _selectedCategory = cat),
+                            : (_) =>
+                                setState(() => _selectedCategory = cat),
                         selectedColor: const Color(0xFFE9D5FF),
-                        backgroundColor: Colors.grey[100],
+                        backgroundColor: Colors.white.withValues(alpha: 0.7),
                         labelStyle: _poppins(
                           size: 13,
                           weight: selected ? FontWeight.w600 : FontWeight.w400,
@@ -223,57 +246,47 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                   ),
                   const SizedBox(height: 22),
 
-                  // ── 2. Target ──────────────────────────────────────
+                  // ── 2. Target (roller) ────────────────────────────
                   Text('Target',
                       style: _poppins(size: 18, weight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _targetController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: InputDecoration(
-                      hintText: _targetHint(),
-                      hintStyle: _poppins(size: 14, color: Colors.grey[400]!),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                            color: Color(0xFF6B21A8), width: 2),
-                      ),
-                      errorBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.red),
-                      ),
-                    ),
-                    style: _poppins(size: 15),
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return 'Please set a valid target number.';
-                      }
-                      final n = int.tryParse(val.trim());
-                      if (n == null || n <= 0) {
-                        return 'Please set a valid target number.';
-                      }
-                      return null;
-                    },
+                  const SizedBox(height: 4),
+                  Text(
+                    'Scroll to select the number of ${_targetUnit()}',
+                    style: _poppins(size: 13, color: Colors.grey[600]!),
                   ),
+                  const SizedBox(height: 12),
+                  _buildRoller(),
                   const SizedBox(height: 22),
 
-                  // ── 3. Duration ────────────────────────────────────
-                  Text('Duration',
-                      style: _poppins(size: 18, weight: FontWeight.w600)),
+                  // ── 3. Duration (REQUIRED) ────────────────────────
+                  Row(
+                    children: [
+                      Text('Duration',
+                          style:
+                              _poppins(size: 18, weight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '*',
+                        style: _poppins(
+                          size: 18,
+                          weight: FontWeight.w700,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _durationError
+                        ? 'Duration is required — please choose a time period'
+                        : 'Required — choose a time period',
+                    style: _poppins(
+                      size: 13,
+                      color: _durationError
+                          ? Colors.red[700]!
+                          : Colors.grey[600]!,
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -285,9 +298,20 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                         selected: selected,
                         onSelected: _saving
                             ? null
-                            : (_) => setState(() => _selectedDuration = dur),
+                            : (_) => setState(() {
+                                  _selectedDuration = dur;
+                                  _durationError = false;
+                                  // Clear the duration error message if it was set
+                                  if (_errorMessage != null &&
+                                      _errorMessage!
+                                          .contains('duration')) {
+                                    _errorMessage = null;
+                                  }
+                                }),
                         selectedColor: const Color(0xFFE9D5FF),
-                        backgroundColor: Colors.grey[100],
+                        backgroundColor: _durationError
+                            ? Colors.red[50]!
+                            : Colors.white.withValues(alpha: 0.7),
                         labelStyle: _poppins(
                           size: 13,
                           weight: selected ? FontWeight.w600 : FontWeight.w400,
@@ -298,9 +322,12 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                           side: BorderSide(
-                            color: selected
-                                ? const Color(0xFF6B21A8)
-                                : Colors.grey[300]!,
+                            color: _durationError
+                                ? Colors.red[300]!
+                                : (selected
+                                    ? const Color(0xFF6B21A8)
+                                    : Colors.grey[300]!),
+                            width: _durationError ? 1.5 : 1.0,
                           ),
                         ),
                       );
@@ -354,9 +381,7 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
+                                  strokeWidth: 2, color: Colors.white),
                             )
                           : Text(
                               'Save Goal',
@@ -373,6 +398,124 @@ class _NewGoalDialogState extends State<NewGoalDialog> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Roller widget ────────────────────────────────────────────────
+
+  Widget _buildRoller() {
+    return Container(
+      height: 160,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF6B21A8).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // ── Centre selection highlight ───────────────────────────
+          Positioned(
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 46,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9D5FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+
+          // ── Wheel ────────────────────────────────────────────────
+          ListWheelScrollView.useDelegate(
+            controller: _rollerController,
+            itemExtent: 46,
+            perspective: 0.003,
+            diameterRatio: 1.6,
+            physics: const FixedExtentScrollPhysics(),
+            onSelectedItemChanged: (index) {
+              setState(() => _targetValue = _minTarget + index);
+            },
+            childDelegate: ListWheelChildBuilderDelegate(
+              childCount: _maxTarget - _minTarget + 1,
+              builder: (context, index) {
+                final value = _minTarget + index;
+                final isSelected = value == _targetValue;
+                return Center(
+                  child: Text(
+                    '$value',
+                    style: GoogleFonts.poppins(
+                      fontSize: isSelected ? 24 : 17,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: isSelected
+                          ? const Color(0xFF6B21A8)
+                          : Colors.black45,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ── Top fade overlay ─────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFFE0F2FE).withValues(alpha: 0.95),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Bottom fade overlay ───────────────────────────────────
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      const Color(0xFFF3E8FF).withValues(alpha: 0.95),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

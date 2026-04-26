@@ -1,17 +1,28 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'supabase_service.dart';
 
 /// Logs every emoji interaction during gameplay.
 /// Caregivers can view this data to understand which emotions
 /// the child engages with most frequently.
+///
+/// Scoped by `selected_child_profile_id` so siblings under the same
+/// caregiver/org account each maintain their own emotion journal — the
+/// previous behaviour (keyed by caregiver Supabase UID) caused all child
+/// profiles to share analytics.
 class EmotionJournalService {
   EmotionJournalService._();
 
   static const String _storageKey = 'emotion_journal';
+  static const String _profileIdKey = 'selected_child_profile_id';
   static const int _maxEntries = 500; // Keep last 500 interactions
 
-  /// Log a single emoji interaction.
+  static Future<String> _scopeKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return '${_storageKey}_$profileId';
+  }
+
+  /// Log a single emoji interaction for the current child profile.
   static Future<void> log({
     required String emoji,
     required String emotionName,
@@ -19,50 +30,41 @@ class EmotionJournalService {
     required String gameId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final entries = await _loadEntries(prefs);
-
-    final userId = SupabaseService.currentUserId ?? 'anon';
+    final key = await _scopeKey();
+    final entries = _loadEntriesForKey(prefs, key);
 
     entries.add({
       'emoji': emoji,
       'emotion': emotionName,
       'category': category,
       'game': gameId,
-      'userId': userId,
       'timestamp': DateTime.now().toUtc().toIso8601String(),
     });
 
-    // Trim to max entries
     if (entries.length > _maxEntries) {
       entries.removeRange(0, entries.length - _maxEntries);
     }
 
-    await prefs.setString(
-      '${_storageKey}_$userId',
-      jsonEncode(entries),
-    );
+    await prefs.setString(key, jsonEncode(entries));
   }
 
-  /// Load all journal entries for the current user.
+  /// Load all journal entries for the current child profile.
   static Future<List<Map<String, dynamic>>> getEntries() async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = SupabaseService.currentUserId ?? 'anon';
-    return _loadEntriesForUser(prefs, userId);
+    final key = await _scopeKey();
+    return _loadEntriesForKey(prefs, key);
   }
 
-  /// Load entries for a specific user (for caregiver viewing).
-  static Future<List<Map<String, dynamic>>> getEntriesForUser(String userId) async {
+  /// Load entries for a specific child profile (for caregiver viewing).
+  static Future<List<Map<String, dynamic>>> getEntriesForProfile(
+      String profileId) async {
     final prefs = await SharedPreferences.getInstance();
-    return _loadEntriesForUser(prefs, userId);
+    return _loadEntriesForKey(prefs, '${_storageKey}_$profileId');
   }
 
-  static Future<List<Map<String, dynamic>>> _loadEntries(SharedPreferences prefs) async {
-    final userId = SupabaseService.currentUserId ?? 'anon';
-    return _loadEntriesForUser(prefs, userId);
-  }
-
-  static List<Map<String, dynamic>> _loadEntriesForUser(SharedPreferences prefs, String userId) {
-    final stored = prefs.getString('${_storageKey}_$userId');
+  static List<Map<String, dynamic>> _loadEntriesForKey(
+      SharedPreferences prefs, String key) {
+    final stored = prefs.getString(key);
     if (stored == null) return [];
     try {
       final decoded = jsonDecode(stored) as List;
@@ -132,10 +134,10 @@ class EmotionJournalService {
     return breakdown;
   }
 
-  /// Clear all journal entries for the current user (used by Reset Game feature).
+  /// Clear all journal entries for the current child profile.
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = SupabaseService.currentUserId ?? 'anon';
-    await prefs.remove('${_storageKey}_$userId');
+    final key = await _scopeKey();
+    await prefs.remove(key);
   }
 }

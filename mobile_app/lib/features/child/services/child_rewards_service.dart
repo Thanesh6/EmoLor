@@ -283,8 +283,23 @@ const List<ChildReward> _catalogue = [
 ///
 /// Follows offline-first SharedPreferences pattern (StarService-compatible).
 class ChildRewardsService {
-  static const _storageKey = 'child_rewards';
-  static const _equippedKey = 'child_equipped_reward';
+  static const _profileIdKey = 'selected_child_profile_id';
+
+  /// Per-child reward state keys. Without this, every child profile
+  /// inherits the previous child's unlocks — and the auto-unlock logic
+  /// in [getAllRewards] then permanently writes them into the global
+  /// bucket.
+  static Future<String> _storageKeyAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'child_rewards_$profileId';
+  }
+
+  static Future<String> _equippedKeyAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'child_equipped_reward_$profileId';
+  }
 
   // ── Read ───────────────────────────────────────────────────────
 
@@ -350,20 +365,23 @@ class ChildRewardsService {
   /// Equip a reward (theme / avatar). Unequips the previous one.
   static Future<void> equipReward(String rewardId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_equippedKey, rewardId);
+    final key = await _equippedKeyAsync();
+    await prefs.setString(key, rewardId);
   }
 
   /// Unequip the current reward.
   static Future<void> unequipReward() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_equippedKey);
+    final key = await _equippedKeyAsync();
+    await prefs.remove(key);
   }
 
   // ── Private Helpers ────────────────────────────────────────────
 
   static Future<Map<String, Map<String, dynamic>>> _loadSavedState() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final key = await _storageKeyAsync();
+    final raw = prefs.getString(key);
     if (raw == null) return {};
     try {
       final Map<String, dynamic> decoded = jsonDecode(raw);
@@ -381,18 +399,22 @@ class ChildRewardsService {
       'unlockedAt': when.toIso8601String(),
     };
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(saved));
+    final key = await _storageKeyAsync();
+    await prefs.setString(key, jsonEncode(saved));
   }
 
   static Future<String?> _getEquippedId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_equippedKey);
+    final key = await _equippedKeyAsync();
+    return prefs.getString(key);
   }
 
-  /// Reset all reward state (debug).
+  /// Reset all reward state for the current child profile.
   static Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storageKey);
-    await prefs.remove(_equippedKey);
+    final storageKey = await _storageKeyAsync();
+    final equippedKey = await _equippedKeyAsync();
+    await prefs.remove(storageKey);
+    await prefs.remove(equippedKey);
   }
 }

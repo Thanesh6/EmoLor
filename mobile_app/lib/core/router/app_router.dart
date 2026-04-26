@@ -87,6 +87,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             return null;
           }
 
+          // If the session was created by a password-recovery deep link
+          // (Supabase fires passwordRecovery just before this redirect runs),
+          // force the user to the update-password screen instead of the
+          // dashboard. The recovery flag persists in the URL fragment until
+          // the password is updated.
+          final amr = client.auth.currentSession?.user.appMetadata['amr'];
+          if (amr is List && amr.any((e) => e is Map && e['method'] == 'recovery')) {
+            return '/update-password';
+          }
+
           // If email is not confirmed yet (and they're not explicitly on the verification screen),
           // don't let them securely enter the app
           if (client.auth.currentUser?.emailConfirmedAt == null) {

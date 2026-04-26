@@ -287,8 +287,17 @@ const List<String> availableRewards = [
 ///
 /// Follows the same offline-first pattern as CompletionService / StarService.
 class GoalService {
-  static const _storageKey = 'performance_goals';
+  static const _profileIdKey = 'selected_child_profile_id';
   static const _uuid = Uuid();
+
+  /// Per-child storage key. Falls back to a `'no_profile'` bucket if no
+  /// child profile is selected — never to a caregiver-wide key, which
+  /// would let siblings share goals.
+  static Future<String> _storageKeyAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'performance_goals_$profileId';
+  }
 
   /// Create and persist a new goal. Returns the created goal.
   ///
@@ -364,17 +373,19 @@ class GoalService {
     await _saveAll(all);
   }
 
-  /// Clear all goals (used by Reset Game feature).
+  /// Clear all goals for the current child profile.
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_storageKey);
+    final key = await _storageKeyAsync();
+    await prefs.remove(key);
   }
 
   // ── Private helpers ──────────────────────────────────────────────
 
   static Future<List<PerformanceGoal>> _loadAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final key = await _storageKeyAsync();
+    final raw = prefs.getString(key);
     if (raw == null) return [];
     try {
       final List<dynamic> decoded = jsonDecode(raw);
@@ -388,7 +399,8 @@ class GoalService {
 
   static Future<void> _saveAll(List<PerformanceGoal> goals) async {
     final prefs = await SharedPreferences.getInstance();
+    final key = await _storageKeyAsync();
     final encoded = jsonEncode(goals.map((g) => g.toJson()).toList());
-    await prefs.setString(_storageKey, encoded);
+    await prefs.setString(key, encoded);
   }
 }

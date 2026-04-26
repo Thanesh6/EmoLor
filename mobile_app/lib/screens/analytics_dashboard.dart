@@ -140,8 +140,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         return ts.isAfter(weekStartDate);
       }).length;
 
-      // Load user-created goals (must be outside setState — it's async)
-      final serviceGoals = await GoalService.getAllGoals();
+      // Load user-created goals with REAL progress values (must be outside
+      // setState — it's async). Replaces the previous code path that mapped
+      // every goal to `current: 0`, leaving every progress bar stuck empty.
+      final activeGoalsLive = await _activeGoalsWithProgress();
       final childSessions = await ChildSessionService.getRecentSessions(limit: 30);
 
       // ── Extended analytics ──
@@ -410,16 +412,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
           _gameFreq = gameFreq;
           _recentCompletions = completions.take(5).toList();
           _recentJournal = journal.reversed.take(10).toList();
-          _activeGoals = serviceGoals
-              .map((g) => <String, dynamic>{
-                    'id': g.id,
-                    'label': '${g.category.name} — ${g.target}',
-                    'current': 0,
-                    'target': g.target,
-                    'color': 'purple',
-                    'emoji': '🎯',
-                  })
-              .toList();
+          _activeGoals = activeGoalsLive;
 
           _currentStreak = streak;
           _weekActivities = weekActivities;
@@ -563,6 +556,88 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         return rawName[0].toUpperCase() +
             rawName.substring(1).toLowerCase();
     }
+  }
+
+  /// Build the active-goals list with **real** progress values pulled from
+  /// the same data sources the rest of the dashboard uses
+  /// (StarService, CompletionService, EmotionJournalService).
+  ///
+  /// Window per duration:
+  ///   today      → since 00:00 today
+  ///   thisWeek   → since Monday 00:00
+  ///   thisMonth  → since the 1st 00:00
+  /// Goals created mid-window count from their createdAt instead, so the bar
+  /// never includes activity that happened before the goal was set.
+  Future<List<Map<String, dynamic>>> _activeGoalsWithProgress() async {
+    final goals = await GoalService.getAllGoals();
+    if (goals.isEmpty) return [];
+
+    final completions = await CompletionService.history();
+    final journal = await EmotionJournalService.getEntries();
+    final totalStars = await StarService.getTotalStars();
+    final now = DateTime.now();
+
+    DateTime windowStart(GoalDuration d, DateTime createdAt) {
+      DateTime period;
+      switch (d) {
+        case GoalDuration.today:
+          period = DateTime(now.year, now.month, now.day);
+          break;
+        case GoalDuration.thisWeek:
+          final ws = now.subtract(Duration(days: now.weekday - 1));
+          period = DateTime(ws.year, ws.month, ws.day);
+          break;
+        case GoalDuration.thisMonth:
+          period = DateTime(now.year, now.month, 1);
+          break;
+      }
+      return createdAt.isAfter(period) ? createdAt : period;
+    }
+
+    const colourMap = {
+      GoalCategory.starCollection: 'orange',
+      GoalCategory.activityCompletion: 'blue',
+      GoalCategory.timeSpent: 'teal',
+      GoalCategory.moodLogging: 'purple',
+    };
+
+    return goals.map((g) {
+      final start = windowStart(g.duration, g.createdAt);
+      int current;
+      switch (g.category) {
+        case GoalCategory.starCollection:
+          // Stars are cumulative per profile — best signal we have is
+          // total stars, capped at target so the bar fills cleanly.
+          current = totalStars;
+          break;
+        case GoalCategory.activityCompletion:
+          current = completions
+              .where((c) => c.completedAt.isAfter(start))
+              .length;
+          break;
+        case GoalCategory.timeSpent:
+          final secs = completions
+              .where((c) => c.completedAt.isAfter(start))
+              .fold<int>(0, (sum, c) => sum + c.timeSpentSeconds);
+          current = (secs / 60).round(); // target is in minutes
+          break;
+        case GoalCategory.moodLogging:
+          current = journal.where((e) {
+            final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+            return ts != null && ts.isAfter(start);
+          }).length;
+          break;
+      }
+      return <String, dynamic>{
+        'id': g.id,
+        'label':
+            '${g.category.label} — ${g.category.unitLabel(g.target)}',
+        'current': current,
+        'target': g.target,
+        'color': colourMap[g.category] ?? 'purple',
+        'emoji': g.category.emoji,
+      };
+    }).toList();
   }
 
   String _timeAgo(String timestamp) {
@@ -2633,20 +2708,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
               onPressed: () async {
                 final saved = await NewGoalDialog.show(context);
                 if (saved == true) {
-                  final serviceGoals = await GoalService.getAllGoals();
+                  // Pull fresh list with real progress values (and the
+                  // `id` field, which the previous mapping dropped — that
+                  // was why the X delete button silently no-op'd on
+                  // newly-created goals).
+                  final fresh = await _activeGoalsWithProgress();
                   if (mounted) {
-                    setState(() {
-                      _activeGoals = serviceGoals
-                          .map((g) => <String, dynamic>{
-                                'label':
-                                    '${g.category.label} — ${g.category.unitLabel(g.target)}',
-                                'current': 0,
-                                'target': g.target,
-                                'color': 'purple',
-                                'emoji': g.category.emoji,
-                              })
-                          .toList();
-                    });
+                    setState(() => _activeGoals = fresh);
                   }
                 }
               },
@@ -2741,31 +2809,34 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                     'Earned Rewards',
                     Icons.emoji_events_rounded,
                     FutureBuilder<List<ChildReward>>(
-                      future: ChildRewardsService.getAllRewards(),
+                      future: ChildRewardsService.getUnlockedRewards(),
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) {
                           return const Center(
                               child: CircularProgressIndicator());
                         }
-                        final allRewards = snapshot.data!;
-                        final unlocked = allRewards
+                        // Show ONLY rewards the child has actually earned.
+                        // Previous behaviour padded the grid with locked
+                        // teasers so a freshly-reset profile still showed
+                        // four "reward" tiles, contradicting the real
+                        // earned-stars state.
+                        final display = snapshot.data!
                             .where((r) => r.unlockedAt != null)
-                            .toList();
-                        final locked = allRewards
-                            .where((r) => r.unlockedAt == null)
-                            .take(4 - unlocked.length.clamp(0, 4))
-                            .toList();
-                        final display =
-                            [...unlocked.take(4), ...locked].take(4).toList();
+                            .toList()
+                          ..sort((a, b) =>
+                              b.unlockedAt!.compareTo(a.unlockedAt!));
 
                         if (display.isEmpty) {
                           return Container(
                               alignment: Alignment.center,
                               padding:
                                   const EdgeInsets.symmetric(vertical: 100),
-                              child: Text('No rewards yet',
+                              child: Text(
+                                  'No rewards yet — earn stars to unlock!',
+                                  textAlign: TextAlign.center,
                                   style: _textStyle(
-                                      fontSize: 16, color: Colors.grey[400]!)));
+                                      fontSize: 16,
+                                      color: Colors.grey[400]!)));
                         }
 
                         final rows = <Widget>[];
