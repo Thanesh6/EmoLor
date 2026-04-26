@@ -8,7 +8,13 @@ import '../models/completion_record.dart';
 /// alt-flow). When the backend is reachable the data can be synced
 /// by calling [syncPending].
 class CompletionService {
-  static const _listKey = 'completion_records';
+  static const _profileIdKey = 'selected_child_profile_id';
+
+  static Future<String> _listKeyAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'completion_records_$profileId';
+  }
 
   /// Persist a new [record] locally.
   static Future<void> save(CompletionRecord record) async {
@@ -61,7 +67,8 @@ class CompletionService {
 
   static Future<List<CompletionRecord>> _loadAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_listKey);
+    final listKey = await _listKeyAsync();
+    final raw = prefs.getString(listKey);
     if (raw == null) return [];
     try {
       final List<dynamic> decoded = jsonDecode(raw);
@@ -75,13 +82,15 @@ class CompletionService {
 
   static Future<void> _saveAll(List<CompletionRecord> records) async {
     final prefs = await SharedPreferences.getInstance();
+    final listKey = await _listKeyAsync();
     final encoded = jsonEncode(records.map((r) => r.toJson()).toList());
-    await prefs.setString(_listKey, encoded);
+    await prefs.setString(listKey, encoded);
   }
 
   /// Clear all completion history (used by Reset Game feature).
   static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_listKey);
+    final listKey = await _listKeyAsync();
+    await prefs.remove(listKey);
   }
 }

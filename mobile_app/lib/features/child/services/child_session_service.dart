@@ -13,6 +13,41 @@ class ChildSessionService {
   static const _pendingSessionKey = 'pending_child_session_id';
   static const _profileIdKey = 'selected_child_profile_id';
 
+  // Per-session pre-emotion (cleared at end of every session). The UI uses
+  // these to colour the matching emotion card on the post-session screen
+  // without polluting the persistent personalized palette.
+  static const _sessionPreEmotionIdKey = 'current_session_pre_emotion_id';
+  static const _sessionPreEmotionColourKey = 'current_session_pre_emotion_colour';
+
+  /// Save the colour the child just picked for their pre-session emotion.
+  /// Stored only for the duration of this session.
+  static Future<void> setSessionPreEmotion({
+    required String emotionId,
+    required String colourHex,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionPreEmotionIdKey, emotionId);
+    await prefs.setString(_sessionPreEmotionColourKey, colourHex);
+  }
+
+  /// Read the current session's pre-emotion id + colour, if any.
+  static Future<({String? emotionId, String? colourHex})>
+      getSessionPreEmotion() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (
+      emotionId: prefs.getString(_sessionPreEmotionIdKey),
+      colourHex: prefs.getString(_sessionPreEmotionColourKey),
+    );
+  }
+
+  /// Wipe the current session's pre-emotion. Called from the post-session
+  /// screen once the child has completed the loop.
+  static Future<void> clearSessionPreEmotion() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionPreEmotionIdKey);
+    await prefs.remove(_sessionPreEmotionColourKey);
+  }
+
   // ── Profile ID helpers ───────────────────────────────────────────
 
   static Future<String?> getChildProfileId() async {

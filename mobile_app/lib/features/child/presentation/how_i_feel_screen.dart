@@ -3,12 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/emotion_service.dart';
 import '../../../core/services/emotion_colour_mapping.dart';
+import '../../caregiver/services/goal_notification_service.dart';
+import '../../caregiver/services/goal_service.dart';
 import '../domain/models/emotion.dart';
 import '../services/child_session_service.dart';
 
 enum HowIFeelMode { start, end }
 
-enum _Phase { pickEmotion, colorForSelected, colorForExtra }
+enum _Phase { pickEmotion, colorForSelected }
 
 class HowIFeelEmotionChoice {
   final String id, name, emoji, valence;
@@ -19,15 +21,16 @@ class HowIFeelEmotionChoice {
 /// Session-time emotion screen.
 ///
 /// **Pre-session (start):**
-///   1. Pick emotion from 8 cards (grey if unassigned, coloured if assigned).
-///   2. If chosen emotion has no colour → inline colour picker.
-///   3. If any other emotions still unassigned → colour ONE more.
+///   1. All 8 emotions shown colourless. Persistent palette is ignored.
+///   2. Child picks an emotion → inline colour picker (always).
+///   3. Picked colour is saved to the current session only.
 ///   4. Proceed to games.
 ///
 /// **Post-session (end):**
-///   1. Pick emotion.
-///   2. If chosen emotion has no colour → inline colour picker.
-///   3. Save pre+post → return to profile.
+///   1. All 8 emotions shown colourless EXCEPT the one chosen pre-session,
+///      which appears in the colour the child picked at the start.
+///   2. Tapping the same emotion → continue. Tapping a different (grey)
+///      one → inline colour picker, then continue.
 class HowIFeelScreen extends StatefulWidget {
   final HowIFeelMode mode;
   final String? childName;
@@ -52,7 +55,6 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   // ── Phase state ──────────────────────────────────────────────────────────
   _Phase _phase = _Phase.pickEmotion;
   Emotion? _selectedEmotion;   // emotion child tapped in phase 1
-  Emotion? _extraEmotion;      // one additional unassigned emotion (phase 3)
   Color? _pickedColor;         // colour chosen in current picker phase
 
   // ── Data ─────────────────────────────────────────────────────────────────
@@ -93,12 +95,37 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
 
   Future<void> _init() async {
     await EmotionColourMapping.ensureLoaded();
-    final emotions = await EmotionService.loadEmotionsStatic();
-    final assigned = await EmotionService.getAssignedIds();
+    // Start with the canonical 8 emotions but treat them all as colourless
+    // — the persistent personalized palette is intentionally ignored here.
+    final emotions = EmotionService.defaultEmotions;
+
+    if (widget.mode == HowIFeelMode.start) {
+      if (mounted) {
+        setState(() {
+          _emotions = emotions;
+          _assignedIds = {};
+        });
+      }
+      return;
+    }
+
+    // End mode: paint the one emotion picked in this session's pre-screen.
+    final pre = await ChildSessionService.getSessionPreEmotion();
+    final preId = pre.emotionId;
+    final preHex = pre.colourHex;
+    final preColor = (preHex != null) ? _hexToColor(preHex) : null;
+
     if (mounted) {
       setState(() {
-        _emotions = emotions;
-        _assignedIds = assigned;
+        if (preId != null && preColor != null) {
+          _emotions = emotions
+              .map((e) => e.id == preId ? e.copyWith(color: preColor) : e)
+              .toList();
+          _assignedIds = {preId};
+        } else {
+          _emotions = emotions;
+          _assignedIds = {};
+        }
       });
     }
   }
@@ -126,20 +153,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   }
 
   void _afterSelectedHandled() {
-    if (widget.mode == HowIFeelMode.start) {
-      // Gradual onboarding: pick ONE more unassigned emotion
-      final unassigned = _emotions
-          .where((e) => !_assignedIds.contains(e.id) && e.id != _selectedEmotion?.id)
-          .toList();
-      if (unassigned.isNotEmpty) {
-        setState(() {
-          _extraEmotion = unassigned.first;
-          _pickedColor = null;
-          _phase = _Phase.colorForExtra;
-        });
-        return;
-      }
-    }
+    // No more "bonus round" — go straight to finish in both modes.
     _finish();
   }
 
@@ -148,30 +162,25 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
     final color = _pickedColor!;
     final id = _selectedEmotion!.id;
 
-    await EmotionService.saveSingleColorStatic(id, color);
     _assignedIds.add(id);
 
     setState(() {
-      _emotions = _emotions.map((e) => e.id == id ? e.copyWith(color: color) : e).toList();
+      _emotions = _emotions
+          .map((e) => e.id == id ? e.copyWith(color: color) : e)
+          .toList();
       _selectedEmotion = _selectedEmotion!.copyWith(color: color);
     });
 
+    // Pre-session: stash the picked colour for this session only so the
+    // post-session screen can show the matching card already coloured.
+    if (widget.mode == HowIFeelMode.start) {
+      await ChildSessionService.setSessionPreEmotion(
+        emotionId: id,
+        colourHex: _colorToHex(color),
+      );
+    }
+
     _afterSelectedHandled();
-  }
-
-  Future<void> _confirmExtraColor() async {
-    if (_pickedColor == null || _extraEmotion == null) return;
-    final color = _pickedColor!;
-    final id = _extraEmotion!.id;
-
-    await EmotionService.saveSingleColorStatic(id, color);
-    _assignedIds.add(id);
-
-    setState(() {
-      _emotions = _emotions.map((e) => e.id == id ? e.copyWith(color: color) : e).toList();
-    });
-
-    _finish();
   }
 
   Future<void> _finish() async {
@@ -188,6 +197,15 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
 
     await _saveMoodLocally(choice);
     await _saveMoodToDatabase(choice);
+
+    // End-of-session housekeeping: drop the per-session pre-emotion record,
+    // and clear all per-session goals so the next session starts fresh.
+    if (widget.mode == HowIFeelMode.end) {
+      await ChildSessionService.clearSessionPreEmotion();
+      await GoalService.clearAll();
+      GoalNotificationService.instance.resetAllStarAlerts();
+    }
+
     try {
       await widget.onContinue(choice);
     } finally {
@@ -239,6 +257,19 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   Color _cardBg(Emotion e) =>
       _assignedIds.contains(e.id) ? e.color : _unassignedBg;
 
+  /// Parse `#RRGGBB` (or `#AARRGGBB`) to a [Color].
+  static Color _hexToColor(String hex) {
+    var h = hex.trim();
+    if (h.startsWith('#')) h = h.substring(1);
+    if (h.length == 6) h = 'FF$h'; // add full alpha
+    final value = int.tryParse(h, radix: 16);
+    if (value == null) return _unassignedBg;
+    return Color(value);
+  }
+
+  static String _colorToHex(Color c) =>
+      '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -267,14 +298,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
               _Phase.colorForSelected => _buildColorPickerPhase(
                 key: const ValueKey('color-selected'),
                 emotion: _selectedEmotion!,
-                isExtra: false,
                 onConfirm: _confirmSelectedColor,
-              ),
-              _Phase.colorForExtra  => _buildColorPickerPhase(
-                key: const ValueKey('color-extra'),
-                emotion: _extraEmotion!,
-                isExtra: true,
-                onConfirm: _confirmExtraColor,
               ),
             },
           ),
@@ -393,7 +417,8 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                                   ],
                                 ),
                               ),
-                              // Paint icon for unassigned emotions
+                              // Paint icon hint for unassigned emotions —
+                              // tapping these leads to the colour picker.
                               if (!isAssigned)
                                 Positioned(
                                   top: 8,
@@ -414,17 +439,6 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                     );
                   },
                 ),
-              ),
-            ),
-
-            // Assigned count hint
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _assignedIds.length == 8
-                    ? 'All emotions coloured! 🎨'
-                    : '${_assignedIds.length}/8 emotions coloured',
-                style: _cute(size: 15, weight: FontWeight.w600, color: Colors.black45),
               ),
             ),
 
@@ -489,20 +503,15 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
     );
   }
 
-  // ── Phase 2/3: inline colour picker ──────────────────────────────────────
+  // ── Phase 2: inline colour picker ────────────────────────────────────────
 
   Widget _buildColorPickerPhase({
     required Key key,
     required Emotion emotion,
-    required bool isExtra,
     required Future<void> Function() onConfirm,
   }) {
-    final title = isExtra
-        ? "Let's colour one more!"
-        : 'Pick a colour for this feeling';
-    final subtitle = isExtra
-        ? 'What colour is ${emotion.emoji} ${emotion.name}?'
-        : 'What colour is ${emotion.emoji} ${emotion.name}?';
+    const title = 'Pick a colour for this feeling';
+    final subtitle = 'What colour is ${emotion.emoji} ${emotion.name}?';
 
     return Column(
       key: key,
@@ -512,19 +521,6 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
           child: Column(
             children: [
-              if (isExtra)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6B21A8).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    'Bonus round! 🎨',
-                    style: _cute(size: 20, weight: FontWeight.w700, color: const Color(0xFF6B21A8)),
-                  ),
-                ),
-              if (isExtra) const SizedBox(height: 12),
               Text(title,
                   style: _cute(size: 38, weight: FontWeight.w900, color: const Color(0xFF1B2541)),
                   textAlign: TextAlign.center),
@@ -621,7 +617,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
                   : const Icon(Icons.check_rounded, size: 28),
               label: Text(
-                isExtra ? 'Save & Continue →' : "That's my colour! ✓",
+                "That's my colour! ✓",
                 style: _cute(size: 26, weight: FontWeight.w800),
               ),
             ),

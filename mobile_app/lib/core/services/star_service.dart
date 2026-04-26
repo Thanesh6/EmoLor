@@ -1,15 +1,23 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Lightweight local star‑persistence layer.
 ///
-/// Stars are stored per‑game per‑user and summed on the rewards screen.
-/// A simple SharedPreferences backend avoids an extra Supabase table
+/// Stars are stored per‑game per child profile and summed on the rewards
+/// screen. A simple SharedPreferences backend avoids an extra Supabase table
 /// while keeping data across hot‑restarts.
+///
+/// The storage prefix is keyed off the currently selected child profile id
+/// (`selected_child_profile_id`) so multiple children under the same
+/// caregiver/org account each maintain their own star totals. If no profile
+/// is selected we fall back to a sentinel `'no_profile'` bucket — never to
+/// the caregiver auth uid, which would cause sibling children to share data.
 class StarService {
-  static String get _prefix {
-    final uid = Supabase.instance.client.auth.currentUser?.id ?? 'anon';
-    return 'stars_${uid}_';
+  static const _profileIdKey = 'selected_child_profile_id';
+
+  static Future<String> _prefixAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'stars_${profileId}_';
   }
 
   // Game keys
@@ -55,23 +63,26 @@ class StarService {
   static Future<void> addStars(String game, int stars) async {
     if (stars <= 0) return;
     final prefs = await SharedPreferences.getInstance();
-    final current = prefs.getInt('$_prefix$game') ?? 0;
-    await prefs.setInt('$_prefix$game', current + stars);
+    final prefix = await _prefixAsync();
+    final current = prefs.getInt('$prefix$game') ?? 0;
+    await prefs.setInt('$prefix$game', current + stars);
   }
 
   /// Get total stars earned for [game].
   static Future<int> getStarsForGame(String game) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('$_prefix$game') ?? 0;
+    final prefix = await _prefixAsync();
+    return prefs.getInt('$prefix$game') ?? 0;
   }
 
   /// Get grand total across all games.
   static Future<int> getTotalStars() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
+    final prefix = await _prefixAsync();
     int total = 0;
     for (final g in allGames) {
-      total += prefs.getInt('$_prefix$g') ?? 0;
+      total += prefs.getInt('$prefix$g') ?? 0;
     }
     return total;
   }
@@ -79,7 +90,8 @@ class StarService {
   /// Star breakdown per game (for rewards screen).
   static Future<Map<String, int>> getBreakdown() async {
     final prefs = await SharedPreferences.getInstance();
-    return {for (final g in allGames) g: prefs.getInt('$_prefix$g') ?? 0};
+    final prefix = await _prefixAsync();
+    return {for (final g in allGames) g: prefs.getInt('$prefix$g') ?? 0};
   }
 
   /// Spend [amount] stars (returns false if not enough).
@@ -88,12 +100,13 @@ class StarService {
     if (total < amount) return false;
     // Deduct proportionally from games with most stars
     final prefs = await SharedPreferences.getInstance();
+    final prefix = await _prefixAsync();
     int remaining = amount;
     for (final g in allGames) {
       if (remaining <= 0) break;
-      final cur = prefs.getInt('$_prefix$g') ?? 0;
+      final cur = prefs.getInt('$prefix$g') ?? 0;
       final deduct = cur < remaining ? cur : remaining;
-      await prefs.setInt('$_prefix$g', cur - deduct);
+      await prefs.setInt('$prefix$g', cur - deduct);
       remaining -= deduct;
     }
     return true;
@@ -102,14 +115,16 @@ class StarService {
   /// Reset all stars (debug).
   static Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
+    final prefix = await _prefixAsync();
     for (final g in allGames) {
-      await prefs.remove('$_prefix$g');
+      await prefs.remove('$prefix$g');
     }
   }
 
   /// Directly set the star count for a specific game (useful for testing).
   static Future<void> setGameStars(String game, int stars) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('$_prefix$game', stars);
+    final prefix = await _prefixAsync();
+    await prefs.setInt('$prefix$game', stars);
   }
 }

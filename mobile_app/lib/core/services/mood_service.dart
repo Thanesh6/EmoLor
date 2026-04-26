@@ -13,11 +13,18 @@ class MoodService extends StateNotifier<List<MoodEntry>> {
     _loadEntries();
   }
 
-  static const String _storageKey = 'user_mood_entries';
+  static const String _profileIdKey = 'selected_child_profile_id';
+
+  static Future<String> _storageKeyAsync() async {
+    final prefs = await SharedPreferences.getInstance();
+    final profileId = prefs.getString(_profileIdKey) ?? 'no_profile';
+    return 'user_mood_entries_$profileId';
+  }
 
   Future<void> _loadEntries() async {
     final prefs = await SharedPreferences.getInstance();
-    final String? stored = prefs.getString(_storageKey);
+    final storageKey = await _storageKeyAsync();
+    final String? stored = prefs.getString(storageKey);
 
     if (stored != null) {
       try {
@@ -41,7 +48,8 @@ class MoodService extends StateNotifier<List<MoodEntry>> {
 
   Future<void> _saveEntries() async {
     final prefs = await SharedPreferences.getInstance();
+    final storageKey = await _storageKeyAsync();
     final String encoded = jsonEncode(state.map((e) => e.toJson()).toList());
-    await prefs.setString(_storageKey, encoded);
+    await prefs.setString(storageKey, encoded);
   }
 }

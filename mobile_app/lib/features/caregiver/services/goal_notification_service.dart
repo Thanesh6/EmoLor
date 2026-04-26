@@ -74,7 +74,11 @@ class GoalNotificationService {
           message: "Time's Up! Amazing effort today! 🌟",
           alertType: GoalAlertType.timeUp,
           holdDuration: const Duration(seconds: 5),
-          onDone: () {
+          onDone: () async {
+            // Time goal achieved — wipe the per-session goal set so the next
+            // session starts fresh, and reset our star-alert tracking too.
+            await GoalService.clearAll();
+            resetAllStarAlerts();
             if (context.mounted) {
               context.go('/how-i-feel-end', extra: {
                 'childName': childName,
@@ -197,6 +201,13 @@ class GoalNotificationService {
 
   void resetStarAlerts(String goalId) {
     _firedStarAlerts.remove(goalId);
+  }
+
+  /// Clears every per-goal star-alert tracking entry. Call this when the
+  /// goal set itself is wiped (end of session / logout / profile switch)
+  /// so the next session's milestones can fire fresh.
+  void resetAllStarAlerts() {
+    _firedStarAlerts.clear();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import 'rewards_screen.dart';
 import '../core/services/bg_music_player.dart';
 import '../core/services/star_service.dart';
 import '../features/caregiver/services/goal_notification_service.dart';
+import '../features/caregiver/services/goal_service.dart';
 
 class ChildDashboard extends ConsumerStatefulWidget {
   final bool showSwitchAccount;
@@ -201,7 +202,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
               top: 40,
               right: 25,
               child: GestureDetector(
-                onTap: () => context.go('/orgz-child-dashboard'),
+                onTap: () => _switchProfile(context),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -453,7 +454,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                   Padding(
                     padding: const EdgeInsets.only(right: 10),
                     child: GestureDetector(
-                      onTap: () => context.go('/orgz-child-dashboard'),
+                      onTap: () => _switchProfile(context),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
@@ -626,6 +627,16 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
     );
   }
 
+  Future<void> _switchProfile(BuildContext context) async {
+    // Profile switch mid-session — wipe per-session goals so the next
+    // child starts with a clean slate.
+    await GoalService.clearAll();
+    GoalNotificationService.instance.resetAllStarAlerts();
+    if (context.mounted) {
+      context.go('/orgz-child-dashboard');
+    }
+  }
+
   void _confirmLogout(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -656,6 +667,10 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
             ),
             onPressed: () async {
               Navigator.pop(dialogContext);
+              // Goals are per-session — clear them so the next sign-in starts
+              // fresh and reset the in-memory star alert tracking too.
+              await GoalService.clearAll();
+              GoalNotificationService.instance.resetAllStarAlerts();
               await ref.read(authProvider.notifier).signOut();
             },
             child: Text('Log Out',
