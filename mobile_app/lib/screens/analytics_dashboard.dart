@@ -390,16 +390,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         insight = '⚠️ Low usage this week';
       }
 
-      // --- FAKE DATA INJECTION FOR PREVIEW ---
-      if (recentCompletions7D.length < 2) {
-        topE = 'Happy 😄';
-        topEPct = '65%';
-        uniqueActiveDays = 4;
-        mostPlayedG = 'Emozzle';
-        mostPlayedTime = '24 mins';
-        compRate = 88;
-        insight = '🏆 Engagement is high! Child is curious today.';
-      }
+      // No mock-data fallback — for new profiles every metric stays at
+      // its real default ("—" / "0 mins" / 0%) until the child actually
+      // plays a session. This is required so caregivers see an empty
+      // dashboard for a brand-new child rather than fictitious history.
 
       if (mounted) {
         setState(() {
@@ -898,29 +892,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       'Anger',
     };
 
-    // Preview fallback — when there's no real journal data yet, fill
-    // every card with plausible sample counts so the caregiver can see
-    // how a populated week looks. As soon as real interactions arrive,
-    // this block is skipped and real numbers take over.
-    Map<String, int> freq = _emotionFreq;
-    String mostPlayedGame = _mostPlayedGame7D;
-    String mostPlayedTime = _mostPlayedGameTime7D;
-    if (freq.isEmpty) {
-      freq = const {
-        'Happy': 8,
-        'Calm': 5,
-        'Excited': 3,
-        'Trust': 2,
-        'Sad': 3,
-        'Angry': 1,
-      };
-    }
-    if (mostPlayedGame == '—' ||
-        mostPlayedGame.isEmpty ||
-        mostPlayedTime.isEmpty) {
-      mostPlayedGame = 'Emozzle';
-      mostPlayedTime = '24 mins';
-    }
+    // No mock fallback — show whatever the child actually has.
+    // For a brand-new profile this means the cards render zeros / em
+    // dashes / "No data yet" empty states.
+    final Map<String, int> freq = _emotionFreq;
+    final String mostPlayedGame = _mostPlayedGame7D;
+    final String mostPlayedTime = _mostPlayedGameTime7D;
 
     int posCount = 0;
     int negCount = 0;
@@ -1471,6 +1448,50 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
+  /// Wraps a chart [child] with a "No data yet" overlay when [hasData]
+  /// is false. The chart is still rendered (faded out) so the layout
+  /// stays consistent — a fresh profile sees a clear, friendly empty
+  /// state rather than fictitious sample data.
+  Widget _emptyChartOverlay({
+    required bool hasData,
+    required Widget child,
+    String message = 'No data yet — start a session to see this chart.',
+  }) {
+    if (hasData) return child;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Opacity(opacity: 0.25, child: IgnorePointer(child: child)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.insights_outlined,
+                  size: 18, color: Color(0xFF9CA3AF)),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: _textStyle(
+                      fontSize: 13,
+                      color: const Color(0xFF6B7280),
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPrePostChart() {
     // Last 7 sessions that have BOTH pre and post emotions
     final completeSessions = _childSessions
@@ -1696,16 +1717,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       }
     }
 
-    // Fill sample data when there is no real data yet.
-    if (positivePerDay.every((c) => c == 0) &&
-        negativePerDay.every((c) => c == 0)) {
-      positivePerDay[0] = 1; positivePerDay[1] = 1;
-      positivePerDay[3] = 1; positivePerDay[4] = 1;
-      positivePerDay[5] = 1; positivePerDay[6] = 1;
-      negativePerDay[2] = 1; negativePerDay[4] = 1;
-      positiveFreqRecent.addAll({'Happy': 3, 'Excited': 2, 'Calm': 1});
-      negativeFreqRecent.addAll({'Sad': 1, 'Angry': 1});
-    }
+    // No sample-data fallback — the line chart, pie sections and
+    // distribution panel below all flatten to empty when this child
+    // has no journal entries. The chart itself shows an empty-state
+    // overlay (handled where the LineChart is built — see
+    // `hasEmotionData` below).
 
     // Distribution panel lists (aligned with trend totals).
     final positiveEmotionsData = positiveFreqRecent.entries.toList();
@@ -1841,11 +1857,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     // coreGames order so x-axis labels line up with the bars.
     List<double> barMinutes =
         coreGames.map((g) => (_gameMinutes7D[g] ?? 0).toDouble()).toList();
-    // Sample data so caregivers can see the chart populated before any
-    // real activity has been recorded.
-    if (barMinutes.every((m) => m == 0)) {
-      barMinutes = [24, 18, 12, 9, 15, 20, 11, 7];
-    }
+    // No sample-data fallback — for a fresh profile barMinutes stays at
+    // all zeros and the bar chart renders flat. An empty-state overlay
+    // is shown via `hasGameMinutes` further down.
     // Y-axis headroom: round up to the nearest 5 minutes above the peak
     // so the tallest bar never hugs the top.
     final double peakMinutes = barMinutes.reduce(max);
@@ -1853,11 +1867,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         ? 5.0
         : (((peakMinutes + 4) ~/ 5) * 5).toDouble();
 
-    List<int> engagementData = _dailyActivityCounts.isEmpty
+    final List<int> engagementData = _dailyActivityCounts.isEmpty
         ? [0, 0, 0, 0, 0, 0, 0]
         : _dailyActivityCounts;
-    if (engagementData.every((c) => c == 0))
-      engagementData = [2, 3, 2, 4, 1, 5, 4];
+    // No sample-data fallback — empty profiles get a flat zero line
+    // with an empty-state overlay (see `hasEngagementData`).
     final maxEngagement = engagementData.reduce(max).toDouble() + 1;
 
     final engagementLineBar = LineChartBarData(
@@ -1870,6 +1884,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       belowBarData: BarAreaData(
           show: true, color: Colors.blueAccent.withValues(alpha: 0.2)),
     );
+
+    // Empty-state flags — used below to overlay a "No data yet" message
+    // on each chart instead of showing a flat / empty plot. We do NOT
+    // hide the chart container itself so the layout stays stable.
+    final bool hasEmotionData = totalPositive > 0 || totalNegative > 0;
+    final bool hasGameMinutes = barMinutes.any((m) => m > 0);
+    final bool hasEngagementData = engagementData.any((c) => c > 0);
 
     return Column(
       children: [
@@ -1937,7 +1958,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: LineChart(
+                          child: _emptyChartOverlay(
+                            hasData: hasEmotionData,
+                            message: 'No emotion entries yet this week.',
+                            child: LineChart(
                             LineChartData(
                               minX: 0,
                               maxX: 6,
@@ -2023,6 +2047,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                               borderData: FlBorderData(show: false),
                             ),
                           ),
+                          ), // _emptyChartOverlay
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -2094,7 +2119,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                   '🎮 Activity Performance',
                   'Minutes spent per activity this week',
                   height: 240,
-                  child: BarChart(BarChartData(
+                  child: _emptyChartOverlay(
+                    hasData: hasGameMinutes,
+                    message: 'No activity time logged this week.',
+                    child: BarChart(BarChartData(
                     alignment: BarChartAlignment.spaceAround,
                     maxY: barsMaxY,
                     barTouchData: BarTouchData(
@@ -2168,14 +2196,18 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                         },
                       )),
                     ),
-                  )),
+                  )), // BarChart(BarChartData)
+                  ), // _emptyChartOverlay
                 ),
                 const SizedBox(height: 14),
                 _buildChartCard(
                   '⏱️ Engagement Trend',
                   'Sessions per day identifying interest peaks and drops',
                   height: 200,
-                  child: LineChart(LineChartData(
+                  child: _emptyChartOverlay(
+                    hasData: hasEngagementData,
+                    message: 'No sessions yet this week.',
+                    child: LineChart(LineChartData(
                     lineBarsData: [engagementLineBar],
                     minY: 0,
                     maxY: maxEngagement,
@@ -2245,7 +2277,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                         getDrawingHorizontalLine: (_) => FlLine(
                             color: Colors.grey.withValues(alpha: 0.15),
                             strokeWidth: 1)),
-                  )),
+                  )), // LineChart(LineChartData)
+                  ), // _emptyChartOverlay
                 ),
                 const SizedBox(height: 14),
                 _buildPrePostChart(),
