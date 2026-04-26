@@ -31,7 +31,11 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
 
   // ── Star goal ────────────────────────────────────────────────────
   bool _starsEnabled = false;
-  final TextEditingController _starCtrl = TextEditingController(text: '10');
+  // Replaced the old text-input with a wheel-picker (range 1..100).
+  static const int _starMin = 1;
+  static const int _starMax = 100;
+  int _starTargetValue = 10;
+  late final FixedExtentScrollController _starCtrl;
 
   bool _isSaving = false;
 
@@ -45,6 +49,8 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
     super.initState();
     _hourCtrl = FixedExtentScrollController(initialItem: _hours);
     _minCtrl = FixedExtentScrollController(initialItem: _minutes);
+    _starCtrl =
+        FixedExtentScrollController(initialItem: _starTargetValue - _starMin);
 
     _enterCtrl = AnimationController(
       vsync: this,
@@ -67,7 +73,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
   }
 
   int get _totalMinutes => _hours * 60 + _minutes;
-  int get _starTarget => int.tryParse(_starCtrl.text) ?? 0;
+  int get _starTarget => _starTargetValue;
   bool get _hasGoal => _timeEnabled || _starsEnabled;
   bool get _timeValid => !_timeEnabled || _totalMinutes > 0;
   bool get _starValid => !_starsEnabled || _starTarget > 0;
@@ -105,13 +111,15 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(
+          // Soft light gradient — same palette as profile_screen.dart
+          // and the caregiver "New Goal" dialog so the screen reads as
+          // part of the same family.
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF6B21A8),
-              Color(0xFF1D4ED8),
-              Color(0xFF0E7490),
+              Color(0xFFE0F2FE),
+              Color(0xFFF3E8FF),
             ],
           ),
         ),
@@ -132,7 +140,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                         child: IconButton(
                           onPressed: widget.onBack,
                           icon: const Icon(Icons.arrow_back_ios_rounded,
-                              color: Colors.white70),
+                              color: Color(0xFF6B21A8)),
                         ),
                       ),
                     )
@@ -153,13 +161,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                           style: GoogleFonts.fredoka(
                             fontSize: 35,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            shadows: const [
-                              Shadow(
-                                  color: Colors.black26,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 2))
-                            ],
+                            color: const Color(0xFF6B21A8),
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -168,7 +170,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                           'Enable at least one goal to continue',
                           style: GoogleFonts.baloo2(
                             fontSize: 16,
-                            color: Colors.white60,
+                            color: const Color(0xFF6B7280),
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
@@ -368,37 +370,17 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 14),
-                  // Big number input — scaled to fill card
-                  Container(
-                    width: 210,
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.07),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: color.withValues(alpha: 0.32), width: 2.5),
-                    ),
-                    child: TextField(
-                      controller: _starCtrl,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.baloo2(
-                        fontSize: 56,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 8),
-                        hintText: '10',
-                        hintStyle: GoogleFonts.baloo2(
-                          fontSize: 56,
-                          color: color.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
+                  // Wheel picker — replaces the keyboard-based input.
+                  // Children pick a number by scrolling, just like the
+                  // hours / minutes pickers on the Time card.
+                  _buildWheelPicker(
+                    controller: _starCtrl,
+                    itemCount: _starMax - _starMin + 1,
+                    label: 'Stars',
+                    color: color,
+                    onChanged: (i) =>
+                        setState(() => _starTargetValue = _starMin + i),
+                    formatItem: (i) => (_starMin + i).toString(),
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -409,14 +391,6 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (_starsEnabled && _starTarget <= 0) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Enter a number above 0',
-                      style: GoogleFonts.baloo2(
-                          fontSize: 12, color: Colors.red[400]),
-                    ),
-                  ],
                   const Spacer(),
                   Text(
                     '✅ You can keep playing after reaching the star goal.',
@@ -447,10 +421,10 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: _canStart
                   ? const Color(0xFF10B981)
-                  : Colors.white.withValues(alpha: 0.18),
-              disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
+                  : const Color(0xFFD1D5DB),
+              disabledBackgroundColor: const Color(0xFFD1D5DB),
               foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white38,
+              disabledForegroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 28),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24)),
@@ -481,7 +455,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
             'Please enable at least one goal to continue',
             style: GoogleFonts.baloo2(
               fontSize: 12,
-              color: Colors.white54,
+              color: const Color(0xFF6B7280),
             ),
             textAlign: TextAlign.center,
           ),
