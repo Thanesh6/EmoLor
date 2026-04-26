@@ -53,8 +53,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
 
   List<Map<String, dynamic>> _childSessions = [];
 
-  // ── Progress tab category selector ──
-  int _selectedProgressCategory = 0;
+  // ── Week selector offset for Home tab (0 = this week, -1 = last week …) ──
+  int _selectedWeekOffset = 0;
+
+  // ── Full completion history — used by week-filtered Home tab cards ──
+  List<CompletionRecord> _allCompletions = [];
 
   // ── Extended analytics ──
   int _currentStreak = 0;
@@ -405,7 +408,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
           _emotionFreq = emotionFreq;
           _gameFreq = gameFreq;
           _recentCompletions = completions.take(5).toList();
-          _recentJournal = journal.reversed.take(10).toList();
+          _allCompletions = completions;
+          _recentJournal = journal.reversed.toList();
           _activeGoals = activeGoalsLive;
 
           _currentStreak = streak;
@@ -739,13 +743,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                                 'Goals & Rewards', _selectedNavIndex == 2, () {
                               setState(() => _selectedNavIndex = 2);
                             }),
-                            _buildNavItem(Icons.child_care_rounded, 'My Child',
+                            _buildNavItem(Icons.settings_rounded, 'Settings',
                                 _selectedNavIndex == 3, () {
                               setState(() => _selectedNavIndex = 3);
-                            }),
-                            _buildNavItem(Icons.settings_rounded, 'Settings',
-                                _selectedNavIndex == 4, () {
-                              setState(() => _selectedNavIndex = 4);
                             }),
                           ],
                         ),
@@ -803,10 +803,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                     : _selectedNavIndex == 2
                         ? _buildGoalsRewardsTab()
                         : _selectedNavIndex == 3
-                            ? _buildMyChildTab()
-                            : _selectedNavIndex == 4
-                                ? _buildSettingsTab()
-                                : _buildHomeTab(),
+                            ? _buildSettingsTab()
+                            : _buildHomeTab(),
               ),
             ],
           ),
@@ -866,38 +864,62 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     'Confused': '😕',
   };
 
+  // ── Week selector helpers ────────────────────────────────────────
+
+  /// Returns the Monday that starts the week at [offset]
+  /// (0 = current week, -1 = last week, …).
+  DateTime _weekStartDate(int offset) {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final target = DateTime(monday.year, monday.month, monday.day)
+        .add(Duration(days: 7 * offset));
+    return target;
+  }
+
+  String _weekLabel(int offset) {
+    final start = _weekStartDate(offset);
+    final end = start.add(const Duration(days: 6));
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    if (start.month == end.month) {
+      return '${months[start.month - 1]} ${start.day}–${end.day}';
+    }
+    return '${months[start.month - 1]} ${start.day} – ${months[end.month - 1]} ${end.day}';
+  }
+
   Widget _buildHomeTab() {
-    // ── Weekly overview cards ─────────────────────────────────────
-    // All six cards are derived from the same 7-day emotion journal
-    // that feeds the Progress Dashboard, so the two views stay aligned.
     const positiveSet = {
-      'Happy',
-      'Excited',
-      'Calm',
-      'Joy',
-      'Trust',
-      'Anticipation',
-      'Surprise',
-      'Surprised',
-      'Love',
+      'Happy', 'Excited', 'Calm', 'Joy', 'Trust',
+      'Anticipation', 'Surprise', 'Surprised', 'Love',
+      'Loved', 'Proud', 'Shy', 'Silly',
     };
     const negativeSet = {
-      'Sad',
-      'Angry',
-      'Scared',
-      'Disgusted',
-      'Fear',
-      'Sadness',
-      'Disgust',
-      'Anger',
+      'Sad', 'Angry', 'Scared', 'Disgusted', 'Fear',
+      'Sadness', 'Disgust', 'Anger', 'Tired', 'Confused',
     };
 
-    // No mock fallback — show whatever the child actually has.
-    // For a brand-new profile this means the cards render zeros / em
-    // dashes / "No data yet" empty states.
-    final Map<String, int> freq = _emotionFreq;
-    final String mostPlayedGame = _mostPlayedGame7D;
-    final String mostPlayedTime = _mostPlayedGameTime7D;
+    // ── Filter journal + completions to the selected week ─────────────
+    final weekStart = _weekStartDate(_selectedWeekOffset);
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    final weekJournal = _recentJournal.where((e) {
+      final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+      return ts != null && ts.isAfter(weekStart) && ts.isBefore(weekEnd);
+    }).toList();
+
+    final weekCompletions = _allCompletions
+        .where((c) =>
+            c.completedAt.isAfter(weekStart) && c.completedAt.isBefore(weekEnd))
+        .toList();
+
+    // ── Emotion frequency for the week ────────────────────────────────
+    final Map<String, int> freq = {};
+    for (final e in weekJournal) {
+      final em = e['emotion'] as String? ?? '';
+      if (em.isNotEmpty) freq[em] = (freq[em] ?? 0) + 1;
+    }
 
     int posCount = 0;
     int negCount = 0;
@@ -907,14 +929,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     });
     final totalPolarised = posCount + negCount;
 
-    // 1. Weekly Feelings — dominant mood type with %
+    // Card 1 — Weekly Feelings
     String weeklyLabel;
     String weeklySub;
     Color weeklyColor;
     String weeklyEmoji;
     if (totalPolarised == 0) {
       weeklyLabel = 'No data';
-      weeklySub = 'This week';
+      weeklySub = 'No entries this week';
       weeklyColor = Colors.grey;
       weeklyEmoji = '🌤️';
     } else if (posCount >= negCount) {
@@ -931,7 +953,28 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       weeklyEmoji = '🌧️';
     }
 
-    // 2 & 3. Frequent positive / negative emoji
+    // Card 2 — Most Played
+    const validActivities = [
+      'EMOZZLE', 'EMOPOP', 'EMOSPELL', 'EMOMATCH',
+      'EMOSLASH', 'EMOCATCH', 'ANIMATCH', 'Draw',
+    ];
+    final Map<String, int> gameTimeSecs = {};
+    for (final c in weekCompletions) {
+      if (!validActivities.contains(c.activityName)) continue;
+      gameTimeSecs[c.activityName] =
+          (gameTimeSecs[c.activityName] ?? 0) + c.timeSpentSeconds;
+    }
+    String mostPlayedGame = '—';
+    String mostPlayedTime = '0 mins';
+    if (gameTimeSecs.isNotEmpty) {
+      final sorted = gameTimeSecs.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      mostPlayedGame = _brandedGameName(sorted.first.key);
+      mostPlayedTime =
+          '${(sorted.first.value / 60).toStringAsFixed(0)} mins';
+    }
+
+    // Cards 3 & 4 — Frequent positive / negative
     MapEntry<String, int>? topPositive;
     MapEntry<String, int>? topNegative;
     freq.forEach((emotion, count) {
@@ -949,23 +992,21 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final freqPosName = topPositive?.key ?? '—';
     final freqPosEmoji = _eEmojis[freqPosName] ?? '😊';
     final freqPosSub = topPositive != null
-        ? '${topPositive!.value} time${topPositive!.value == 1 ? '' : 's'}'
+        ? '${topPositive!.value}×'
         : 'Not yet';
 
     final freqNegName = topNegative?.key ?? '—';
     final freqNegEmoji = _eEmojis[freqNegName] ?? '😔';
     final freqNegSub = topNegative != null
-        ? '${topNegative!.value} time${topNegative!.value == 1 ? '' : 's'}'
+        ? '${topNegative!.value}×'
         : 'Not yet';
 
-    // 5. Emotion Variety — how many distinct emotions were expressed
+    // Card 5 — Emotion Variety
     final distinctEmotions = freq.keys
         .where((k) => positiveSet.contains(k) || negativeSet.contains(k))
         .length;
 
-    // 6. Top Mood Colour — personalised colour for the dominant emotion
-    // (ties straight back to My Colours). Picks whichever side is dominant
-    // so the colour reflects the week's overall mood.
+    // Card 6 — Top Mood Colour
     final dominantEmotion = posCount >= negCount ? topPositive : topNegative;
     final dominantName = dominantEmotion?.key ?? '—';
     final dominantColour = dominantEmotion != null
@@ -981,9 +1022,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final card4 = _buildHomeCard(freqNegEmoji, 'Frequent Negative',
         freqNegName, const Color(0xFFEF4444), freqNegSub);
     final card5 = _buildHomeCard(
-        '🌈',
-        'Emotion Variety',
-        '$distinctEmotions',
+        '🌈', 'Emotion Variety', '$distinctEmotions',
         const Color(0xFF8B5CF6),
         distinctEmotions == 1 ? 'emotion felt' : 'different emotions');
     final card6 = _buildHomeCard('🎨', 'Top Mood Colour', dominantName,
@@ -994,46 +1033,89 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Top bar: title + week selector + refresh ──────────────
           Row(
             children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFFFFB74D), Color(0xFFFF8A65)]),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                    child: Text(_childAvatar,
-                        style: const TextStyle(fontSize: 32))),
-              ),
-              const SizedBox(width: 14),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Text(
+                  '$_childName\'s Weekly Overview',
+                  style: _textStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF6B21A8)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // ── Week selector ─────────────────────────────────────
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                      color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('$_childName\'s Overview',
+                    // ◀ prev week
+                    InkWell(
+                      onTap: () => setState(() => _selectedWeekOffset--),
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 8),
+                        child: Icon(Icons.chevron_left_rounded,
+                            color: Color(0xFF6B21A8), size: 22),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        _selectedWeekOffset == 0
+                            ? 'This Week'
+                            : _weekLabel(_selectedWeekOffset),
                         style: _textStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF6B21A8))),
-                    Text('Focusing on emotional signals and engagement',
-                        style:
-                            _textStyle(fontSize: 16, color: Colors.grey[500]!)),
+                            fontSize: 15,
+                            color: const Color(0xFF6B21A8),
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    // ▶ next week (disabled when already on current week)
+                    InkWell(
+                      onTap: _selectedWeekOffset >= 0
+                          ? null
+                          : () => setState(() => _selectedWeekOffset++),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 8),
+                        child: Icon(Icons.chevron_right_rounded,
+                            color: _selectedWeekOffset >= 0
+                                ? Colors.grey.shade300
+                                : const Color(0xFF6B21A8),
+                            size: 22),
+                      ),
+                    ),
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
+              // ── Refresh button ────────────────────────────────────
               GestureDetector(
-                onTap: _loadRealData,
+                onTap: () {
+                  _loadRealData();
+                  setState(() => _selectedWeekOffset = 0);
+                },
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 11),
                   decoration: BoxDecoration(
                     color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(13),
                     border: Border.all(
-                        color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
+                        color:
+                            const Color(0xFF6B21A8).withValues(alpha: 0.3)),
                   ),
                   child: Row(children: [
                     const Icon(Icons.refresh_rounded,
@@ -1041,13 +1123,15 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                     const SizedBox(width: 7),
                     Text('Refresh',
                         style: _textStyle(
-                            fontSize: 15, color: const Color(0xFF6B21A8))),
+                            fontSize: 15,
+                            color: const Color(0xFF6B21A8))),
                   ]),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
+          // ── 6 flashcards in 3 rows × 2 columns ───────────────────
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1492,8 +1576,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
-  Widget _buildPrePostChart() {
-    // Last 7 sessions that have BOTH pre and post emotions
+  Widget _buildPrePostChartUnused() {
+    // REMOVED — replaced by 4-chart Progress tab layout.
+    // Kept as dead code to avoid breaking the git diff history.
     final completeSessions = _childSessions
         .where((s) =>
             s['pre_emotion_name'] != null && s['post_emotion_name'] != null)
@@ -1639,7 +1724,6 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
   }
 
   Widget _buildProgressTab() {
-    final now = DateTime.now();
     // The 7 games on the Play screen + the Draw activity. Both bar chart
     // (Activity Performance) and any other per-activity widget should
     // iterate in this order so the x-axis stays consistent.
@@ -1653,8 +1737,6 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       'ANIMATCH',
       'Draw',
     ];
-
-    List<String> top4Emotions = ['Happy', 'Sad', 'Angry', 'Calm'];
 
     // ── Emotion categories (shared by both trend chart and distribution) ──
     // Positive: happy, joyful, safe, proud feelings.
@@ -1779,36 +1861,6 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       pieSectionsNegative.add(PieChartSectionData(
           value: 1, color: const Color(0xFFEF4444), title: '0%',
           radius: _pieRadius, titleStyle: _pieLabelStyle));
-    }
-
-    String topE = _emotionFreq.isNotEmpty
-        ? (_emotionFreq.entries.toList()
-              ..sort((a, b) => b.value.compareTo(a.value)))
-            .first
-            .key
-        : 'Happy';
-
-    // Build insight from child_sessions data
-    String summaryInsight;
-    if (_childSessions.isNotEmpty) {
-      final complete = _childSessions
-          .where((s) => s['pre_emotion_name'] != null && s['post_emotion_name'] != null)
-          .toList();
-      int improved = 0;
-      for (final s in complete) {
-        final pre = s['pre_emotion_valence'] as String? ?? '';
-        final post = s['post_emotion_valence'] as String? ?? '';
-        if (pre == 'negative' && post == 'positive') improved++;
-        if (pre == 'negative' && post == 'negative') {} // no change
-        if (pre == 'positive') improved++; // stayed positive = good
-      }
-      final pct = complete.isNotEmpty ? (improved / complete.length * 100).toInt() : 0;
-      summaryInsight = 'Based on ${_childSessions.length} sessions this week, '
-          '$_childName\'s emotional state improved or stayed positive in $pct% of sessions. '
-          '${_mostPlayedGame7D != "—" ? "Most engaged with $_mostPlayedGame7D." : ""} '
-          'Keep up the great work with EmoLor!';
-    } else {
-      summaryInsight = 'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
     }
 
     // Create line chart data for positive and negative emotions. Dots
@@ -2280,44 +2332,6 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                   )), // LineChart(LineChartData)
                   ), // _emptyChartOverlay
                 ),
-                const SizedBox(height: 14),
-                _buildPrePostChart(),
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFDF4FF),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFF5D0FE)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.psychology,
-                              color: Color(0xFFC026D3), size: 28),
-                          const SizedBox(width: 10),
-                          Text('Insights Summary',
-                              style: _textStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF86198F))),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        summaryInsight,
-                        style: _textStyle(
-                                fontSize: 16,
-                                color: const Color(0xFF4A044E),
-                                fontWeight: FontWeight.w500)
-                            .copyWith(height: 1.5),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -2710,8 +2724,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
-  // ── My Child's Colours Card ────────────────────────────────────────
-
+  // Used by (now-dead) _buildInteractivePaletteCard
   static const List<Map<String, String>> _emotionList = [
     {'name': 'Joy', 'emoji': '😊'},
     {'name': 'Trust', 'emoji': '🤝'},
@@ -3058,11 +3071,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
-  // ── My Child Tab ─────────────────────────────────────────────────
+  // ── My Child Tab — REMOVED ───────────────────────────────────────
+  // Tab removed per UCD refactor (2026-04). Navigation index 3 is now Settings.
 
-  // ── My Child Tab (Redesign) ────────────────────────────────────────────────
-
-  Widget _buildMyChildTab() {
+  Widget _buildMyChildTab_REMOVED() {
     return Padding(
       padding: const EdgeInsets.all(28),
       child: Column(
