@@ -876,56 +876,196 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     return target;
   }
 
+  /// User-friendly week selector label.
+  /// Only three values are valid (offset is clamped to [-2, 0]).
   String _weekLabel(int offset) {
-    final start = _weekStartDate(offset);
-    final end = start.add(const Duration(days: 6));
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    if (start.month == end.month) {
-      return '${months[start.month - 1]} ${start.day}–${end.day}';
+    switch (offset) {
+      case 0:
+        return 'This Week';
+      case -1:
+        return 'Last Week';
+      case -2:
+        return '2 Weeks Ago';
+      default:
+        return 'Week';
     }
-    return '${months[start.month - 1]} ${start.day} – ${months[end.month - 1]} ${end.day}';
   }
 
-  Widget _buildHomeTab() {
-    const positiveSet = {
-      'Happy', 'Excited', 'Calm', 'Joy', 'Trust',
-      'Anticipation', 'Surprise', 'Surprised', 'Love',
-      'Loved', 'Proud', 'Shy', 'Silly',
-    };
-    const negativeSet = {
-      'Sad', 'Angry', 'Scared', 'Disgusted', 'Fear',
-      'Sadness', 'Disgust', 'Anger', 'Tired', 'Confused',
-    };
+  // ── Real / fake week metrics dispatcher ──────────────────────────
+  //
+  // CONDITIONAL LOADING:
+  //   offset ==  0  →  REAL data (from Supabase + local services).
+  //                   Filtered to current Mon-Sun window.
+  //   offset == -1  →  FAKE data → const _kFakeWeeks[-1] ("Last Week")
+  //   offset == -2  →  FAKE data → const _kFakeWeeks[-2] ("2 Weeks Ago")
+  //
+  // Real and fake data are NEVER mixed: either every metric is sourced
+  // from the database or every metric is sourced from the static fake
+  // dataset, depending on which week the user has selected.
+  _WeekMetrics _metricsForWeek(int offset) {
+    if (offset == 0) {
+      return _realCurrentWeekMetrics();
+    }
+    return _kFakeWeeks[offset] ?? const _WeekMetrics();
+  }
 
-    // ── Filter journal + completions to the selected week ─────────────
-    final weekStart = _weekStartDate(_selectedWeekOffset);
+  /// Build a [_WeekMetrics] snapshot from the loaded real-data services.
+  /// Only used when the selected week is "This Week" — we deliberately
+  /// keep the real data path completely separate from the fake dataset
+  /// so neither can leak into the other.
+  _WeekMetrics _realCurrentWeekMetrics() {
+    const positiveSet = _kPositiveEmotions;
+    const negativeSet = _kNegativeEmotions;
+
+    final weekStart = _weekStartDate(0);
     final weekEnd = weekStart.add(const Duration(days: 7));
 
+    // Filter journal to current week.
     final weekJournal = _recentJournal.where((e) {
       final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
       return ts != null && ts.isAfter(weekStart) && ts.isBefore(weekEnd);
     }).toList();
 
-    final weekCompletions = _allCompletions
-        .where((c) =>
-            c.completedAt.isAfter(weekStart) && c.completedAt.isBefore(weekEnd))
-        .toList();
-
-    // ── Emotion frequency for the week ────────────────────────────────
+    // Emotion frequency for the week.
     final Map<String, int> freq = {};
     for (final e in weekJournal) {
       final em = e['emotion'] as String? ?? '';
       if (em.isNotEmpty) freq[em] = (freq[em] ?? 0) + 1;
     }
 
+    // Per-day positive / negative counts (Sun=0 … Sat=6).
+    final positivePerDay = List<int>.filled(7, 0);
+    final negativePerDay = List<int>.filled(7, 0);
+    for (final entry in weekJournal) {
+      final ts =
+          DateTime.tryParse(entry['timestamp'] as String? ?? '')?.toLocal();
+      if (ts == null) continue;
+      final dayOfWeek = ts.weekday % 7; // Sun=0..Sat=6
+      final em = entry['emotion'] as String? ?? '';
+      if (positiveSet.contains(em)) {
+        positivePerDay[dayOfWeek]++;
+      } else if (negativeSet.contains(em)) {
+        negativePerDay[dayOfWeek]++;
+      }
+    }
+
+    // Filter completions to current week.
+    final weekCompletions = _allCompletions
+        .where((c) =>
+            c.completedAt.isAfter(weekStart) &&
+            c.completedAt.isBefore(weekEnd))
+        .toList();
+
+    // Sessions per day (Mon=0 … Sun=6 to match Engagement chart labels).
+    final sessionsPerDay = List<int>.filled(7, 0);
+    for (final c in weekCompletions) {
+      final dow = c.completedAt.weekday; // Mon=1..Sun=7
+      sessionsPerDay[dow - 1]++;
+    }
+
+    // Game minutes per activity.
+    const validActivities = [
+      'EMOZZLE', 'EMOPOP', 'EMOSPELL', 'EMOMATCH',
+      'EMOSLASH', 'EMOCATCH', 'ANIMATCH', 'Draw',
+    ];
+    final Map<String, int> gameSecs = {};
+    for (final c in weekCompletions) {
+      if (!validActivities.contains(c.activityName)) continue;
+      gameSecs[c.activityName] =
+          (gameSecs[c.activityName] ?? 0) + c.timeSpentSeconds;
+    }
+    final gameMinutes = <String, int>{
+      for (final e in gameSecs.entries) e.key: (e.value / 60).round(),
+    };
+
+    return _WeekMetrics(
+      emotionFreq: freq,
+      positivePerDay: positivePerDay,
+      negativePerDay: negativePerDay,
+      sessionsPerDay: sessionsPerDay,
+      gameMinutes: gameMinutes,
+    );
+  }
+
+  // ── Reusable week selector pill ──────────────────────────────────
+  Widget _buildWeekSelector() {
+    final atOldest = _selectedWeekOffset <= -2;
+    final atNewest = _selectedWeekOffset >= 0;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+            color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ◀ prev (older) week
+          InkWell(
+            onTap: atOldest
+                ? null
+                : () => setState(() => _selectedWeekOffset--),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Icon(Icons.chevron_left_rounded,
+                  color: atOldest
+                      ? Colors.grey.shade300
+                      : const Color(0xFF6B21A8),
+                  size: 22),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              _weekLabel(_selectedWeekOffset),
+              style: _textStyle(
+                  fontSize: 15,
+                  color: const Color(0xFF6B21A8),
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+          // ▶ next (newer) week — disabled on This Week
+          InkWell(
+            onTap: atNewest
+                ? null
+                : () => setState(() => _selectedWeekOffset++),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Icon(Icons.chevron_right_rounded,
+                  color: atNewest
+                      ? Colors.grey.shade300
+                      : const Color(0xFF6B21A8),
+                  size: 22),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeTab() {
+    const positiveSet = _kPositiveEmotions;
+    const negativeSet = _kNegativeEmotions;
+
+    // Single source of truth for the selected week — switches between
+    // real and fake data internally so this build method never has to
+    // know which path produced the numbers.
+    final metrics = _metricsForWeek(_selectedWeekOffset);
+    final freq = metrics.emotionFreq;
+
     int posCount = 0;
     int negCount = 0;
     freq.forEach((emotion, count) {
-      if (positiveSet.contains(emotion)) posCount += count;
-      else if (negativeSet.contains(emotion)) negCount += count;
+      if (positiveSet.contains(emotion)) {
+        posCount += count;
+      } else if (negativeSet.contains(emotion)) {
+        negCount += count;
+      }
     });
     final totalPolarised = posCount + negCount;
 
@@ -953,25 +1093,16 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       weeklyEmoji = '🌧️';
     }
 
-    // Card 2 — Most Played
-    const validActivities = [
-      'EMOZZLE', 'EMOPOP', 'EMOSPELL', 'EMOMATCH',
-      'EMOSLASH', 'EMOCATCH', 'ANIMATCH', 'Draw',
-    ];
-    final Map<String, int> gameTimeSecs = {};
-    for (final c in weekCompletions) {
-      if (!validActivities.contains(c.activityName)) continue;
-      gameTimeSecs[c.activityName] =
-          (gameTimeSecs[c.activityName] ?? 0) + c.timeSpentSeconds;
-    }
+    // Card 2 — Most Played (from gameMinutes map directly).
     String mostPlayedGame = '—';
     String mostPlayedTime = '0 mins';
-    if (gameTimeSecs.isNotEmpty) {
-      final sorted = gameTimeSecs.entries.toList()
+    if (metrics.gameMinutes.isNotEmpty) {
+      final sorted = metrics.gameMinutes.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-      mostPlayedGame = _brandedGameName(sorted.first.key);
-      mostPlayedTime =
-          '${(sorted.first.value / 60).toStringAsFixed(0)} mins';
+      if (sorted.first.value > 0) {
+        mostPlayedGame = _brandedGameName(sorted.first.key);
+        mostPlayedTime = '${sorted.first.value} mins';
+      }
     }
 
     // Cards 3 & 4 — Frequent positive / negative
@@ -1047,61 +1178,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                 ),
               ),
               const SizedBox(width: 12),
-              // ── Week selector ─────────────────────────────────────
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                      color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // ◀ prev week
-                    InkWell(
-                      onTap: () => setState(() => _selectedWeekOffset--),
-                      borderRadius: BorderRadius.circular(8),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 8),
-                        child: Icon(Icons.chevron_left_rounded,
-                            color: Color(0xFF6B21A8), size: 22),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        _selectedWeekOffset == 0
-                            ? 'This Week'
-                            : _weekLabel(_selectedWeekOffset),
-                        style: _textStyle(
-                            fontSize: 15,
-                            color: const Color(0xFF6B21A8),
-                            fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    // ▶ next week (disabled when already on current week)
-                    InkWell(
-                      onTap: _selectedWeekOffset >= 0
-                          ? null
-                          : () => setState(() => _selectedWeekOffset++),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 8),
-                        child: Icon(Icons.chevron_right_rounded,
-                            color: _selectedWeekOffset >= 0
-                                ? Colors.grey.shade300
-                                : const Color(0xFF6B21A8),
-                            size: 22),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildWeekSelector(),
               const SizedBox(width: 10),
-              // ── Refresh button ────────────────────────────────────
+              // ── Refresh button — only meaningful for live data ────
               GestureDetector(
                 onTap: () {
                   _loadRealData();
@@ -1738,72 +1817,29 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       'Draw',
     ];
 
-    // ── Emotion categories (shared by both trend chart and distribution) ──
-    // Positive: happy, joyful, safe, proud feelings.
-    // Negative: distressing or draining feelings.
-    // "Silly" is lighthearted and playful → classified as positive.
-    const positiveEmotions = {
-      'Happy', 'Excited', 'Calm', 'Loved', 'Proud', 'Shy', 'Silly',
-      // Plutchik / legacy names kept for backward-compat
-      'Joy', 'Trust', 'Anticipation', 'Surprise',
-    };
-    const negativeEmotions = {
-      'Sad', 'Angry', 'Scared', 'Tired', 'Confused',
-      // Plutchik / legacy names kept for backward-compat
-      'Disgusted', 'Fear', 'Sadness', 'Disgust', 'Anger',
-    };
+    const positiveEmotions = _kPositiveEmotions;
+    const negativeEmotions = _kNegativeEmotions;
 
-    // Group _recentJournal entries by day-of-week slot (for trend chart).
-    final Map<int, Map<String, int>> emotionByDay = {
-      for (int i = 0; i < 7; i++) i: {}
-    };
-    for (final entry in _recentJournal) {
-      final ts =
-          DateTime.tryParse(entry['timestamp'] as String? ?? '')?.toLocal();
-      if (ts == null) continue;
-      final dayOfWeek = ts.weekday % 7; // Sunday=0 … Saturday=6
-      final em = entry['emotion'] as String? ?? '';
-      if (em.isNotEmpty) {
-        emotionByDay[dayOfWeek]![em] =
-            (emotionByDay[dayOfWeek]![em] ?? 0) + 1;
-      }
-    }
+    // ── Single source of truth for all 4 charts ─────────────────────
+    // Real for "This Week", static fake data for "Last Week" / "2 Weeks
+    // Ago". Real and fake data are produced by separate code paths
+    // inside _metricsForWeek and never combined.
+    final metrics = _metricsForWeek(_selectedWeekOffset);
 
-    // Per-day positive/negative counts — drives the trend chart lines.
-    final List<int> positivePerDay = List.generate(7, (day) {
-      return emotionByDay[day]!
-          .entries
-          .where((e) => positiveEmotions.contains(e.key))
-          .fold(0, (sum, e) => sum + e.value);
-    });
-    final List<int> negativePerDay = List.generate(7, (day) {
-      return emotionByDay[day]!
-          .entries
-          .where((e) => negativeEmotions.contains(e.key))
-          .fold(0, (sum, e) => sum + e.value);
-    });
+    final List<int> positivePerDay = metrics.positivePerDay;
+    final List<int> negativePerDay = metrics.negativePerDay;
 
-    // Per-emotion frequency from the same journal data — drives the
-    // distribution panel chips and pie slices.  Using _recentJournal
-    // keeps these counts identical to what the trend chart plots, so
-    // "6 positive" in the trend == "6 times" in the distribution.
+    // Per-emotion frequency derived from the metrics (so the chart's
+    // distribution slices stay aligned with the trend totals).
     final Map<String, int> positiveFreqRecent = {};
     final Map<String, int> negativeFreqRecent = {};
-    for (final entry in _recentJournal) {
-      final em = entry['emotion'] as String? ?? '';
-      if (em.isEmpty) continue;
+    metrics.emotionFreq.forEach((em, count) {
       if (positiveEmotions.contains(em)) {
-        positiveFreqRecent[em] = (positiveFreqRecent[em] ?? 0) + 1;
+        positiveFreqRecent[em] = count;
       } else if (negativeEmotions.contains(em)) {
-        negativeFreqRecent[em] = (negativeFreqRecent[em] ?? 0) + 1;
+        negativeFreqRecent[em] = count;
       }
-    }
-
-    // No sample-data fallback — the line chart, pie sections and
-    // distribution panel below all flatten to empty when this child
-    // has no journal entries. The chart itself shows an empty-state
-    // overlay (handled where the LineChart is built — see
-    // `hasEmotionData` below).
+    });
 
     // Distribution panel lists (aligned with trend totals).
     final positiveEmotionsData = positiveFreqRecent.entries.toList();
@@ -1905,13 +1941,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final double maxEmotionY =
         maxEmotionValue < 1 ? 1.0 : maxEmotionValue.ceilToDouble();
 
-    // Minutes spent per activity over the last 7 days, aligned to the
+    // Minutes spent per activity over the selected week, aligned to the
     // coreGames order so x-axis labels line up with the bars.
-    List<double> barMinutes =
-        coreGames.map((g) => (_gameMinutes7D[g] ?? 0).toDouble()).toList();
-    // No sample-data fallback — for a fresh profile barMinutes stays at
-    // all zeros and the bar chart renders flat. An empty-state overlay
-    // is shown via `hasGameMinutes` further down.
+    List<double> barMinutes = coreGames
+        .map((g) => (metrics.gameMinutes[g] ?? 0).toDouble())
+        .toList();
     // Y-axis headroom: round up to the nearest 5 minutes above the peak
     // so the tallest bar never hugs the top.
     final double peakMinutes = barMinutes.reduce(max);
@@ -1919,11 +1953,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         ? 5.0
         : (((peakMinutes + 4) ~/ 5) * 5).toDouble();
 
-    final List<int> engagementData = _dailyActivityCounts.isEmpty
-        ? [0, 0, 0, 0, 0, 0, 0]
-        : _dailyActivityCounts;
-    // No sample-data fallback — empty profiles get a flat zero line
-    // with an empty-state overlay (see `hasEngagementData`).
+    // Sessions per day for Engagement Trend chart, sourced from the same
+    // metrics object so the chart respects the week selector.
+    final List<int> engagementData = metrics.sessionsPerDay;
     final maxEngagement = engagementData.reduce(max).toDouble() + 1;
 
     final engagementLineBar = LineChartBarData(
@@ -1954,41 +1986,52 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
               const Color(0xFF6B21A8),
               'Progress Dashboard',
               'Emotion trends, game performance & weekly activity',
-              action: ElevatedButton.icon(
-                icon: const Icon(Icons.picture_as_pdf,
-                    color: Colors.white, size: 18),
-                label: Text('Export Report',
-                    style: _textStyle(
-                        fontSize: 14,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B21A8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () async {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Generating PDF Report...')));
+              action: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Same week selector as the Home tab — drives all 4 charts.
+                  _buildWeekSelector(),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.picture_as_pdf,
+                        color: Colors.white, size: 18),
+                    label: Text('Export Report',
+                        style: _textStyle(
+                            fontSize: 14,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6B21A8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Generating PDF Report...')));
 
-                  String topE = _emotionFreq.isNotEmpty
-                      ? (_emotionFreq.entries.toList()
-                            ..sort((a, b) => b.value.compareTo(a.value)))
-                          .first
-                          .key
-                      : 'Happy';
-                  String summaryInsight =
-                      'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
+                      // PDF export always reports on real all-time data,
+                      // never the fake-data preview.
+                      String topE = _emotionFreq.isNotEmpty
+                          ? (_emotionFreq.entries.toList()
+                                ..sort((a, b) => b.value.compareTo(a.value)))
+                              .first
+                              .key
+                          : 'Happy';
+                      String summaryInsight =
+                          'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
 
-                  await PdfReportService.generateReport(
-                    childName: _childName,
-                    summaryInsight: summaryInsight,
-                    emotionFreq: _emotionFreq,
-                    gameAvgStars: _gameAvgStars,
-                  );
-                },
+                      await PdfReportService.generateReport(
+                        childName: _childName,
+                        summaryInsight: summaryInsight,
+                        emotionFreq: _emotionFreq,
+                        gameAvgStars: _gameAvgStars,
+                      );
+                    },
+                  ),
+                ],
               )),
         ),
         Expanded(
@@ -4272,3 +4315,128 @@ class _InteractiveEmotionCardState extends State<_InteractiveEmotionCard> {
     );
   }
 }
+
+// ─── Mixed real/fake week-data system ─────────────────────────────────
+//
+// The Home tab and the Progress Dashboard's 4 charts both consume a
+// single [_WeekMetrics] object. The dispatcher
+// `_AnalyticsDashboardState._metricsForWeek(offset)` decides which
+// source to use:
+//
+//    offset ==  0   →  REAL data (Supabase + local services), filtered
+//                       to the current Mon-Sun window.
+//    offset == -1   →  FAKE data → `_kFakeWeeks[-1]`  ("Last Week")
+//    offset == -2   →  FAKE data → `_kFakeWeeks[-2]`  ("2 Weeks Ago")
+//
+// CRITICAL: real and fake data are never combined. `_WeekMetrics` is
+// produced wholesale by exactly one path. When the user picks "Last
+// Week" or "2 Weeks Ago" the live database isn't queried at all — we
+// just hand back the const fake snapshot. When they pick "This Week"
+// the fake snapshot is never consulted.
+//
+// The fake snapshots are *static* (compile-time `const` literals) so
+// they don't change between app launches or refreshes — caregivers
+// see the same demonstration data every time, which is exactly what
+// the brief required ("Keep static (not random every refresh)").
+// ──────────────────────────────────────────────────────────────────
+
+/// Emotion names that count as "positive" — used by both Home cards
+/// and Progress charts. Hoisted to a top-level const so the home tab
+/// and progress tab can share it without duplicating string literals.
+const Set<String> _kPositiveEmotions = {
+  // Child-friendly set
+  'Happy', 'Excited', 'Calm', 'Loved', 'Proud', 'Shy', 'Silly',
+  // Plutchik / legacy names — kept for backward-compat
+  'Joy', 'Trust', 'Anticipation', 'Surprise', 'Surprised', 'Love',
+};
+
+const Set<String> _kNegativeEmotions = {
+  // Child-friendly set
+  'Sad', 'Angry', 'Scared', 'Tired', 'Confused',
+  // Plutchik / legacy names
+  'Disgusted', 'Fear', 'Sadness', 'Disgust', 'Anger',
+};
+
+/// All numbers that drive a single week's worth of charts.
+///
+///   • [emotionFreq]    name → count, used by Home cards + Distribution
+///   • [positivePerDay] index 0=Sun … 6=Sat (matches Emotion Trend chart)
+///   • [negativePerDay] index 0=Sun … 6=Sat
+///   • [sessionsPerDay] index 0=Mon … 6=Sun (matches Engagement chart)
+///   • [gameMinutes]    raw activity id → minutes (for Activity bars +
+///                      "Most Played" Home card)
+///
+/// All four lists default to `[0,0,0,0,0,0,0]` and the maps default to
+/// empty so a missing offset still renders a clean empty state.
+class _WeekMetrics {
+  final Map<String, int> emotionFreq;
+  final List<int> positivePerDay;
+  final List<int> negativePerDay;
+  final List<int> sessionsPerDay;
+  final Map<String, int> gameMinutes;
+
+  const _WeekMetrics({
+    this.emotionFreq = const {},
+    this.positivePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.negativePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.sessionsPerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.gameMinutes = const {},
+  });
+}
+
+/// Static, hand-curated demo data for the two preview weeks.
+/// These never mutate at runtime and never read from the database.
+const Map<int, _WeekMetrics> _kFakeWeeks = {
+  // ── -1 = Last Week — a generally upbeat week ───────────────────────
+  -1: _WeekMetrics(
+    emotionFreq: {
+      'Happy': 8,
+      'Calm': 6,
+      'Excited': 4,
+      'Proud': 3,
+      'Sad': 2,
+      'Angry': 1,
+      'Confused': 1,
+    },
+    // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+    positivePerDay: [3, 4, 2, 3, 5, 4, 0],
+    negativePerDay: [0, 1, 1, 0, 0, 1, 1],
+    // Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    sessionsPerDay: [3, 2, 4, 3, 5, 2, 0],
+    gameMinutes: {
+      'EMOZZLE': 35,
+      'EMOPOP': 22,
+      'EMOSPELL': 18,
+      'EMOMATCH': 14,
+      'EMOSLASH': 8,
+      'EMOCATCH': 12,
+      'ANIMATCH': 10,
+      'Draw': 16,
+    },
+  ),
+  // ── -2 = 2 Weeks Ago — a more challenging week ─────────────────────
+  -2: _WeekMetrics(
+    emotionFreq: {
+      'Happy': 5,
+      'Calm': 4,
+      'Excited': 2,
+      'Sad': 3,
+      'Angry': 4,
+      'Tired': 2,
+      'Confused': 2,
+    },
+    positivePerDay: [1, 2, 2, 1, 3, 2, 0],
+    negativePerDay: [2, 1, 2, 1, 1, 2, 2],
+    sessionsPerDay: [2, 3, 1, 2, 3, 2, 1],
+    gameMinutes: {
+      'EMOZZLE': 18,
+      'EMOPOP': 28,
+      'EMOSPELL': 8,
+      'EMOMATCH': 6,
+      'EMOSLASH': 4,
+      'EMOCATCH': 0,
+      'ANIMATCH': 12,
+      'Draw': 8,
+    },
+  ),
+};
