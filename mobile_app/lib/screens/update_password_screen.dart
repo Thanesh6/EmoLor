@@ -66,6 +66,23 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
         UserAttributes(password: password),
       );
 
+      // IMPORTANT: After a password reset, Supabase leaves the
+      // password-recovery session active. If we navigate straight to
+      // '/login', the GoRouter redirect sees a logged-in user on an
+      // auth route and bounces them into the role-based dashboard
+      // (which, for a first-time caregiver, lands on profile creation /
+      // onboarding).
+      //
+      // We must explicitly sign the user out so they enter the login
+      // screen with NO session and have to re-authenticate using the
+      // new password.
+      try {
+        await Supabase.instance.client.auth.signOut();
+      } catch (_) {
+        // Sign-out failures are non-fatal — we still want to send the
+        // user to the login screen.
+      }
+
       if (mounted) {
         setState(() {
           _isSuccess = true;
@@ -77,7 +94,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
         ScaffoldMessenger.of(context).showMaterialBanner(
           MaterialBanner(
             content: Text(
-              'Password updated! Redirecting to login...',
+              'Password updated! Please log in with your new password.',
               style: GoogleFonts.fredoka(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -93,7 +110,9 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
             ScaffoldMessenger.of(context).clearMaterialBanners();
-            // UCD011 Step 11 — redirect to Login Page
+            // UCD011 Step 11 — redirect to Login Page.
+            // Session is already cleared above, so the GoRouter
+            // redirect will let the user stay on /login.
             context.go('/login');
           }
         });
