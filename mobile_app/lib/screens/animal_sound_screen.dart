@@ -113,6 +113,15 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
     ]).animate(CurvedAnimation(
         parent: _voiceCorrectPulseController, curve: Curves.easeInOut));
 
+    // Use transient-duck focus so the bg music ducks briefly instead of stopping.
+    _animalPlayer.setAudioContext(AudioContext(
+      android: AudioContextAndroid(
+        audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        contentType: AndroidContentType.sonification,
+        usageType: AndroidUsageType.game,
+      ),
+    ));
+
     _initTts();
     _shuffledAnimals = List.from(_animals)..shuffle(_rng);
     _loadEmojiQuestion();

@@ -19,6 +19,18 @@ class AudioService {
   final AudioPlayer _sfxPlayer = AudioPlayer();
   bool _bgRunning = false;
   BgMusicType? _currentBgType;
+  bool _sfxContextSet = false;
+
+  // SFX uses transient-duck focus: bg music briefly lowers its volume while
+  // the SFX plays, then Android automatically restores it. The music never stops.
+  static AudioContext get _sfxContext => AudioContext(
+    android: AudioContextAndroid(
+      audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+      stayAwake: false,
+      contentType: AndroidContentType.sonification,
+      usageType: AndroidUsageType.game,
+    ),
+  );
 
   // ─── WAV builder ──────────────────────────────────────────────────────────
 
@@ -315,7 +327,15 @@ class AudioService {
   }
 
   /// Play a one-shot sound effect (non-blocking).
+  /// Uses transient-duck audio focus so the background music is merely
+  /// lowered in volume during playback, not stopped.
   Future<void> playSfx(SoundEffect effect) async {
+    if (!_sfxContextSet) {
+      _sfxContextSet = true;
+      try {
+        await _sfxPlayer.setAudioContext(_sfxContext);
+      } catch (_) {}
+    }
     await _sfxPlayer.play(BytesSource(_get(effect)));
   }
 }
