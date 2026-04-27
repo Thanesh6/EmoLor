@@ -75,7 +75,11 @@ class ChildReward {
 /// Treasures can be purchased with stars.
 /// Themes apply a visual change when equipped.
 const List<ChildReward> _catalogue = [
-  // ── 1 Star ─────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  // EARLY REWARDS — 10 to 400 stars (easy wins to build momentum)
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── 10 Stars ───────────────────────────────────────────────────
   ChildReward(
     id: 'first_steps',
     title: 'First Steps',
@@ -83,9 +87,9 @@ const List<ChildReward> _catalogue = [
     description: 'You took your first steps on the adventure!',
     type: RewardType.badge,
     colorValue: 0xFF4ECDC4,
-    milestoneStars: 1,
+    milestoneStars: 10,
   ),
-  // ── 2 Stars ────────────────────────────────────────────────────
+  // ── 25 Stars ───────────────────────────────────────────────────
   ChildReward(
     id: 'tiny_spark',
     title: 'Tiny Spark',
@@ -93,9 +97,9 @@ const List<ChildReward> _catalogue = [
     description: 'Your very first spark of light!',
     type: RewardType.badge,
     colorValue: 0xFFFFD700,
-    milestoneStars: 2,
+    milestoneStars: 25,
   ),
-  // ── 3 Stars ────────────────────────────────────────────────────
+  // ── 50 Stars ───────────────────────────────────────────────────
   ChildReward(
     id: 'happy_smile',
     title: 'Happy Smile',
@@ -103,9 +107,9 @@ const List<ChildReward> _catalogue = [
     description: 'You made your first happy smile!',
     type: RewardType.badge,
     colorValue: 0xFFFF9F43,
-    milestoneStars: 3,
+    milestoneStars: 50,
   ),
-  // ── 5 Stars ────────────────────────────────────────────────────
+  // ── 75 Stars ───────────────────────────────────────────────────
   ChildReward(
     id: 'little_star',
     title: 'Little Star',
@@ -113,19 +117,19 @@ const List<ChildReward> _catalogue = [
     description: 'You are becoming a little star!',
     type: RewardType.badge,
     colorValue: 0xFFFFE66D,
-    milestoneStars: 5,
+    milestoneStars: 75,
   ),
-  // ── 10 Stars ───────────────────────────────────────────────────
+  // ── 100 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'super_ten',
-    title: 'Super Ten!',
+    title: 'Century Star',
     emoji: '🏅',
-    description: 'Wow! You collected 10 stars!',
+    description: 'Wow! You collected 100 stars! You\'re on fire!',
     type: RewardType.badge,
     colorValue: 0xFFFF6B6B,
-    milestoneStars: 10,
+    milestoneStars: 100,
   ),
-  // ── 15 Stars ───────────────────────────────────────────────────
+  // ── 150 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'golden_crown',
     title: 'Golden Crown',
@@ -133,9 +137,9 @@ const List<ChildReward> _catalogue = [
     description: 'A shining golden crown for a true champion!',
     type: RewardType.treasure,
     colorValue: 0xFFFFD700,
-    milestoneStars: 15,
+    milestoneStars: 150,
   ),
-  // ── 20 Stars ───────────────────────────────────────────────────
+  // ── 200 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'rainbow_heart',
     title: 'Rainbow Heart',
@@ -143,9 +147,9 @@ const List<ChildReward> _catalogue = [
     description: 'Your heart shines in every color!',
     type: RewardType.badge,
     colorValue: 0xFFAB47BC,
-    milestoneStars: 20,
+    milestoneStars: 200,
   ),
-  // ── 25 Stars ───────────────────────────────────────────────────
+  // ── 250 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'flower_power',
     title: 'Flower Power',
@@ -153,9 +157,9 @@ const List<ChildReward> _catalogue = [
     description: 'You are blossoming beautifully!',
     type: RewardType.treasure,
     colorValue: 0xFFFF7EB3,
-    milestoneStars: 25,
+    milestoneStars: 250,
   ),
-  // ── 30 Stars ───────────────────────────────────────────────────
+  // ── 300 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'magic_wand',
     title: 'Magic Wand',
@@ -163,9 +167,9 @@ const List<ChildReward> _catalogue = [
     description: 'Wave your magic wand and feel the magic!',
     type: RewardType.treasure,
     colorValue: 0xFF9C27B0,
-    milestoneStars: 30,
+    milestoneStars: 300,
   ),
-  // ── 35 Stars ───────────────────────────────────────────────────
+  // ── 400 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'butterfly_wings',
     title: 'Butterfly Wings',
@@ -173,19 +177,24 @@ const List<ChildReward> _catalogue = [
     description: 'You spread your beautiful wings!',
     type: RewardType.badge,
     colorValue: 0xFF00CEC9,
-    milestoneStars: 35,
+    milestoneStars: 400,
   ),
-  // ── 40 Stars ───────────────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════════════════════
+  // MIDDLE REWARDS — 500 to 1650 stars (moderate effort)
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── 500 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'brave_heart',
     title: 'Brave Heart',
     emoji: '💪',
-    description: 'You showed courage and bravery!',
+    description: 'You showed incredible courage and bravery!',
     type: RewardType.badge,
     colorValue: 0xFFE17055,
-    milestoneStars: 40,
+    milestoneStars: 500,
   ),
-  // ── 45 Stars ───────────────────────────────────────────────────
+  // ── 650 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'sunshine_theme',
     title: 'Sunshine Theme',
@@ -193,9 +202,9 @@ const List<ChildReward> _catalogue = [
     description: 'Bright and warm like the sun!',
     type: RewardType.theme,
     colorValue: 0xFFFF9F43,
-    milestoneStars: 45,
+    milestoneStars: 650,
   ),
-  // ── 50 Stars ───────────────────────────────────────────────────
+  // ── 800 Stars ──────────────────────────────────────────────────
   ChildReward(
     id: 'teddy_friend',
     title: 'Teddy Friend',
@@ -203,9 +212,9 @@ const List<ChildReward> _catalogue = [
     description: 'You earned a cuddly teddy friend!',
     type: RewardType.treasure,
     colorValue: 0xFFDEB887,
-    milestoneStars: 50,
+    milestoneStars: 800,
   ),
-  // ── 55 Stars ───────────────────────────────────────────────────
+  // ── 1000 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'paint_splash',
     title: 'Paint Splash',
@@ -213,9 +222,9 @@ const List<ChildReward> _catalogue = [
     description: 'You painted your emotions beautifully!',
     type: RewardType.badge,
     colorValue: 0xFFBB6BD9,
-    milestoneStars: 55,
+    milestoneStars: 1000,
   ),
-  // ── 60 Stars ───────────────────────────────────────────────────
+  // ── 1100 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'music_maker',
     title: 'Music Maker',
@@ -223,9 +232,9 @@ const List<ChildReward> _catalogue = [
     description: 'You found the music in your feelings!',
     type: RewardType.treasure,
     colorValue: 0xFF74B9FF,
-    milestoneStars: 60,
+    milestoneStars: 1100,
   ),
-  // ── 65 Stars ───────────────────────────────────────────────────
+  // ── 1200 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'ocean_theme',
     title: 'Ocean Theme',
@@ -233,9 +242,9 @@ const List<ChildReward> _catalogue = [
     description: 'Dive deep into the ocean adventure!',
     type: RewardType.theme,
     colorValue: 0xFF00838F,
-    milestoneStars: 65,
+    milestoneStars: 1200,
   ),
-  // ── 70 Stars ───────────────────────────────────────────────────
+  // ── 1300 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'rocket_blast',
     title: 'Rocket Blast',
@@ -243,9 +252,9 @@ const List<ChildReward> _catalogue = [
     description: 'Blast off into the emotional galaxy!',
     type: RewardType.badge,
     colorValue: 0xFF1565C0,
-    milestoneStars: 70,
+    milestoneStars: 1300,
   ),
-  // ── 75 Stars ───────────────────────────────────────────────────
+  // ── 1400 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'forest_theme',
     title: 'Forest Theme',
@@ -253,9 +262,9 @@ const List<ChildReward> _catalogue = [
     description: 'Explore the magical enchanted forest!',
     type: RewardType.theme,
     colorValue: 0xFF2E7D32,
-    milestoneStars: 75,
+    milestoneStars: 1400,
   ),
-  // ── 80 Stars ───────────────────────────────────────────────────
+  // ── 1500 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'crystal_ball',
     title: 'Crystal Ball',
@@ -263,17 +272,122 @@ const List<ChildReward> _catalogue = [
     description: 'See your feelings shining inside the crystal!',
     type: RewardType.treasure,
     colorValue: 0xFF7C4DFF,
-    milestoneStars: 80,
+    milestoneStars: 1500,
   ),
-  // ── 85 Stars ───────────────────────────────────────────────────
+  // ── 1650 Stars ─────────────────────────────────────────────────
   ChildReward(
     id: 'champion_trophy',
     title: 'Champion Trophy',
     emoji: '🏆',
-    description: 'You are the ultimate EmoLor champion!',
+    description: 'You are a true EmoLor champion!',
     type: RewardType.badge,
     colorValue: 0xFFFF6B81,
-    milestoneStars: 85,
+    milestoneStars: 1650,
+  ),
+
+  // ══════════════════════════════════════════════════════════════════
+  // LATE REWARDS — 1750 to 5000 stars (hardest, most prestigious)
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── 1750 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'star_explorer',
+    title: 'Star Explorer',
+    emoji: '🌠',
+    description: 'You have explored the farthest reaches of the sky!',
+    type: RewardType.badge,
+    colorValue: 0xFF5C6BC0,
+    milestoneStars: 1750,
+  ),
+  // ── 2000 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'dragon_friend',
+    title: 'Dragon Friend',
+    emoji: '🐉',
+    description: 'A mighty dragon bows to your emotional strength!',
+    type: RewardType.treasure,
+    colorValue: 0xFF388E3C,
+    milestoneStars: 2000,
+  ),
+  // ── 2250 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'rainbow_wizard',
+    title: 'Rainbow Wizard',
+    emoji: '🧙',
+    description: 'You cast spells of kindness and understanding!',
+    type: RewardType.theme,
+    colorValue: 0xFF7B1FA2,
+    milestoneStars: 2250,
+  ),
+  // ── 2500 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'space_commander',
+    title: 'Space Commander',
+    emoji: '👨‍🚀',
+    description: 'Commander of the emotional universe!',
+    type: RewardType.badge,
+    colorValue: 0xFF0277BD,
+    milestoneStars: 2500,
+  ),
+  // ── 2750 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'golden_phoenix',
+    title: 'Golden Phoenix',
+    emoji: '🔥',
+    description: 'You rise stronger every single time!',
+    type: RewardType.badge,
+    colorValue: 0xFFEF6C00,
+    milestoneStars: 2750,
+  ),
+  // ── 3000 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'diamond_shield',
+    title: 'Diamond Shield',
+    emoji: '💎',
+    description: 'Your emotional resilience is unbreakable!',
+    type: RewardType.treasure,
+    colorValue: 0xFF00ACC1,
+    milestoneStars: 3000,
+  ),
+  // ── 3500 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'mystic_dragon',
+    title: 'Mystic Dragon',
+    emoji: '🌋',
+    description: 'Ancient wisdom and fierce feelings — all yours!',
+    type: RewardType.theme,
+    colorValue: 0xFFC62828,
+    milestoneStars: 3500,
+  ),
+  // ── 4000 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'cosmic_legend',
+    title: 'Cosmic Legend',
+    emoji: '🌌',
+    description: 'A legend written across the stars themselves!',
+    type: RewardType.badge,
+    colorValue: 0xFF283593,
+    milestoneStars: 4000,
+  ),
+  // ── 4500 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'eternal_star',
+    title: 'Eternal Star',
+    emoji: '💫',
+    description: 'Your light will shine forever and ever!',
+    type: RewardType.treasure,
+    colorValue: 0xFFF9A825,
+    milestoneStars: 4500,
+  ),
+  // ── 5000 Stars ─────────────────────────────────────────────────
+  ChildReward(
+    id: 'emolor_master',
+    title: 'EmoLor Master',
+    emoji: '🌟',
+    description: 'The ultimate EmoLor achievement — you mastered your emotions!',
+    type: RewardType.badge,
+    colorValue: 0xFF6D28D9,
+    milestoneStars: 5000,
   ),
 ];
 
