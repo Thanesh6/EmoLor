@@ -370,7 +370,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 8),
                   // Wheel picker — replaces the keyboard-based input.
                   // Children pick a number by scrolling, just like the
                   // hours / minutes pickers on the Time card.
