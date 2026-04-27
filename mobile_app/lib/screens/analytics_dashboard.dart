@@ -876,19 +876,15 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     return target;
   }
 
-  /// User-friendly week selector label.
-  /// Only three values are valid (offset is clamped to [-2, 0]).
+  /// Week selector label in `DD/MM/YYYY – DD/MM/YYYY` format
+  /// (Mon → Sun of the selected week). Only offsets 0, -1, -2 are
+  /// valid (clamped at the InkWell level).
   String _weekLabel(int offset) {
-    switch (offset) {
-      case 0:
-        return 'This Week';
-      case -1:
-        return 'Last Week';
-      case -2:
-        return '2 Weeks Ago';
-      default:
-        return 'Week';
-    }
+    final start = _weekStartDate(offset);
+    final end = start.add(const Duration(days: 6));
+    String two(int n) => n.toString().padLeft(2, '0');
+    String fmt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year}';
+    return '${fmt(start)} – ${fmt(end)}';
   }
 
   // ── Real / fake week metrics dispatcher ──────────────────────────
@@ -1022,7 +1018,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
             child: Text(
               _weekLabel(_selectedWeekOffset),
               style: _textStyle(
-                  fontSize: 15,
+                  fontSize: 13,
                   color: const Color(0xFF6B21A8),
                   fontWeight: FontWeight.w600),
             ),
