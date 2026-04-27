@@ -582,16 +582,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     }
   }
 
-  /// Build the active-goals list with **real** progress values pulled from
-  /// the same data sources the rest of the dashboard uses
-  /// (StarService, CompletionService, EmotionJournalService).
+  /// Build the active-goals list with **real** progress values.
   ///
-  /// Window per duration:
-  ///   today      → since 00:00 today
-  ///   thisWeek   → since Monday 00:00
-  ///   thisMonth  → since the 1st 00:00
-  /// Goals created mid-window count from their createdAt instead, so the bar
-  /// never includes activity that happened before the goal was set.
+  /// Delegates the math to `GoalService.liveCurrentForGoal` so the
+  /// caregiver dashboard and analytics dashboard share one definition
+  /// of progress. Goals created mid-window count from their createdAt
+  /// instead of the window start, which is handled inside the service.
   Future<List<Map<String, dynamic>>> _activeGoalsWithProgress() async {
     final goals = await GoalService.getAllGoals();
     if (goals.isEmpty) return [];
@@ -599,24 +595,6 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final completions = await CompletionService.history();
     final journal = await EmotionJournalService.getEntries();
     final totalStars = await StarService.getTotalStars();
-    final now = DateTime.now();
-
-    DateTime windowStart(GoalDuration d, DateTime createdAt) {
-      DateTime period;
-      switch (d) {
-        case GoalDuration.today:
-          period = DateTime(now.year, now.month, now.day);
-          break;
-        case GoalDuration.thisWeek:
-          final ws = now.subtract(Duration(days: now.weekday - 1));
-          period = DateTime(ws.year, ws.month, ws.day);
-          break;
-        case GoalDuration.thisMonth:
-          period = DateTime(now.year, now.month, 1);
-          break;
-      }
-      return createdAt.isAfter(period) ? createdAt : period;
-    }
 
     const colourMap = {
       GoalCategory.starCollection: 'orange',
@@ -626,32 +604,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     };
 
     return goals.map((g) {
-      final start = windowStart(g.duration, g.createdAt);
-      int current;
-      switch (g.category) {
-        case GoalCategory.starCollection:
-          // Stars are cumulative per profile — best signal we have is
-          // total stars, capped at target so the bar fills cleanly.
-          current = totalStars;
-          break;
-        case GoalCategory.activityCompletion:
-          current = completions
-              .where((c) => c.completedAt.isAfter(start))
-              .length;
-          break;
-        case GoalCategory.timeSpent:
-          final secs = completions
-              .where((c) => c.completedAt.isAfter(start))
-              .fold<int>(0, (sum, c) => sum + c.timeSpentSeconds);
-          current = (secs / 60).round(); // target is in minutes
-          break;
-        case GoalCategory.moodLogging:
-          current = journal.where((e) {
-            final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
-            return ts != null && ts.isAfter(start);
-          }).length;
-          break;
-      }
+      final current = GoalService.liveCurrentForGoal(
+        g,
+        totalStars: totalStars,
+        completions: completions,
+        journal: journal,
+      );
       return <String, dynamic>{
         'id': g.id,
         'label':

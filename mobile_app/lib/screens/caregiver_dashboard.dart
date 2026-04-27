@@ -243,13 +243,29 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
         _gameStats = gStats;
         _dailyBreakdown = daily;
         _allJournal = journal;
-        _activeGoals = goals.map((g) => <String, dynamic>{
-          'id': g.id,
-          'label': '${g.category.label} — ${g.target} ${g.duration.label}',
-          'progress': g.progressFraction,
-          'current': g.currentProgress,
-          'target': g.target,
-          'emoji': g.category.emoji,
+        // FIX: g.progressFraction / g.currentProgress are stored fields
+        // that nothing in the codebase ever updates — they stay at 0
+        // forever, which is why the bar appeared empty.
+        // Compute live current/fraction from the real data sources we
+        // already loaded (totalStars + completions + journal).
+        _activeGoals = goals.map((g) {
+          final current = GoalService.liveCurrentForGoal(
+            g,
+            totalStars: stars,
+            completions: completions,
+            journal: journal,
+          );
+          final fraction = g.target > 0
+              ? (current / g.target).clamp(0.0, 1.0)
+              : 0.0;
+          return <String, dynamic>{
+            'id': g.id,
+            'label': '${g.category.label} — ${g.category.unitLabel(g.target)}',
+            'progress': fraction,
+            'current': current,
+            'target': g.target,
+            'emoji': g.category.emoji,
+          };
         }).toList();
       });
     }
@@ -1267,15 +1283,32 @@ class _CaregiverDashboardState extends State<CaregiverDashboard>
             onPressed: () async {
               final saved = await NewGoalDialog.show(context);
               if (saved == true) {
+                // After saving a new goal, re-fetch the data sources
+                // so the new entry shows live progress alongside the
+                // existing ones (rather than 0 from the stored field).
                 final goals = await GoalService.getAllGoals();
+                final completions = await CompletionService.history();
+                final journal = await EmotionJournalService.getEntries();
+                final stars = await StarService.getTotalStars();
                 if (mounted) {
-                  setState(() => _activeGoals = goals.map((g) => <String, dynamic>{
-                    'id': g.id,
-                    'label': '${g.category.label} — ${g.target} ${g.duration.label}',
-                    'progress': g.progressFraction,
-                    'current': g.currentProgress,
-                    'target': g.target,
-                    'emoji': g.category.emoji,
+                  setState(() => _activeGoals = goals.map((g) {
+                    final current = GoalService.liveCurrentForGoal(
+                      g,
+                      totalStars: stars,
+                      completions: completions,
+                      journal: journal,
+                    );
+                    final fraction = g.target > 0
+                        ? (current / g.target).clamp(0.0, 1.0)
+                        : 0.0;
+                    return <String, dynamic>{
+                      'id': g.id,
+                      'label': '${g.category.label} — ${g.category.unitLabel(g.target)}',
+                      'progress': fraction,
+                      'current': current,
+                      'target': g.target,
+                      'emoji': g.category.emoji,
+                    };
                   }).toList());
                 }
               }

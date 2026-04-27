@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../../child/models/completion_record.dart';
 
 // ── Data models ──────────────────────────────────────────────────────
 
@@ -378,6 +379,105 @@ class GoalService {
     final prefs = await SharedPreferences.getInstance();
     final key = await _storageKeyAsync();
     await prefs.remove(key);
+  }
+
+  // ── Live progress calculation ────────────────────────────────────
+  //
+  // The stored `currentProgress` field is never written to in this
+  // codebase — the games and emotion screens log their data into
+  // StarService / CompletionService / EmotionJournalService directly.
+  // Computing the goal's "current" value live from those sources is
+  // what actually drives the progress bars in the caregiver and
+  // analytics dashboards.
+  //
+  // Per-goal window:
+  //   today      → since 00:00 today
+  //   thisWeek   → since Monday 00:00
+  //   thisMonth  → since the 1st 00:00
+  //
+  // Goals created mid-window count from their `createdAt` instead, so
+  // the bar never includes activity that happened before the goal was
+  // set.
+
+  /// Pure helper — given the raw data sources, returns the live
+  /// `current` integer for [goal]. Callers fetch the data themselves
+  /// (this keeps the helper deterministic and easy to test).
+  static int liveCurrentForGoal(
+    PerformanceGoal goal, {
+    required int totalStars,
+    required List<CompletionRecord> completions,
+    required List<Map<String, dynamic>> journal,
+    DateTime? now,
+  }) {
+    final n = now ?? DateTime.now();
+
+    DateTime windowStart() {
+      DateTime period;
+      switch (goal.duration) {
+        case GoalDuration.today:
+          period = DateTime(n.year, n.month, n.day);
+          break;
+        case GoalDuration.thisWeek:
+          final ws = n.subtract(Duration(days: n.weekday - 1));
+          period = DateTime(ws.year, ws.month, ws.day);
+          break;
+        case GoalDuration.thisMonth:
+          period = DateTime(n.year, n.month, 1);
+          break;
+      }
+      return goal.createdAt.isAfter(period) ? goal.createdAt : period;
+    }
+
+    final start = windowStart();
+
+    switch (goal.category) {
+      case GoalCategory.starCollection:
+        // Stars are cumulative per profile. We don't have per-day star
+        // history, so the best signal is the running total — clamped
+        // to the target so the bar reads cleanly when over-target.
+        return totalStars;
+
+      case GoalCategory.activityCompletion:
+        return completions
+            .where((c) => c.completedAt.isAfter(start))
+            .length;
+
+      case GoalCategory.timeSpent:
+        // Target is in minutes; timeSpentSeconds adds up across all
+        // in-window completions and rounds to whole minutes.
+        final secs = completions
+            .where((c) => c.completedAt.isAfter(start))
+            .fold<int>(0, (sum, c) => sum + c.timeSpentSeconds);
+        return (secs / 60).round();
+
+      case GoalCategory.moodLogging:
+        return journal.where((e) {
+          final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
+          return ts != null && ts.isAfter(start);
+        }).length;
+    }
+  }
+
+  /// Convenience wrapper — compute the [0.0, 1.0] progress fraction for
+  /// the given goal using the same data sources as
+  /// [liveCurrentForGoal]. Always clamped so progress bars never
+  /// overflow.
+  static double liveProgressFraction(
+    PerformanceGoal goal, {
+    required int totalStars,
+    required List<CompletionRecord> completions,
+    required List<Map<String, dynamic>> journal,
+    DateTime? now,
+  }) {
+    if (goal.target <= 0) return 0.0;
+    final cur = liveCurrentForGoal(
+      goal,
+      totalStars: totalStars,
+      completions: completions,
+      journal: journal,
+      now: now,
+    );
+    return (cur / goal.target).clamp(0.0, 1.0);
   }
 
   // ── Private helpers ──────────────────────────────────────────────
