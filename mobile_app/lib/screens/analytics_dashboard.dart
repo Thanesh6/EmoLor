@@ -935,6 +935,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
   /// Only used when the selected week is "This Week" — we deliberately
   /// keep the real data path completely separate from the fake dataset
   /// so neither can leak into the other.
+  ///
+  /// IMPORTANT: every field here is computed from data the current child
+  /// profile actually saved. We never inject placeholder numbers for
+  /// "This Week" — an empty week stays empty, which is exactly what the
+  /// flashcards/charts need to show a clean zero/empty state.
   _WeekMetrics _realCurrentWeekMetrics() {
     const positiveSet = _kPositiveEmotions;
     const negativeSet = _kNegativeEmotions;
@@ -942,20 +947,18 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final weekStart = _weekStartDate(0);
     final weekEnd = weekStart.add(const Duration(days: 7));
 
-    // Filter journal to current week.
+    // ── Emotion journal (in-game emoji interactions) ──────────────
     final weekJournal = _recentJournal.where((e) {
       final ts = DateTime.tryParse(e['timestamp'] as String? ?? '');
       return ts != null && ts.isAfter(weekStart) && ts.isBefore(weekEnd);
     }).toList();
 
-    // Emotion frequency for the week.
     final Map<String, int> freq = {};
     for (final e in weekJournal) {
       final em = e['emotion'] as String? ?? '';
       if (em.isNotEmpty) freq[em] = (freq[em] ?? 0) + 1;
     }
 
-    // Per-day positive / negative counts (Sun=0 … Sat=6).
     final positivePerDay = List<int>.filled(7, 0);
     final negativePerDay = List<int>.filled(7, 0);
     for (final entry in weekJournal) {
@@ -971,21 +974,19 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       }
     }
 
-    // Filter completions to current week.
+    // ── Completions (game finishes) ───────────────────────────────
     final weekCompletions = _allCompletions
         .where((c) =>
             c.completedAt.isAfter(weekStart) &&
             c.completedAt.isBefore(weekEnd))
         .toList();
 
-    // Sessions per day (Mon=0 … Sun=6 to match Engagement chart labels).
     final sessionsPerDay = List<int>.filled(7, 0);
     for (final c in weekCompletions) {
       final dow = c.completedAt.weekday; // Mon=1..Sun=7
       sessionsPerDay[dow - 1]++;
     }
 
-    // Game minutes per activity.
     const validActivities = [
       'EMOZZLE', 'EMOPOP', 'EMOSPELL', 'EMOMATCH',
       'EMOSLASH', 'EMOCATCH', 'ANIMATCH', 'Draw',
@@ -1000,13 +1001,139 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       for (final e in gameSecs.entries) e.key: (e.value / 60).round(),
     };
 
+    // Stars earned this week (sum across all in-week completions).
+    final int starsEarned =
+        weekCompletions.fold<int>(0, (sum, c) => sum + c.starsEarned);
+
+    // ── Pre / Post session emotions (Supabase child_sessions) ─────
+    //
+    // Active-session rule: only sessions that have been *fully saved*
+    // count. A session row is created when the child picks the pre
+    // emotion, but `post_emotion_name` only lands when they finish
+    // the post-feel screen — so any in-flight session shows up with
+    // a null post and is excluded from post counts and from the
+    // "Total Sessions" tile.
+    final weekSessions = _childSessions.where((s) {
+      final ts = DateTime.tryParse(s['session_date'] as String? ?? '');
+      return ts != null && ts.isAfter(weekStart) && ts.isBefore(weekEnd);
+    }).toList();
+
+    final Map<String, int> preFreq = {};
+    final Map<String, int> postFreq = {};
+    final prePerDay = List<int>.filled(7, 0);
+    final postPerDay = List<int>.filled(7, 0);
+    final Map<String, Map<String, int>> colorByEmotion = {};
+    int totalSessions = 0;
+
+    void incColour(String emotion, String? hex) {
+      if (hex == null || hex.isEmpty) return;
+      final norm = hex.toUpperCase();
+      colorByEmotion
+          .putIfAbsent(emotion, () => <String, int>{})
+          .update(norm, (v) => v + 1, ifAbsent: () => 1);
+    }
+
+    for (final s in weekSessions) {
+      final tsRaw = s['session_date'] as String? ?? '';
+      final ts = DateTime.tryParse(tsRaw)?.toLocal();
+      final dow = ts == null ? -1 : ts.weekday % 7; // Sun=0..Sat=6
+
+      final preName = (s['pre_emotion_name'] as String?)?.trim();
+      final postName = (s['post_emotion_name'] as String?)?.trim();
+
+      if (preName != null && preName.isNotEmpty) {
+        preFreq[preName] = (preFreq[preName] ?? 0) + 1;
+        if (dow >= 0 && dow < 7) prePerDay[dow]++;
+        incColour(preName, (s['pre_emotion_colour'] as String?)?.trim());
+      }
+      if (postName != null && postName.isNotEmpty) {
+        postFreq[postName] = (postFreq[postName] ?? 0) + 1;
+        if (dow >= 0 && dow < 7) postPerDay[dow]++;
+        incColour(postName, (s['post_emotion_colour'] as String?)?.trim());
+        // A session is "complete" only once post is saved.
+        if (preName != null && preName.isNotEmpty) totalSessions++;
+      }
+    }
+
+    // ── Goals snapshot ────────────────────────────────────────────
+    // _activeGoals is already loaded with profile-scoped real progress.
+    final goalSnapshots = <_GoalSnapshot>[];
+    for (final g in _activeGoals) {
+      final colourName = g['color'] as String? ?? 'purple';
+      final argb = _goalColourArgb(colourName);
+      goalSnapshots.add(_GoalSnapshot(
+        label: g['label'] as String? ?? '',
+        current: (g['current'] as num?)?.toInt() ?? 0,
+        target: (g['target'] as num?)?.toInt() ?? 0,
+        emoji: g['emoji'] as String? ?? '🎯',
+        colorValue: argb,
+      ));
+    }
+
     return _WeekMetrics(
       emotionFreq: freq,
       positivePerDay: positivePerDay,
       negativePerDay: negativePerDay,
       sessionsPerDay: sessionsPerDay,
       gameMinutes: gameMinutes,
+      preEmotionFreq: preFreq,
+      postEmotionFreq: postFreq,
+      prePerDay: prePerDay,
+      postPerDay: postPerDay,
+      colorByEmotion: colorByEmotion,
+      goals: goalSnapshots,
+      starsEarned: starsEarned,
+      totalSessions: totalSessions,
     );
+  }
+
+  /// Map the symbolic colour name produced by `_activeGoalsWithProgress`
+  /// to an ARGB int that `_GoalSnapshot.colorValue` accepts.
+  int _goalColourArgb(String colour) {
+    switch (colour) {
+      case 'orange': return 0xFFF59E0B;
+      case 'blue':   return 0xFF3B82F6;
+      case 'teal':   return 0xFF14B8A6;
+      case 'purple': return 0xFF8B5CF6;
+      default:       return 0xFF8B5CF6;
+    }
+  }
+
+  /// Parse a `#RRGGBB` (or `#AARRGGBB`) hex string into a [Color].
+  /// Falls back to grey for empty/garbage input.
+  Color _hexToColor(String hex) {
+    var h = hex.trim();
+    if (h.startsWith('#')) h = h.substring(1);
+    if (h.length == 6) h = 'FF$h';
+    final v = int.tryParse(h, radix: 16);
+    if (v == null) return Colors.grey.shade400;
+    return Color(v);
+  }
+
+  /// Friendly short label for a colour hex used inside flashcards.
+  /// We don't need a full named-colour resolver — the closest of the
+  /// 12 EmoLor palette swatches is good enough for caregiver-facing
+  /// copy.
+  String _humanHex(String hex) {
+    const named = <String, String>{
+      '#EF4444': 'Red',
+      '#F97316': 'Orange',
+      '#FFE66D': 'Yellow',
+      '#22C55E': 'Green',
+      '#7ED957': 'Green',
+      '#4ECDC4': 'Teal',
+      '#60A5FA': 'Blue',
+      '#74B9FF': 'Light Blue',
+      '#8B5CF6': 'Purple',
+      '#A29BFE': 'Lavender',
+      '#EC4899': 'Pink',
+      '#FF7EB3': 'Rose',
+      '#FF9F43': 'Amber',
+      '#FFB088': 'Peach',
+      '#9CA3AF': 'Grey',
+    };
+    final norm = hex.toUpperCase();
+    return named[norm] ?? hex;
   }
 
   // ── AI insight: trim helper, prompt builder, generator ──────────
@@ -1441,115 +1568,98 @@ gently. Plain text only — no markdown, no headings, no emojis.
   }
 
   Widget _buildHomeTab() {
-    const positiveSet = _kPositiveEmotions;
-    const negativeSet = _kNegativeEmotions;
-
-    // Single source of truth for the selected week — switches between
-    // real and fake data internally so this build method never has to
-    // know which path produced the numbers.
+    // Single source of truth for the selected week — real data for "This
+    // Week", static fake snapshot for past weeks. Every flashcard reads
+    // from this object and ONLY this object, so labels and numbers can
+    // never drift apart.
     final metrics = _metricsForWeek(_selectedWeekOffset);
-    final freq = metrics.emotionFreq;
 
-    int posCount = 0;
-    int negCount = 0;
-    freq.forEach((emotion, count) {
-      if (positiveSet.contains(emotion)) {
-        posCount += count;
-      } else if (negativeSet.contains(emotion)) {
-        negCount += count;
-      }
-    });
-    final totalPolarised = posCount + negCount;
-
-    // Card 1 — Weekly Feelings
-    String weeklyLabel;
-    String weeklySub;
-    Color weeklyColor;
-    String weeklyEmoji;
-    if (totalPolarised == 0) {
-      weeklyLabel = 'No data';
-      weeklySub = 'No entries this week';
-      weeklyColor = Colors.grey;
-      weeklyEmoji = '🌤️';
-    } else if (posCount >= negCount) {
-      final pct = ((posCount / totalPolarised) * 100).round();
-      weeklyLabel = 'Mostly Positive';
-      weeklySub = '$pct% positive';
-      weeklyColor = const Color(0xFF10B981);
-      weeklyEmoji = '🌞';
-    } else {
-      final pct = ((negCount / totalPolarised) * 100).round();
-      weeklyLabel = 'Mostly Negative';
-      weeklySub = '$pct% negative';
-      weeklyColor = const Color(0xFFEF4444);
-      weeklyEmoji = '🌧️';
+    // Helper — pick the highest-count emotion from a frequency map.
+    MapEntry<String, int>? topEntry(Map<String, int> m) {
+      if (m.isEmpty) return null;
+      return m.entries.reduce((a, b) => b.value > a.value ? b : a);
     }
 
-    // Card 2 — Most Played (from gameMinutes map directly).
-    String mostPlayedGame = '—';
-    String mostPlayedTime = '0 mins';
-    if (metrics.gameMinutes.isNotEmpty) {
-      final sorted = metrics.gameMinutes.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      if (sorted.first.value > 0) {
-        mostPlayedGame = _brandedGameName(sorted.first.key);
-        mostPlayedTime = '${sorted.first.value} mins';
-      }
-    }
+    // ── Card 1 — Total Sessions (fully-completed pre+post pairs) ─
+    final int totalSessions = metrics.totalSessions;
+    final String sessionsValue = '$totalSessions';
+    final String sessionsSub = totalSessions == 0
+        ? 'No sessions yet'
+        : (totalSessions == 1 ? 'session this week' : 'sessions this week');
 
-    // Cards 3 & 4 — Frequent positive / negative
-    MapEntry<String, int>? topPositive;
-    MapEntry<String, int>? topNegative;
-    freq.forEach((emotion, count) {
-      if (positiveSet.contains(emotion)) {
-        if (topPositive == null || count > topPositive!.value) {
-          topPositive = MapEntry(emotion, count);
+    // ── Card 2 — Most Common Pre-Session Emotion ─────────────────
+    final preTop = topEntry(metrics.preEmotionFreq);
+    final preName = preTop?.key ?? '—';
+    final preEmoji = preTop != null ? (_eEmojis[preName] ?? '🙂') : '🌤️';
+    final preSub = preTop != null
+        ? '${preTop.value}× before sessions'
+        : 'No pre-session data';
+
+    // ── Card 3 — Most Common Post-Session Emotion ────────────────
+    final postTop = topEntry(metrics.postEmotionFreq);
+    final postName = postTop?.key ?? '—';
+    final postEmoji = postTop != null ? (_eEmojis[postName] ?? '🙂') : '🌤️';
+    final postSub = postTop != null
+        ? '${postTop.value}× after sessions'
+        : 'No post-session data';
+
+    // ── Card 4 — Top Mood Colour ─────────────────────────────────
+    // Pick the emotion-colour pair the child reached for most this week.
+    String topColourEmotion = '—';
+    String topColourHex = '';
+    int topColourCount = 0;
+    metrics.colorByEmotion.forEach((emotion, byHex) {
+      byHex.forEach((hex, count) {
+        if (count > topColourCount) {
+          topColourCount = count;
+          topColourEmotion = emotion;
+          topColourHex = hex;
         }
-      } else if (negativeSet.contains(emotion)) {
-        if (topNegative == null || count > topNegative!.value) {
-          topNegative = MapEntry(emotion, count);
-        }
-      }
+      });
     });
+    final Color topColourSwatch = topColourCount > 0
+        ? _hexToColor(topColourHex)
+        : (postTop != null
+            ? EmotionColourMapping.colorFor(postName)
+            : Colors.grey.shade400);
+    final String topColourValue =
+        topColourCount > 0 ? topColourEmotion : '—';
+    final String topColourSub = topColourCount > 0
+        ? '${_humanHex(topColourHex)} • $topColourCount×'
+        : 'No colour pairs yet';
 
-    final freqPosName = topPositive?.key ?? '—';
-    final freqPosEmoji = _eEmojis[freqPosName] ?? '😊';
-    final freqPosSub = topPositive != null
-        ? '${topPositive!.value}×'
-        : 'Not yet';
+    // ── Card 5 — Goals Completed ─────────────────────────────────
+    final int goalsTotal = metrics.goals.length;
+    final int goalsDone =
+        metrics.goals.where((g) => g.isCompleted).length;
+    final String goalsValue =
+        goalsTotal == 0 ? '—' : '$goalsDone / $goalsTotal';
+    final String goalsSub = goalsTotal == 0
+        ? 'No goals set'
+        : (goalsDone == goalsTotal
+            ? 'All complete!'
+            : '${goalsTotal - goalsDone} in progress');
 
-    final freqNegName = topNegative?.key ?? '—';
-    final freqNegEmoji = _eEmojis[freqNegName] ?? '😔';
-    final freqNegSub = topNegative != null
-        ? '${topNegative!.value}×'
-        : 'Not yet';
-
-    // Card 5 — Emotion Variety
-    final distinctEmotions = freq.keys
-        .where((k) => positiveSet.contains(k) || negativeSet.contains(k))
-        .length;
-
-    // Card 6 — Top Mood Colour
-    final dominantEmotion = posCount >= negCount ? topPositive : topNegative;
-    final dominantName = dominantEmotion?.key ?? '—';
-    final dominantColour = dominantEmotion != null
-        ? EmotionColourMapping.colorFor(dominantName)
-        : Colors.grey.shade400;
+    // ── Card 6 — Stars Earned ────────────────────────────────────
+    final int stars = metrics.starsEarned;
+    final String starsValue = '$stars';
+    final String starsSub = stars == 0
+        ? 'No stars yet'
+        : (stars == 1 ? 'star this week' : 'stars this week');
 
     final card1 = _buildHomeCard(
-        weeklyEmoji, 'Weekly Feelings', weeklyLabel, weeklyColor, weeklySub);
-    final card2 = _buildHomeCard(
-        '🎮', 'Most Played', mostPlayedGame, Colors.amber, mostPlayedTime);
-    final card3 = _buildHomeCard(freqPosEmoji, 'Frequent Positive',
-        freqPosName, const Color(0xFF10B981), freqPosSub);
-    final card4 = _buildHomeCard(freqNegEmoji, 'Frequent Negative',
-        freqNegName, const Color(0xFFEF4444), freqNegSub);
-    final card5 = _buildHomeCard(
-        '🌈', 'Emotion Variety', '$distinctEmotions',
-        const Color(0xFF8B5CF6),
-        distinctEmotions == 1 ? 'emotion felt' : 'different emotions');
-    final card6 = _buildHomeCard('🎨', 'Top Mood Colour', dominantName,
-        dominantColour, 'Linked to My Colours');
+        '🎯', 'Total Sessions', sessionsValue,
+        const Color(0xFF6366F1), sessionsSub);
+    final card2 = _buildHomeCard(preEmoji, 'Top Pre-Session Emotion',
+        preName, const Color(0xFF60A5FA), preSub);
+    final card3 = _buildHomeCard(postEmoji, 'Top Post-Session Emotion',
+        postName, const Color(0xFF10B981), postSub);
+    final card4 = _buildHomeCard('🎨', 'Top Mood Colour',
+        topColourValue, topColourSwatch, topColourSub);
+    final card5 = _buildHomeCard('🏁', 'Goals Completed',
+        goalsValue, const Color(0xFF8B5CF6), goalsSub);
+    final card6 = _buildHomeCard('⭐', 'Stars Earned',
+        starsValue, const Color(0xFFF59E0B), starsSub);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -2195,20 +2305,6 @@ gently. Plain text only — no markdown, no headings, no emojis.
   }
 
   Widget _buildProgressTab() {
-    // The 7 games on the Play screen + the Draw activity. Both bar chart
-    // (Activity Performance) and any other per-activity widget should
-    // iterate in this order so the x-axis stays consistent.
-    const coreGames = [
-      'EMOZZLE',
-      'EMOPOP',
-      'EMOSPELL',
-      'EMOMATCH',
-      'EMOSLASH',
-      'EMOCATCH',
-      'ANIMATCH',
-      'Draw',
-    ];
-
     const positiveEmotions = _kPositiveEmotions;
     const negativeEmotions = _kNegativeEmotions;
 
@@ -2218,11 +2314,11 @@ gently. Plain text only — no markdown, no headings, no emojis.
     // inside _metricsForWeek and never combined.
     final metrics = _metricsForWeek(_selectedWeekOffset);
 
-    final List<int> positivePerDay = metrics.positivePerDay;
-    final List<int> negativePerDay = metrics.negativePerDay;
-
     // Per-emotion frequency derived from the metrics (so the chart's
     // distribution slices stay aligned with the trend totals).
+    //
+    // Distribution counts in-game emoji interactions from the journal,
+    // independent of pre/post session emotions.
     final Map<String, int> positiveFreqRecent = {};
     final Map<String, int> negativeFreqRecent = {};
     metrics.emotionFreq.forEach((em, count) {
@@ -2233,13 +2329,12 @@ gently. Plain text only — no markdown, no headings, no emojis.
       }
     });
 
-    // Distribution panel lists (aligned with trend totals).
+    // Distribution panel lists.
     final positiveEmotionsData = positiveFreqRecent.entries.toList();
     final negativeEmotionsData = negativeFreqRecent.entries.toList();
 
-    // Totals derived from the same perDay sums shown in the trend chart.
-    final totalPositive = positivePerDay.reduce((a, b) => a + b);
-    final totalNegative = negativePerDay.reduce((a, b) => a + b);
+    final totalPositive = positiveEmotionsData.fold<int>(0, (s, e) => s + e.value);
+    final totalNegative = negativeEmotionsData.fold<int>(0, (s, e) => s + e.value);
 
     // Pie sections — each slice gets a unique index-based colour so no
     // two slices ever share the same colour (avoids the duplicate-colour
@@ -2291,14 +2386,28 @@ gently. Plain text only — no markdown, no headings, no emojis.
           radius: _pieRadius, titleStyle: _pieLabelStyle));
     }
 
-    // Create line chart data for positive and negative emotions. Dots
-    // on every day + a soft fill beneath each line echo the Engagement
-    // Trend chart's style.
+    // ── Emotion Trend (PRE vs POST session per day) ─────────────────
+    final List<int> prePerDay = metrics.prePerDay;
+    final List<int> postPerDay = metrics.postPerDay;
+
     final emotionLineBars = [
       LineChartBarData(
         spots: List.generate(
-            7, (day) => FlSpot(day.toDouble(), positivePerDay[day].toDouble())),
-        color: const Color(0xFF10B981), // Green for positive
+            7, (day) => FlSpot(day.toDouble(), prePerDay[day].toDouble())),
+        color: const Color(0xFF6366F1), // Indigo for pre-session
+        barWidth: 3,
+        isCurved: true,
+        curveSmoothness: 0.3,
+        dotData: const FlDotData(show: true),
+        belowBarData: BarAreaData(
+          show: true,
+          color: const Color(0xFF6366F1).withValues(alpha: 0.18),
+        ),
+      ),
+      LineChartBarData(
+        spots: List.generate(
+            7, (day) => FlSpot(day.toDouble(), postPerDay[day].toDouble())),
+        color: const Color(0xFF10B981), // Green for post-session
         barWidth: 3,
         isCurved: true,
         curveSmoothness: 0.3,
@@ -2308,65 +2417,42 @@ gently. Plain text only — no markdown, no headings, no emojis.
           color: const Color(0xFF10B981).withValues(alpha: 0.18),
         ),
       ),
-      LineChartBarData(
-        spots: List.generate(
-            7, (day) => FlSpot(day.toDouble(), negativePerDay[day].toDouble())),
-        color: const Color(0xFFEF4444), // Red for negative
-        barWidth: 3,
-        isCurved: true,
-        curveSmoothness: 0.3,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(
-          show: true,
-          color: const Color(0xFFEF4444).withValues(alpha: 0.18),
-        ),
-      ),
     ];
 
-    final maxEmotionValue = max(
-      positivePerDay.reduce(max),
-      negativePerDay.reduce(max),
+    final maxPrePostValue = max(
+      prePerDay.reduce(max),
+      postPerDay.reduce(max),
     ).toDouble();
-    // Flexible Y-axis — follow the actual data. If the busiest day hits
-    // 1, the axis tops at 1; if it hits 4, the axis tops at 4, etc.
-    // Minimum of 1 so a totally-empty week still renders with a tick.
     final double maxEmotionY =
-        maxEmotionValue < 1 ? 1.0 : maxEmotionValue.ceilToDouble();
+        maxPrePostValue < 1 ? 1.0 : maxPrePostValue.ceilToDouble();
 
-    // Minutes spent per activity over the selected week, aligned to the
-    // coreGames order so x-axis labels line up with the bars.
-    List<double> barMinutes = coreGames
-        .map((g) => (metrics.gameMinutes[g] ?? 0).toDouble())
-        .toList();
-    // Y-axis headroom: round up to the nearest 5 minutes above the peak
-    // so the tallest bar never hugs the top.
-    final double peakMinutes = barMinutes.reduce(max);
-    final double barsMaxY = peakMinutes <= 5
-        ? 5.0
-        : (((peakMinutes + 4) ~/ 5) * 5).toDouble();
+    // ── Goals Progress data ─────────────────────────────────────────
+    final List<_GoalSnapshot> goals = metrics.goals;
 
-    // Sessions per day for Engagement Trend chart, sourced from the same
-    // metrics object so the chart respects the week selector.
-    final List<int> engagementData = metrics.sessionsPerDay;
-    final maxEngagement = engagementData.reduce(max).toDouble() + 1;
-
-    final engagementLineBar = LineChartBarData(
-      spots: List.generate(
-          7, (i) => FlSpot(i.toDouble(), engagementData[i].toDouble())),
-      color: Colors.blueAccent,
-      barWidth: 3,
-      isCurved: true,
-      dotData: const FlDotData(show: true),
-      belowBarData: BarAreaData(
-          show: true, color: Colors.blueAccent.withValues(alpha: 0.2)),
-    );
+    // ── Emotion Color Association data ──────────────────────────────
+    // Flatten the emotion → (hex → count) map into a list of bars, one
+    // per (emotion, hex) pair, sorted by count desc and trimmed to the
+    // top 8 so the chart stays readable.
+    final List<({String emotion, String hex, int count})> assocBars = [];
+    metrics.colorByEmotion.forEach((emotion, byHex) {
+      byHex.forEach((hex, count) {
+        if (count > 0) {
+          assocBars.add((emotion: emotion, hex: hex, count: count));
+        }
+      });
+    });
+    assocBars.sort((a, b) => b.count.compareTo(a.count));
+    final topAssoc = assocBars.take(8).toList();
+    final double assocMaxY = topAssoc.isEmpty
+        ? 1.0
+        : (topAssoc.first.count + 1).toDouble();
 
     // Empty-state flags — used below to overlay a "No data yet" message
     // on each chart instead of showing a flat / empty plot. We do NOT
     // hide the chart container itself so the layout stays stable.
-    final bool hasEmotionData = totalPositive > 0 || totalNegative > 0;
-    final bool hasGameMinutes = barMinutes.any((m) => m > 0);
-    final bool hasEngagementData = engagementData.any((c) => c > 0);
+    final bool hasPrePostData = maxPrePostValue > 0;
+    final bool hasGoals = goals.isNotEmpty;
+    final bool hasAssocData = topAssoc.isNotEmpty;
 
     return Column(
       children: [
@@ -2426,7 +2512,7 @@ gently. Plain text only — no markdown, no headings, no emojis.
               children: [
                 _buildChartCard(
                   '📈 Emotion Trend',
-                  'Positive vs Negative emotions throughout the week',
+                  'Pre-session vs Post-session emotions throughout the week',
                   height: 260,
                   // Extra top padding keeps the plotted lines clear of the
                   // subtitle — they used to sit right underneath it.
@@ -2439,8 +2525,9 @@ gently. Plain text only — no markdown, no headings, no emojis.
                         child: Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: _emptyChartOverlay(
-                            hasData: hasEmotionData,
-                            message: 'No emotion entries yet this week.',
+                            hasData: hasPrePostData,
+                            message:
+                                'No pre/post-session data yet this week.',
                             child: LineChart(
                             LineChartData(
                               minX: 0,
@@ -2457,8 +2544,8 @@ gently. Plain text only — no markdown, no headings, no emojis.
                                   fitInsideVertically: true,
                                   getTooltipItems: (spots) => spots.map((spot) {
                                     final label = spot.barIndex == 0
-                                        ? 'Positive'
-                                        : 'Negative';
+                                        ? 'Pre-session'
+                                        : 'Post-session';
                                     return LineTooltipItem(
                                       '$label: ${spot.y.toInt()}',
                                       const TextStyle(
@@ -2540,10 +2627,10 @@ gently. Plain text only — no markdown, no headings, no emojis.
                           mainAxisAlignment: MainAxisAlignment.start,
                           children: [
                             _buildLegendItem(
-                                'Positive', const Color(0xFF10B981)),
+                                'Pre-session', const Color(0xFF6366F1)),
                             const SizedBox(height: 10),
                             _buildLegendItem(
-                                'Negative', const Color(0xFFEF4444)),
+                                'Post-session', const Color(0xFF10B981)),
                           ],
                         ),
                       ),
@@ -2595,170 +2682,28 @@ gently. Plain text only — no markdown, no headings, no emojis.
                   ),
                 ),
                 const SizedBox(height: 14),
+                // ── Goals Progress (replaces Activity Performance) ──
                 _buildChartCard(
-                  '🎮 Activity Performance',
-                  'Minutes spent per activity this week',
-                  height: 240,
+                  '🏁 Goals Progress',
+                  'How each active goal is tracking this week',
+                  height: hasGoals ? max<double>(120, 60.0 * goals.length) : 120,
                   child: _emptyChartOverlay(
-                    hasData: hasGameMinutes,
-                    message: 'No activity time logged this week.',
-                    child: BarChart(BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: barsMaxY,
-                    barTouchData: BarTouchData(
-                      enabled: true,
-                      touchTooltipData: BarTouchTooltipData(
-                        getTooltipColor: (_) => const Color(0xFF1F2937),
-                        getTooltipItem: (group, _, rod, __) => BarTooltipItem(
-                          '${_brandedGameName(coreGames[group.x.toInt()])}\n'
-                          '${rod.toY.toInt()} min',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                    barGroups: barMinutes
-                        .asMap()
-                        .entries
-                        .map((e) => BarChartGroupData(
-                              x: e.key,
-                              barRods: [
-                                BarChartRodData(
-                                  toY: e.value,
-                                  color: const Color(0xFF14B8A6),
-                                  width: 18,
-                                  borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(6)),
-                                ),
-                              ],
-                            ))
-                        .toList(),
-                    borderData: FlBorderData(show: false),
-                    gridData: FlGridData(
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (_) => FlLine(
-                            color: Colors.grey.withValues(alpha: 0.15),
-                            strokeWidth: 1)),
-                    titlesData: FlTitlesData(
-                      // Left axis hidden — minutes are revealed via the
-                      // tap tooltip so the chart stays clean regardless
-                      // of how large the values get.
-                      leftTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      // Bottom axis — full branded name under every bar.
-                      bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 42,
-                        getTitlesWidget: (v, _) {
-                          final idx = v.toInt();
-                          if (idx < 0 || idx >= coreGames.length) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Text(
-                              _brandedGameName(coreGames[idx]),
-                              style: _textStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700]!,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          );
-                        },
-                      )),
-                    ),
-                  )), // BarChart(BarChartData)
-                  ), // _emptyChartOverlay
+                    hasData: hasGoals,
+                    message: 'No goals set yet for this week.',
+                    child: _buildGoalsProgressChart(goals),
+                  ),
                 ),
                 const SizedBox(height: 14),
+                // ── Emotion Color Association (replaces Engagement Trend) ──
                 _buildChartCard(
-                  '⏱️ Engagement Trend',
-                  'Sessions per day identifying interest peaks and drops',
-                  height: 200,
+                  '🎨 Emotion Color Association',
+                  'Which colours the child paired with each emotion',
+                  height: 230,
                   child: _emptyChartOverlay(
-                    hasData: hasEngagementData,
-                    message: 'No sessions yet this week.',
-                    child: LineChart(LineChartData(
-                    lineBarsData: [engagementLineBar],
-                    minY: 0,
-                    maxY: maxEngagement,
-                    lineTouchData: LineTouchData(
-                      handleBuiltInTouches: true,
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipColor: (_) => const Color(0xFF1F2937),
-                        fitInsideHorizontally: true,
-                        fitInsideVertically: true,
-                        getTooltipItems: (spots) => spots.map((spot) {
-                          final count = spot.y.toInt();
-                          final label =
-                              count == 1 ? '1 session' : '$count sessions';
-                          return LineTooltipItem(
-                            label,
-                            const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      leftTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false)),
-                      bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 24,
-                        // Pin the tick interval to whole days so fl_chart
-                        // doesn't auto-generate fractional x-values (which
-                        // were producing duplicate day labels like
-                        // "Mon Mon Tue Tue …").
-                        interval: 1,
-                        getTitlesWidget: (v, _) {
-                          const labels = [
-                            'Mon',
-                            'Tue',
-                            'Wed',
-                            'Thu',
-                            'Fri',
-                            'Sat',
-                            'Sun'
-                          ];
-                          if (v < 0 || v > 6 || v != v.roundToDouble()) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              labels[v.toInt()],
-                              style: _textStyle(
-                                  fontSize: 13, color: Colors.grey[600]!),
-                            ),
-                          );
-                        },
-                      )),
-                    ),
-                    borderData: FlBorderData(show: false),
-                    gridData: FlGridData(
-                        drawVerticalLine: false,
-                        getDrawingHorizontalLine: (_) => FlLine(
-                            color: Colors.grey.withValues(alpha: 0.15),
-                            strokeWidth: 1)),
-                  )), // LineChart(LineChartData)
-                  ), // _emptyChartOverlay
+                    hasData: hasAssocData,
+                    message: 'No emotion-colour pairs yet this week.',
+                    child: _buildColorAssociationChart(topAssoc, assocMaxY),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 // ── On-demand AI Insight Summary ─────────────────────
@@ -2769,6 +2714,166 @@ gently. Plain text only — no markdown, no headings, no emojis.
         ),
       ],
     );
+  }
+
+  // ── Goals Progress chart ─────────────────────────────────────────
+  // A vertical list of progress rows: emoji + label on the left,
+  // animated progress bar on the right. Reads from `goals` only — no
+  // calls to GoalService here so the past-week (fake) snapshots render
+  // correctly through the same code path.
+  Widget _buildGoalsProgressChart(List<_GoalSnapshot> goals) {
+    if (goals.isEmpty) {
+      return const SizedBox.expand();
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: goals.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (_, i) {
+        final g = goals[i];
+        final color = Color(g.colorValue);
+        final pct = g.target == 0
+            ? 0.0
+            : (g.current / g.target).clamp(0.0, 1.0);
+        return Row(
+          children: [
+            Text(g.emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          g.label,
+                          style: _textStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1F2937)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${g.current} / ${g.target}',
+                        style: _textStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: g.isCompleted
+                                ? const Color(0xFF10B981)
+                                : color),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: pct,
+                      minHeight: 9,
+                      backgroundColor:
+                          color.withValues(alpha: 0.15),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(
+                              g.isCompleted
+                                  ? const Color(0xFF10B981)
+                                  : color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Emotion Color Association chart ──────────────────────────────
+  // Vertical bar per (emotion, hex) pair. Bar fill colour = the actual
+  // colour the child picked, so the chart visually shows the
+  // association at a glance. X-axis label shows the emotion name.
+  Widget _buildColorAssociationChart(
+    List<({String emotion, String hex, int count})> data,
+    double maxY,
+  ) {
+    return BarChart(BarChartData(
+      alignment: BarChartAlignment.spaceAround,
+      maxY: maxY,
+      barTouchData: BarTouchData(
+        enabled: true,
+        touchTooltipData: BarTouchTooltipData(
+          getTooltipColor: (_) => const Color(0xFF1F2937),
+          getTooltipItem: (group, _, rod, __) {
+            final pair = data[group.x.toInt()];
+            return BarTooltipItem(
+              '${pair.emotion}\n${_humanHex(pair.hex)} • ${pair.count}×',
+              const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            );
+          },
+        ),
+      ),
+      barGroups: data.asMap().entries.map((e) {
+        final pair = e.value;
+        return BarChartGroupData(
+          x: e.key,
+          barRods: [
+            BarChartRodData(
+              toY: pair.count.toDouble(),
+              color: _hexToColor(pair.hex),
+              width: 22,
+              borderSide: const BorderSide(
+                  color: Color(0xFFE5E7EB), width: 1),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(6)),
+            ),
+          ],
+        );
+      }).toList(),
+      borderData: FlBorderData(show: false),
+      gridData: FlGridData(
+        drawVerticalLine: false,
+        getDrawingHorizontalLine: (_) => FlLine(
+            color: Colors.grey.withValues(alpha: 0.15),
+            strokeWidth: 1),
+      ),
+      titlesData: FlTitlesData(
+        leftTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            reservedSize: 36,
+            getTitlesWidget: (v, _) {
+              final idx = v.toInt();
+              if (idx < 0 || idx >= data.length) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  data[idx].emotion,
+                  style: _textStyle(
+                      fontSize: 11,
+                      color: Colors.grey[700]!,
+                      fontWeight: FontWeight.w600),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    ));
   }
 
   Widget _buildPill(String emoji, String value, String label, Color color) {
@@ -4747,15 +4852,25 @@ const Set<String> _kNegativeEmotions = {
 
 /// All numbers that drive a single week's worth of charts.
 ///
-///   • [emotionFreq]    name → count, used by Home cards + Distribution
-///   • [positivePerDay] index 0=Sun … 6=Sat (matches Emotion Trend chart)
-///   • [negativePerDay] index 0=Sun … 6=Sat
-///   • [sessionsPerDay] index 0=Mon … 6=Sun (matches Engagement chart)
-///   • [gameMinutes]    raw activity id → minutes (for Activity bars +
-///                      "Most Played" Home card)
+///   • [emotionFreq]      name → count, used by Distribution chart.
+///   • [positivePerDay]   index 0=Sun … 6=Sat (legacy — kept for AI prompt).
+///   • [negativePerDay]   index 0=Sun … 6=Sat (legacy — kept for AI prompt).
+///   • [sessionsPerDay]   index 0=Mon … 6=Sun (per-day session count).
+///   • [gameMinutes]      raw activity id → minutes (kept for AI prompt).
+///   • [preEmotionFreq]   name → count of pre-session emotions logged.
+///   • [postEmotionFreq]  name → count of post-session emotions logged.
+///   • [prePerDay]        per-day pre-session emotion count, index 0=Sun…6=Sat.
+///   • [postPerDay]       per-day post-session emotion count, index 0=Sun…6=Sat.
+///   • [colorByEmotion]   emotion name → (colour hex → count) — drives the
+///                        Emotion Color Association chart.
+///   • [goals]            list of active goals + their current/target progress
+///                        for the Goals Progress chart and Goals Completed card.
+///   • [starsEarned]      sum of stars earned from completions in this week.
+///   • [totalSessions]    count of fully-completed child_sessions (both pre
+///                        AND post recorded) — for Total Sessions card.
 ///
-/// All four lists default to `[0,0,0,0,0,0,0]` and the maps default to
-/// empty so a missing offset still renders a clean empty state.
+/// All counters default to zero/empty so a missing offset still renders a
+/// clean empty state.
 class _WeekMetrics {
   final Map<String, int> emotionFreq;
   final List<int> positivePerDay;
@@ -4763,13 +4878,52 @@ class _WeekMetrics {
   final List<int> sessionsPerDay;
   final Map<String, int> gameMinutes;
 
+  // ── New fields for the corrected analytics ──────────────────────────
+  final Map<String, int> preEmotionFreq;
+  final Map<String, int> postEmotionFreq;
+  final List<int> prePerDay;
+  final List<int> postPerDay;
+  final Map<String, Map<String, int>> colorByEmotion;
+  final List<_GoalSnapshot> goals;
+  final int starsEarned;
+  final int totalSessions;
+
   const _WeekMetrics({
     this.emotionFreq = const {},
     this.positivePerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.negativePerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.sessionsPerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.gameMinutes = const {},
+    this.preEmotionFreq = const {},
+    this.postEmotionFreq = const {},
+    this.prePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.postPerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.colorByEmotion = const {},
+    this.goals = const [],
+    this.starsEarned = 0,
+    this.totalSessions = 0,
   });
+}
+
+/// One row of the Goals Progress chart and the Home "Goals Completed"
+/// card. Stays profile-scoped because both real and fake goals live
+/// inside `_WeekMetrics.goals`.
+class _GoalSnapshot {
+  final String label;
+  final int current;
+  final int target;
+  final String emoji;
+  final int colorValue; // ARGB int — keeps `_kFakeWeeks` const-able.
+
+  const _GoalSnapshot({
+    required this.label,
+    required this.current,
+    required this.target,
+    required this.emoji,
+    required this.colorValue,
+  });
+
+  bool get isCompleted => current >= target;
 }
 
 /// Static, hand-curated demo data for the two preview weeks.
@@ -4801,6 +4955,37 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
       'ANIMATCH': 10,
       'Draw': 16,
     },
+    // Pre-session: child often started feeling Calm or Happy.
+    preEmotionFreq: {
+      'Calm': 7, 'Happy': 5, 'Excited': 3, 'Sad': 2, 'Tired': 2,
+    },
+    // Post-session: ended on a positive note more often.
+    postEmotionFreq: {
+      'Happy': 9, 'Excited': 5, 'Calm': 3, 'Proud': 2,
+    },
+    prePerDay: [2, 3, 2, 2, 4, 4, 2],
+    postPerDay: [2, 3, 2, 2, 4, 4, 2],
+    colorByEmotion: {
+      'Happy':   {'#FFE66D': 4, '#FF9F43': 3, '#FFB088': 1},
+      'Calm':    {'#4ECDC4': 5, '#74B9FF': 1},
+      'Excited': {'#FF9F43': 3, '#FFB088': 1},
+      'Proud':   {'#7ED957': 2, '#FFE66D': 1},
+      'Sad':     {'#74B9FF': 2},
+      'Angry':   {'#EF4444': 1},
+      'Confused':{'#A29BFE': 1},
+    },
+    goals: [
+      _GoalSnapshot(label: 'Daily Activities — 4 activities',
+          current: 4, target: 4, emoji: '🎯', colorValue: 0xFF3B82F6),
+      _GoalSnapshot(label: 'Time Spent — 60 minutes',
+          current: 52, target: 60, emoji: '⏱️', colorValue: 0xFF14B8A6),
+      _GoalSnapshot(label: 'Star Collection — 50 stars',
+          current: 38, target: 50, emoji: '⭐', colorValue: 0xFFF59E0B),
+      _GoalSnapshot(label: 'Mood Logging — 5 entries',
+          current: 5, target: 5, emoji: '📓', colorValue: 0xFF8B5CF6),
+    ],
+    starsEarned: 38,
+    totalSessions: 19,
   ),
   // ── -2 = 2 Weeks Ago — a more challenging week ─────────────────────
   -2: _WeekMetrics(
@@ -4826,6 +5011,32 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
       'ANIMATCH': 12,
       'Draw': 8,
     },
+    preEmotionFreq: {
+      'Tired': 4, 'Sad': 3, 'Calm': 2, 'Angry': 3, 'Happy': 2,
+    },
+    postEmotionFreq: {
+      'Calm': 5, 'Happy': 4, 'Excited': 2, 'Sad': 2, 'Tired': 1,
+    },
+    prePerDay: [3, 2, 2, 1, 3, 2, 1],
+    postPerDay: [3, 2, 2, 1, 3, 2, 1],
+    colorByEmotion: {
+      'Happy':   {'#FFE66D': 3, '#FFB088': 2},
+      'Calm':    {'#4ECDC4': 3, '#74B9FF': 1},
+      'Sad':     {'#74B9FF': 3},
+      'Angry':   {'#EF4444': 4},
+      'Tired':   {'#9CA3AF': 2},
+      'Confused':{'#A29BFE': 2},
+    },
+    goals: [
+      _GoalSnapshot(label: 'Daily Activities — 3 activities',
+          current: 1, target: 3, emoji: '🎯', colorValue: 0xFF3B82F6),
+      _GoalSnapshot(label: 'Time Spent — 45 minutes',
+          current: 28, target: 45, emoji: '⏱️', colorValue: 0xFF14B8A6),
+      _GoalSnapshot(label: 'Mood Logging — 4 entries',
+          current: 2, target: 4, emoji: '📓', colorValue: 0xFF8B5CF6),
+    ],
+    starsEarned: 22,
+    totalSessions: 14,
   ),
 };
 
