@@ -2465,6 +2465,7 @@ gently. Plain text only — no markdown, no headings, no emojis.
                               lineBarsData: emotionLineBars,
                               minY: 0,
                               maxY: maxEmotionY,
+                              clipData: const FlClipData.all(),
                               lineTouchData: LineTouchData(
                                 handleBuiltInTouches: true,
                                 touchTooltipData: LineTouchTooltipData(
@@ -2494,7 +2495,8 @@ gently. Plain text only — no markdown, no headings, no emojis.
                                 leftTitles: const AxisTitles(
                                     sideTitles: SideTitles(showTitles: false)),
                                 rightTitles: const AxisTitles(
-                                    sideTitles: SideTitles(showTitles: false)),
+                                    sideTitles: SideTitles(
+                                        showTitles: false, reservedSize: 8)),
                                 topTitles: const AxisTitles(
                                     sideTitles: SideTitles(showTitles: false)),
                                 bottomTitles: AxisTitles(
