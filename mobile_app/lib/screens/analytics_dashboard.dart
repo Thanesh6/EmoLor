@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/services/ai_insight_service.dart';
 import '../core/services/emotion_colour_mapping.dart';
 import '../core/services/emotion_journal_service.dart';
 import '../core/services/star_service.dart';
@@ -55,6 +56,13 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
 
   // ── Week selector offset for Home tab (0 = this week, -1 = last week …) ──
   int _selectedWeekOffset = 0;
+
+  // ── On-demand AI insight summary (Progress tab) ──
+  // null = never generated for the current selection.
+  // Cleared whenever the user changes weeks so the panel re-prompts.
+  String? _aiInsight;
+  bool _aiLoading = false;
+  String? _aiError;
 
   // ── Full completion history — used by week-filtered Home tab cards ──
   List<CompletionRecord> _allCompletions = [];
@@ -983,6 +991,257 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     );
   }
 
+  // ── AI insight: trim helper, prompt builder, generator ──────────
+  //
+  // For "This Week" we only want the AI to talk about days that have
+  // actually happened — never claim about days from Wed–Sat if today
+  // is Tuesday. We zero-out future-day slots in the per-day arrays
+  // before building the prompt. emotionFreq / gameMinutes are already
+  // safe because they only contain entries the child actually logged.
+  _WeekMetrics _trimMetricsToToday(_WeekMetrics m) {
+    final now = DateTime.now();
+    final dowSun = now.weekday % 7; // Sun=0..Sat=6  (matches positivePerDay)
+    final dowMon = now.weekday - 1; // Mon=0..Sun=6  (matches sessionsPerDay)
+    return _WeekMetrics(
+      emotionFreq: m.emotionFreq,
+      positivePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.positivePerDay[i] : 0),
+      negativePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.negativePerDay[i] : 0),
+      sessionsPerDay: List.generate(
+          7, (i) => i <= dowMon ? m.sessionsPerDay[i] : 0),
+      gameMinutes: m.gameMinutes,
+    );
+  }
+
+  /// Build the prompt sent to Claude. Only describes data that actually
+  /// exists — empty days, zero-minute activities and unused emotions
+  /// are filtered out so the model can't hallucinate them.
+  String _buildAiPrompt(_WeekMetrics m, int offset) {
+    final start = _weekStartDate(offset);
+    final end = start.add(const Duration(days: 6));
+    String two(int n) => n.toString().padLeft(2, '0');
+    String fmt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year}';
+
+    const dayNamesSun = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    final dayLines = <String>[];
+    for (int i = 0; i < 7; i++) {
+      final pos = m.positivePerDay[i];
+      final neg = m.negativePerDay[i];
+      if (pos == 0 && neg == 0) continue;
+      dayLines.add(
+          '  - ${dayNamesSun[i]}: $pos positive, $neg negative emotion entries');
+    }
+
+    final emotionLines = m.emotionFreq.entries
+        .where((e) => e.value > 0)
+        .map((e) => '  - ${e.key}: ${e.value} time(s)')
+        .toList();
+
+    final activityLines = m.gameMinutes.entries
+        .where((e) => e.value > 0)
+        .map((e) => '  - ${e.key}: ${e.value} min')
+        .toList();
+
+    final totalSessions =
+        m.sessionsPerDay.fold<int>(0, (sum, v) => sum + v);
+
+    final cutoffNote = offset == 0
+        ? 'NOTE: Only days from Sunday up to TODAY (${fmt(DateTime.now())}) '
+            'are listed. Do NOT mention any later days in the week.'
+        : 'NOTE: This is the complete summary for the past week '
+            '${fmt(start)} – ${fmt(end)}.';
+
+    return '''
+You are summarising one child's emotional + activity data for the parent.
+
+Week range: ${fmt(start)} – ${fmt(end)}
+$cutoffNote
+
+EMOTION ENTRIES PER DAY:
+${dayLines.isEmpty ? '  (no entries)' : dayLines.join('\n')}
+
+EMOTION FREQUENCY (whole week so far):
+${emotionLines.isEmpty ? '  (no entries)' : emotionLines.join('\n')}
+
+ACTIVITY TIME (minutes spent on each game / activity):
+${activityLines.isEmpty ? '  (no activity)' : activityLines.join('\n')}
+
+TOTAL SESSIONS LOGGED: $totalSessions
+
+Write 2–3 short, simple, parent-friendly, encouraging sentences that
+summarise the week. Stick STRICTLY to the data above — do not invent
+days, emotions, activities, goals or trends that are not listed. If a
+mix of positive and negative emotions appears, acknowledge both
+gently. Plain text only — no markdown, no headings, no emojis.
+''';
+  }
+
+  /// Triggered by the "Generate Insight Summary" button. Pulls the
+  /// metrics for the currently-selected week, short-circuits to a
+  /// fixed message when the week is empty, otherwise calls Claude.
+  Future<void> _generateAiInsight() async {
+    if (_aiLoading) return;
+    setState(() {
+      _aiLoading = true;
+      _aiError = null;
+      _aiInsight = null;
+    });
+
+    try {
+      // For "This Week" we only feed Sun → today.  Past weeks (fake
+      // data) get the full snapshot.
+      var metrics = _metricsForWeek(_selectedWeekOffset);
+      if (_selectedWeekOffset == 0) {
+        metrics = _trimMetricsToToday(metrics);
+      }
+
+      // Empty-data short-circuit — never burn an API call on a blank
+      // week, and surface the exact copy the spec asks for.
+      final hasAny = metrics.emotionFreq.values.any((v) => v > 0) ||
+          metrics.gameMinutes.values.any((v) => v > 0) ||
+          metrics.sessionsPerDay.any((v) => v > 0);
+      if (!hasAny) {
+        if (!mounted) return;
+        setState(() {
+          _aiInsight =
+              'No data available yet. Start using EMOLOR this week to generate an insight summary.';
+          _aiLoading = false;
+        });
+        return;
+      }
+
+      final prompt = _buildAiPrompt(metrics, _selectedWeekOffset);
+      final summary = await AiInsightService.generateInsight(prompt);
+      if (!mounted) return;
+      setState(() {
+        _aiInsight = summary;
+        _aiLoading = false;
+      });
+    } catch (e) {
+      debugPrint('AI insight error: $e');
+      if (!mounted) return;
+      setState(() {
+        _aiError = 'Could not generate summary. Please try again.';
+        _aiLoading = false;
+      });
+    }
+  }
+
+  /// The AI insight panel — sits at the bottom of the Progress tab
+  /// after the four charts. Has four mutually-exclusive states:
+  ///   • idle (no insight yet)  → placeholder text
+  ///   • loading                → spinner
+  ///   • error                  → red error chip
+  ///   • success                → generated paragraph
+  Widget _buildAiInsightSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDF4FF),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF5D0FE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.psychology,
+                  color: Color(0xFFC026D3), size: 26),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('AI Insight Summary',
+                    style: _textStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF86198F))),
+              ),
+              ElevatedButton.icon(
+                onPressed: _aiLoading ? null : _generateAiInsight,
+                icon: Icon(
+                    _aiInsight == null
+                        ? Icons.auto_awesome
+                        : Icons.refresh_rounded,
+                    color: Colors.white,
+                    size: 18),
+                label: Text(
+                  _aiInsight == null
+                      ? 'Generate Insight Summary'
+                      : 'Regenerate',
+                  style: _textStyle(
+                      fontSize: 14,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFC026D3),
+                  disabledBackgroundColor: Colors.grey[300],
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // ── Mutually-exclusive state slots ────────────────────────
+          if (_aiLoading)
+            Row(children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Color(0xFFC026D3)),
+              ),
+              const SizedBox(width: 12),
+              Text('Generating insight…',
+                  style: _textStyle(
+                      fontSize: 14, color: const Color(0xFF86198F))),
+            ])
+          else if (_aiError != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Row(children: [
+                Icon(Icons.error_outline, color: Colors.red[700], size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(_aiError!,
+                      style: _textStyle(
+                          fontSize: 13, color: Colors.red[700]!)),
+                ),
+              ]),
+            )
+          else if (_aiInsight != null)
+            Text(
+              _aiInsight!,
+              style: _textStyle(
+                      fontSize: 16,
+                      color: const Color(0xFF4A044E),
+                      fontWeight: FontWeight.w500)
+                  .copyWith(height: 1.5),
+            )
+          else
+            Text(
+              'Click "Generate Insight Summary" to receive a parent-friendly '
+              'recap of the selected week\'s analytics.',
+              style: _textStyle(
+                  fontSize: 14,
+                  color: const Color(0xFF86198F).withValues(alpha: 0.7)),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ── Reusable week selector pill ──────────────────────────────────
   Widget _buildWeekSelector() {
     final atOldest = _selectedWeekOffset <= -2;
@@ -1001,7 +1260,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
           InkWell(
             onTap: atOldest
                 ? null
-                : () => setState(() => _selectedWeekOffset--),
+                : () => setState(() {
+                      _selectedWeekOffset--;
+                      _aiInsight = null;
+                      _aiError = null;
+                    }),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding:
@@ -1027,7 +1290,11 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
           InkWell(
             onTap: atNewest
                 ? null
-                : () => setState(() => _selectedWeekOffset++),
+                : () => setState(() {
+                      _selectedWeekOffset++;
+                      _aiInsight = null;
+                      _aiError = null;
+                    }),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding:
@@ -2371,6 +2638,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                   )), // LineChart(LineChartData)
                   ), // _emptyChartOverlay
                 ),
+                const SizedBox(height: 14),
+                // ── On-demand AI Insight Summary ─────────────────────
+                _buildAiInsightSection(),
               ],
             ),
           ),
