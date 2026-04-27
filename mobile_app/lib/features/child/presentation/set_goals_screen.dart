@@ -111,16 +111,17 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
       resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(
-          // Soft light gradient — same palette as profile_screen.dart
-          // and the caregiver "New Goal" dialog so the screen reads as
-          // part of the same family.
+          // Matches the "Who's Playing Today?" child dashboard gradient:
+          // sky blue → light yellow → mint green.
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE0F2FE),
-              Color(0xFFF3E8FF),
+              Color(0xFF7DD3FC), // sky blue
+              Color(0xFFFDE68A), // light yellow
+              Color(0xFF86EFAC), // mint green
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
