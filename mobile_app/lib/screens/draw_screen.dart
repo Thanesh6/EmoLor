@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/logic/adaptive_engine.dart';
-import '../core/services/emotion_service.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
 
@@ -22,38 +21,21 @@ class _DrawScreenState extends State<DrawScreen> {
     overloadTapsPerSecond: 5.0,
   );
 
-  // Emotion-based color palette (loaded from My Colors)
-  List<Color> _allColors = [
-    Colors.black,
-    const Color(0xFFFF6B6B),
-    const Color(0xFFFFE66D),
-    const Color(0xFF4ECDC4),
-    const Color(0xFF7ED957),
-    const Color(0xFFBB6BD9),
-    const Color(0xFFFF9F43),
-    const Color(0xFF5B8DEE),
+  // Fixed 8-color drawing palette — not linked to emotions.
+  static const List<Color> _colors = [
+    Color(0xFFE53935), // red
+    Color(0xFFFF7043), // orange
+    Color(0xFFFFD600), // yellow
+    Color(0xFF43A047), // green
+    Color(0xFF1E88E5), // blue
+    Color(0xFF8E24AA), // purple
+    Color(0xFFEC407A), // pink
+    Color(0xFF212121), // black
   ];
-
-  List<Color> get _colors => _allColors;
 
   @override
   void initState() {
     super.initState();
-    _loadEmotionColors();
-  }
-
-  Future<void> _loadEmotionColors() async {
-    final emotions = await EmotionService.loadEmotionsStatic();
-    if (emotions.isNotEmpty && mounted) {
-      setState(() {
-        _allColors = emotions.map((e) => e.color).toList();
-        // Reset selected color if not in new palette
-        if (!_allColors.contains(_selectedColor) &&
-            _selectedColor != Colors.white) {
-          _selectedColor = _allColors.first;
-        }
-      });
-    }
   }
 
   TextStyle _cuteTextStyle({
