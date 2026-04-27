@@ -1356,73 +1356,45 @@ gently. Plain text only — no markdown, no headings, no emojis.
     setState(() => _pdfGenerating = true);
 
     try {
+      // Single source of truth — same metrics object the on-screen
+      // charts consume for the selected week. Real data for offset 0,
+      // static fake snapshot for past weeks. Real and fake never mix,
+      // and fake data is NEVER persisted to Supabase.
       final metrics = _metricsForWeek(_selectedWeekOffset);
       final start = _weekStartDate(_selectedWeekOffset);
       final end = start.add(const Duration(days: 6));
       String two(int n) => n.toString().padLeft(2, '0');
       String fmt(DateTime d) =>
           '${two(d.day)}/${two(d.month)}/${d.year}';
-      final weekRange = '${fmt(start)} – ${fmt(end)}';
+      // Plain ASCII hyphen — em-dashes were rendering as box / X tofu
+      // in the previous Helvetica-only PDF.
+      final weekRange = '${fmt(start)} - ${fmt(end)}';
       final shortLabel = _selectedWeekOffset == 0
           ? 'This Week'
           : (_selectedWeekOffset == -1 ? 'Last Week' : '2 Weeks Ago');
 
-      // ── Goals + rewards: real for offset 0, static fake otherwise ─
-      final List<PdfGoalEntry> pdfGoals;
-      late int rewardsUnlocked;
-      late int rewardsTotal;
-      late List<PdfRewardEntry> pdfRewards;
+      // Goals — already populated for both real and fake weeks via
+      // `_WeekMetrics.goals`. Strip the leading emoji from each label
+      // because NotoSans (the new PDF base font) has no emoji glyphs.
+      final pdfGoals = metrics.goals.map((g) {
+        return PdfGoalEntry(
+          label: WeeklyPdfReportService.safe(g.label),
+          current: g.current,
+          target: g.target,
+        );
+      }).toList();
 
-      if (_selectedWeekOffset == 0) {
-        // Real, scoped to current child profile_id.
-        pdfGoals = _activeGoals.map((g) {
-          return PdfGoalEntry(
-            label: (g['label'] as String?) ?? 'Goal',
-            current: (g['current'] as int?) ?? 0,
-            target: (g['target'] as int?) ?? 1,
-            emoji: (g['emoji'] as String?) ?? '🎯',
-          );
-        }).toList();
-
-        // Pull live rewards. _rewardsUnlocked is already populated
-        // by ChildRewardsService (profile-scoped). For the gallery
-        // list we re-query so the chips are rich.
-        try {
-          final all = await ChildRewardsService.getAllRewards();
-          rewardsTotal = all.length;
-          rewardsUnlocked = all.where((r) => r.isUnlocked).length;
-          pdfRewards = all
-              .map((r) => PdfRewardEntry(
-                    title: r.title,
-                    emoji: r.emoji,
-                    unlocked: r.isUnlocked,
-                  ))
-              .toList();
-        } catch (_) {
-          rewardsTotal = _rewardsUnlocked;
-          rewardsUnlocked = _rewardsUnlocked;
-          pdfRewards = const [];
-        }
-      } else {
-        final fake = _kFakeReportExtras[_selectedWeekOffset];
-        pdfGoals = fake == null
-            ? const []
-            : fake.goals
-                .map((g) => PdfGoalEntry(
-                    label: g.label,
-                    current: g.current,
-                    target: g.target,
-                    emoji: g.emoji))
-                .toList();
-        rewardsUnlocked = fake?.rewardsUnlocked ?? 0;
-        rewardsTotal = fake?.rewardsTotal ?? 0;
-        pdfRewards = fake == null
-            ? const []
-            : fake.rewards
-                .map((r) => PdfRewardEntry(
-                    title: r.title, emoji: r.emoji, unlocked: r.unlocked))
-                .toList();
-      }
+      // Color associations — flatten emotion -> {hex -> count} into a
+      // single list of bars, mirroring what the dashboard chart does.
+      final List<PdfColorAssocBar> colorAssoc = [];
+      metrics.colorByEmotion.forEach((emotion, byHex) {
+        byHex.forEach((hex, count) {
+          if (count > 0) {
+            colorAssoc.add(PdfColorAssocBar(
+                emotion: emotion, hex: hex, count: count));
+          }
+        });
+      });
 
       final payload = WeeklyPdfReportPayload(
         childName: _childName,
@@ -1430,15 +1402,15 @@ gently. Plain text only — no markdown, no headings, no emojis.
         weekRangeLabel: weekRange,
         weekShortLabel: shortLabel,
         emotionFreq: metrics.emotionFreq,
-        positivePerDay: metrics.positivePerDay,
-        negativePerDay: metrics.negativePerDay,
+        prePerDay: metrics.prePerDay,
+        postPerDay: metrics.postPerDay,
+        preEmotionFreq: metrics.preEmotionFreq,
+        postEmotionFreq: metrics.postEmotionFreq,
+        colorAssoc: colorAssoc,
         goals: pdfGoals,
-        rewards: pdfRewards,
-        rewardsUnlocked: rewardsUnlocked,
-        rewardsTotal: rewardsTotal,
         // Re-use whichever AI insight is currently on screen — if
         // none has been generated yet, the PDF builder falls back to
-        // its deterministic auto-summary.
+        // its deterministic auto-summary that covers all 4 charts.
         aiSummary: _aiInsight,
       );
 
@@ -4998,59 +4970,8 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
   ),
 };
 
-/// Fake goals + rewards used by the PDF report when the caregiver
-/// picks a past week from the selector. Mirrors the `_kFakeWeeks`
-/// philosophy: never persisted, never written to Supabase, identical
-/// across every refresh.
-class _FakeWeekReportExtras {
-  final List<({String label, int current, int target, String emoji})> goals;
-  final int rewardsUnlocked;
-  final int rewardsTotal;
-  final List<({String title, String emoji, bool unlocked})> rewards;
-  const _FakeWeekReportExtras({
-    required this.goals,
-    required this.rewardsUnlocked,
-    required this.rewardsTotal,
-    required this.rewards,
-  });
-}
-
-const Map<int, _FakeWeekReportExtras> _kFakeReportExtras = {
-  -1: _FakeWeekReportExtras(
-    goals: [
-      (label: 'Daily Activities — 4 activities',  current: 4, target: 4, emoji: '🎯'),
-      (label: 'Time Spent — 60 minutes',          current: 52, target: 60, emoji: '⏱️'),
-      (label: 'Star Collection — 50 stars',       current: 38, target: 50, emoji: '⭐'),
-      (label: 'Mood Logging — 5 entries',         current: 5, target: 5, emoji: '📓'),
-    ],
-    rewardsUnlocked: 5,
-    rewardsTotal: 12,
-    rewards: [
-      (title: 'First Steps',  emoji: '🌱', unlocked: true),
-      (title: 'Star Collector', emoji: '⭐', unlocked: true),
-      (title: 'Calm Explorer', emoji: '🧘', unlocked: true),
-      (title: 'Joyful Streak', emoji: '🌞', unlocked: true),
-      (title: 'Mood Master',   emoji: '📊', unlocked: true),
-      (title: 'Game Champion', emoji: '🏆', unlocked: false),
-      (title: 'Storyteller',   emoji: '📖', unlocked: false),
-      (title: 'Brave Heart',   emoji: '💪', unlocked: false),
-    ],
-  ),
-  -2: _FakeWeekReportExtras(
-    goals: [
-      (label: 'Daily Activities — 3 activities', current: 1, target: 3, emoji: '🎯'),
-      (label: 'Time Spent — 45 minutes',         current: 28, target: 45, emoji: '⏱️'),
-      (label: 'Mood Logging — 4 entries',        current: 2, target: 4, emoji: '📓'),
-    ],
-    rewardsUnlocked: 2,
-    rewardsTotal: 12,
-    rewards: [
-      (title: 'First Steps',  emoji: '🌱', unlocked: true),
-      (title: 'Star Collector', emoji: '⭐', unlocked: true),
-      (title: 'Calm Explorer', emoji: '🧘', unlocked: false),
-      (title: 'Joyful Streak', emoji: '🌞', unlocked: false),
-      (title: 'Mood Master',   emoji: '📊', unlocked: false),
-      (title: 'Game Champion', emoji: '🏆', unlocked: false),
-    ],
-  ),
-};
+// `_FakeWeekReportExtras` / `_kFakeReportExtras` were used by the
+// previous PDF report (which had a Rewards chart and used a separate
+// fake-data store for past weeks). Both are now obsolete — `metrics.goals`
+// from `_kFakeWeeks[offset]` is the single source for past-week goals,
+// and the PDF no longer renders a Rewards chart.
