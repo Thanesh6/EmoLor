@@ -10,7 +10,7 @@ import '../core/services/emotion_journal_service.dart';
 import '../core/services/star_service.dart';
 import '../features/caregiver/presentation/widgets/new_goal_dialog.dart';
 import '../features/caregiver/services/goal_service.dart';
-import '../features/caregiver/services/pdf_report_service.dart';
+import '../features/caregiver/services/weekly_pdf_report_service.dart';
 import '../features/child/services/child_rewards_service.dart';
 import '../features/child/services/child_session_service.dart';
 import '../features/child/services/completion_service.dart';
@@ -39,6 +39,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
   late AnimationController _glowCtrl;
 
   String? _childUserId; // child's Supabase user_id for linking codes
+  int? _childAge;        // computed from profiles.date_of_birth
+
+  // ── PDF generation (Progress tab) ──
+  bool _pdfGenerating = false;
 
   // ── Real-time data from services ──
   int _totalStars = 0;
@@ -477,7 +481,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         final childId = link['child_id'] as String;
         final childProfile = await Supabase.instance.client
             .from('profiles')
-            .select('full_name, avatar_url')
+            .select('full_name, avatar_url, date_of_birth')
             .eq('user_id', childId)
             .maybeSingle();
         if (mounted && childProfile != null) {
@@ -487,6 +491,20 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
             if (name != null && name.isNotEmpty) _childName = name;
             final av = childProfile['avatar_url'] as String?;
             if (av != null && av.isNotEmpty) _childAvatar = av;
+            // Compute age from date_of_birth if available
+            final dobStr = childProfile['date_of_birth'] as String?;
+            if (dobStr != null && dobStr.isNotEmpty) {
+              try {
+                final dob = DateTime.parse(dobStr);
+                final now = DateTime.now();
+                int years = now.year - dob.year;
+                if (now.month < dob.month ||
+                    (now.month == dob.month && now.day < dob.day)) {
+                  years--;
+                }
+                _childAge = years >= 0 ? years : null;
+              } catch (_) {}
+            }
           });
         }
       }
@@ -1240,6 +1258,117 @@ gently. Plain text only — no markdown, no headings, no emojis.
         ],
       ),
     );
+  }
+
+  // ── PDF report generation (Progress tab) ────────────────────────
+  //
+  // Builds a [WeeklyPdfReportPayload] for the currently-selected week
+  // and hands it off to [WeeklyPdfReportService]. Real data only for
+  // "This Week"; static fake snapshots for past weeks. Real and fake
+  // data never mix, and fake data is NEVER persisted to Supabase.
+  Future<void> _generatePdfReport() async {
+    if (_pdfGenerating) return;
+    setState(() => _pdfGenerating = true);
+
+    try {
+      final metrics = _metricsForWeek(_selectedWeekOffset);
+      final start = _weekStartDate(_selectedWeekOffset);
+      final end = start.add(const Duration(days: 6));
+      String two(int n) => n.toString().padLeft(2, '0');
+      String fmt(DateTime d) =>
+          '${two(d.day)}/${two(d.month)}/${d.year}';
+      final weekRange = '${fmt(start)} – ${fmt(end)}';
+      final shortLabel = _selectedWeekOffset == 0
+          ? 'This Week'
+          : (_selectedWeekOffset == -1 ? 'Last Week' : '2 Weeks Ago');
+
+      // ── Goals + rewards: real for offset 0, static fake otherwise ─
+      final List<PdfGoalEntry> pdfGoals;
+      late int rewardsUnlocked;
+      late int rewardsTotal;
+      late List<PdfRewardEntry> pdfRewards;
+
+      if (_selectedWeekOffset == 0) {
+        // Real, scoped to current child profile_id.
+        pdfGoals = _activeGoals.map((g) {
+          return PdfGoalEntry(
+            label: (g['label'] as String?) ?? 'Goal',
+            current: (g['current'] as int?) ?? 0,
+            target: (g['target'] as int?) ?? 1,
+            emoji: (g['emoji'] as String?) ?? '🎯',
+          );
+        }).toList();
+
+        // Pull live rewards. _rewardsUnlocked is already populated
+        // by ChildRewardsService (profile-scoped). For the gallery
+        // list we re-query so the chips are rich.
+        try {
+          final all = await ChildRewardsService.getAllRewards();
+          rewardsTotal = all.length;
+          rewardsUnlocked = all.where((r) => r.isUnlocked).length;
+          pdfRewards = all
+              .map((r) => PdfRewardEntry(
+                    title: r.title,
+                    emoji: r.emoji,
+                    unlocked: r.isUnlocked,
+                  ))
+              .toList();
+        } catch (_) {
+          rewardsTotal = _rewardsUnlocked;
+          rewardsUnlocked = _rewardsUnlocked;
+          pdfRewards = const [];
+        }
+      } else {
+        final fake = _kFakeReportExtras[_selectedWeekOffset];
+        pdfGoals = fake == null
+            ? const []
+            : fake.goals
+                .map((g) => PdfGoalEntry(
+                    label: g.label,
+                    current: g.current,
+                    target: g.target,
+                    emoji: g.emoji))
+                .toList();
+        rewardsUnlocked = fake?.rewardsUnlocked ?? 0;
+        rewardsTotal = fake?.rewardsTotal ?? 0;
+        pdfRewards = fake == null
+            ? const []
+            : fake.rewards
+                .map((r) => PdfRewardEntry(
+                    title: r.title, emoji: r.emoji, unlocked: r.unlocked))
+                .toList();
+      }
+
+      final payload = WeeklyPdfReportPayload(
+        childName: _childName,
+        childAge: _childAge,
+        weekRangeLabel: weekRange,
+        weekShortLabel: shortLabel,
+        emotionFreq: metrics.emotionFreq,
+        positivePerDay: metrics.positivePerDay,
+        negativePerDay: metrics.negativePerDay,
+        goals: pdfGoals,
+        rewards: pdfRewards,
+        rewardsUnlocked: rewardsUnlocked,
+        rewardsTotal: rewardsTotal,
+        // Re-use whichever AI insight is currently on screen — if
+        // none has been generated yet, the PDF builder falls back to
+        // its deterministic auto-summary.
+        aiSummary: _aiInsight,
+      );
+
+      await WeeklyPdfReportService.generate(payload);
+    } catch (e) {
+      debugPrint('PDF report error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Could not generate PDF. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pdfGenerating = false);
+    }
   }
 
   // ── Reusable week selector pill ──────────────────────────────────
@@ -2255,44 +2384,37 @@ gently. Plain text only — no markdown, no headings, no emojis.
                   // Same week selector as the Home tab — drives all 4 charts.
                   _buildWeekSelector(),
                   const SizedBox(width: 10),
+                  // ── Generate PDF Report ────────────────────────────
+                  // Builds an A4 PDF whose data exactly mirrors the 4
+                  // charts above for the currently-selected week
+                  // (real for "This Week", fake for past weeks).
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.picture_as_pdf,
-                        color: Colors.white, size: 18),
-                    label: Text('Export Report',
+                    icon: _pdfGenerating
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.picture_as_pdf,
+                            color: Colors.white, size: 18),
+                    label: Text(
+                        _pdfGenerating
+                            ? 'Generating…'
+                            : 'Generate PDF Report',
                         style: _textStyle(
                             fontSize: 14,
                             color: Colors.white,
                             fontWeight: FontWeight.w600)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6B21A8),
+                      disabledBackgroundColor:
+                          const Color(0xFF6B21A8).withValues(alpha: 0.6),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Generating PDF Report...')));
-
-                      // PDF export always reports on real all-time data,
-                      // never the fake-data preview.
-                      String topE = _emotionFreq.isNotEmpty
-                          ? (_emotionFreq.entries.toList()
-                                ..sort((a, b) => b.value.compareTo(a.value)))
-                              .first
-                              .key
-                          : 'Happy';
-                      String summaryInsight =
-                          'The child demonstrated a predominantly positive emotional pattern, with $topE being the most frequently expressed emotion. Engagement remained consistent with gradual improvement seen in the latest sessions.';
-
-                      await PdfReportService.generateReport(
-                        childName: _childName,
-                        summaryInsight: summaryInsight,
-                        emotionFreq: _emotionFreq,
-                        gameAvgStars: _gameAvgStars,
-                      );
-                    },
+                    onPressed: _pdfGenerating ? null : _generatePdfReport,
                   ),
                 ],
               )),
@@ -4704,5 +4826,62 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
       'ANIMATCH': 12,
       'Draw': 8,
     },
+  ),
+};
+
+/// Fake goals + rewards used by the PDF report when the caregiver
+/// picks a past week from the selector. Mirrors the `_kFakeWeeks`
+/// philosophy: never persisted, never written to Supabase, identical
+/// across every refresh.
+class _FakeWeekReportExtras {
+  final List<({String label, int current, int target, String emoji})> goals;
+  final int rewardsUnlocked;
+  final int rewardsTotal;
+  final List<({String title, String emoji, bool unlocked})> rewards;
+  const _FakeWeekReportExtras({
+    required this.goals,
+    required this.rewardsUnlocked,
+    required this.rewardsTotal,
+    required this.rewards,
+  });
+}
+
+const Map<int, _FakeWeekReportExtras> _kFakeReportExtras = {
+  -1: _FakeWeekReportExtras(
+    goals: [
+      (label: 'Daily Activities — 4 activities',  current: 4, target: 4, emoji: '🎯'),
+      (label: 'Time Spent — 60 minutes',          current: 52, target: 60, emoji: '⏱️'),
+      (label: 'Star Collection — 50 stars',       current: 38, target: 50, emoji: '⭐'),
+      (label: 'Mood Logging — 5 entries',         current: 5, target: 5, emoji: '📓'),
+    ],
+    rewardsUnlocked: 5,
+    rewardsTotal: 12,
+    rewards: [
+      (title: 'First Steps',  emoji: '🌱', unlocked: true),
+      (title: 'Star Collector', emoji: '⭐', unlocked: true),
+      (title: 'Calm Explorer', emoji: '🧘', unlocked: true),
+      (title: 'Joyful Streak', emoji: '🌞', unlocked: true),
+      (title: 'Mood Master',   emoji: '📊', unlocked: true),
+      (title: 'Game Champion', emoji: '🏆', unlocked: false),
+      (title: 'Storyteller',   emoji: '📖', unlocked: false),
+      (title: 'Brave Heart',   emoji: '💪', unlocked: false),
+    ],
+  ),
+  -2: _FakeWeekReportExtras(
+    goals: [
+      (label: 'Daily Activities — 3 activities', current: 1, target: 3, emoji: '🎯'),
+      (label: 'Time Spent — 45 minutes',         current: 28, target: 45, emoji: '⏱️'),
+      (label: 'Mood Logging — 4 entries',        current: 2, target: 4, emoji: '📓'),
+    ],
+    rewardsUnlocked: 2,
+    rewardsTotal: 12,
+    rewards: [
+      (title: 'First Steps',  emoji: '🌱', unlocked: true),
+      (title: 'Star Collector', emoji: '⭐', unlocked: true),
+      (title: 'Calm Explorer', emoji: '🧘', unlocked: false),
+      (title: 'Joyful Streak', emoji: '🌞', unlocked: false),
+      (title: 'Mood Master',   emoji: '📊', unlocked: false),
+      (title: 'Game Champion', emoji: '🏆', unlocked: false),
+    ],
   ),
 };
