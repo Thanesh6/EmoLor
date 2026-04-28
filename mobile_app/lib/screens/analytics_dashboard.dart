@@ -757,8 +757,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 10, horizontal: 14),
+                            padding: EdgeInsets.symmetric(
+                                vertical: 10,
+                                horizontal: widget.caregiverShortcut ? 10 : 14),
                             decoration: BoxDecoration(
                               color: const Color(0xFFDC2626)
                                   .withValues(alpha: 0.85),
@@ -772,13 +773,15 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                               children: [
                                 const Icon(Icons.arrow_back_rounded,
                                     color: Colors.white, size: 20),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 Text(
                                     widget.caregiverShortcut
                                         ? 'Return to Profile Selection'
                                         : 'Child Dashboard',
                                     style: GoogleFonts.baloo2(
-                                        fontSize: 16,
+                                        fontSize: widget.caregiverShortcut
+                                            ? 14
+                                            : 16,
                                         fontWeight: FontWeight.w600,
                                         color: Colors.white)),
                               ],
