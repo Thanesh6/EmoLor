@@ -484,6 +484,32 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                         ),
                       ],
                     ),
+                    // Top-right: View Child Analytics shortcut
+                    Positioned(
+                      top: 20,
+                      right: 20,
+                      child: GestureDetector(
+                        onTap: _showAnalyticsProfilePicker,
+                        child: Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                            border: Border.all(
+                                color: const Color(0xFF6B21A8), width: 2.5),
+                          ),
+                          child: const Icon(Icons.bar_chart_rounded,
+                              color: Color(0xFF6B21A8), size: 31),
+                        ),
+                      ),
+                    ),
                     // Bottom-left: Logout (+10% bigger than the old header one)
                     Positioned(
                       bottom: 20,
@@ -596,30 +622,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 16),
-            // ── Caregiver shortcut: view analytics without starting a session
-            OutlinedButton.icon(
-              onPressed: _showAnalyticsProfilePicker,
-              icon: const Icon(Icons.bar_chart_rounded,
-                  color: Color(0xFF6B21A8), size: 20),
-              label: Text(
-                'View Child Analytics',
-                style: GoogleFonts.baloo2(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6B21A8),
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF6B21A8), width: 2),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                backgroundColor: Colors.white.withValues(alpha: 0.7),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 28),
             // Profile grid — 5 per row, spills onto new rows, scrolls
             // vertically via the outer SingleChildScrollView. No cap.
             SizedBox(
