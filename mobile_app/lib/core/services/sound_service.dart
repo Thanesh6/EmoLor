@@ -5,11 +5,53 @@ import 'package:flutter/services.dart';
 
 /// Generates and plays simple programmatic tones for goal alerts.
 /// No external audio files needed — WAV PCM bytes are synthesised in Dart.
+///
+/// IMPORTANT — audio focus:
+/// These tones are notification-style SFX that must coexist with the
+/// looping background music ([BgMusicPlayer]).  Without an explicit
+/// AudioContext the player defaults to `AndroidAudioFocus.gain`, which
+/// steals full focus and **stops** the bg music every time a goal alert
+/// fires.  We override that with `gainTransientMayDuck` (Android) /
+/// `ambient` (iOS) so the music briefly ducks but is never interrupted.
 class SoundService {
   SoundService._();
   static final SoundService instance = SoundService._();
 
   final AudioPlayer _player = AudioPlayer();
+  bool _audioContextSet = false;
+
+  /// Audio context for goal-alert beeps.
+  ///
+  /// • Android: `gainTransientMayDuck` — Android automatically lowers the
+  ///   bg music volume for the duration of the beep and restores it after.
+  ///   Music is **never** paused or stopped.
+  /// • iOS: `ambient` with `mixWithOthers` — beep plays mixed on top of
+  ///   the music; neither stream interrupts the other.
+  static AudioContext get _sfxContext => AudioContext(
+        android: AudioContextAndroid(
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          stayAwake: false,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.assistanceSonification,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.ambient,
+          options: {
+            AVAudioSessionOptions.mixWithOthers,
+          },
+        ),
+      );
+
+  Future<void> _ensureAudioContext() async {
+    if (_audioContextSet) return;
+    _audioContextSet = true;
+    try {
+      await _player.setAudioContext(_sfxContext);
+    } catch (_) {
+      // If the platform rejects the context, fall back to default — at
+      // worst the music ducks/stops as before; we never throw.
+    }
+  }
 
   // ── Public API ────────────────────────────────────────────────────
 
@@ -57,6 +99,9 @@ class SoundService {
 
   Future<void> _playTone(double freq, double durSec) async {
     try {
+      // Configure audio focus on first use so goal-alert beeps coexist
+      // with the looping bg music instead of stopping it.
+      await _ensureAudioContext();
       final bytes = _generateWav(freq, durSec);
       await _player.play(BytesSource(bytes));
     } catch (_) {

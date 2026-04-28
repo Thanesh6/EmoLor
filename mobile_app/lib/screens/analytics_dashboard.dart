@@ -67,9 +67,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
   int _selectedWeekOffset = 0;
 
   // ── On-demand AI insight summary (Progress tab) ──
-  // null = never generated for the current selection.
-  // Cleared whenever the user changes weeks so the panel re-prompts.
-  String? _aiInsight;
+  // Keyed by week offset so switching weeks preserves already-generated
+  // summaries.  0 = this week, -1 = last week, -2 = two weeks ago.
+  final Map<int, String> _aiInsightByWeek = {};
   bool _aiLoading = false;
   String? _aiError;
 
@@ -873,15 +873,162 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     return target;
   }
 
-  /// Week selector label in `DD/MM/YYYY – DD/MM/YYYY` format
-  /// (Mon → Sun of the selected week). Only offsets 0, -1, -2 are
-  /// valid (clamped at the InkWell level).
+  /// Week selector label in `DD/MM/YYYY – DD/MM/YYYY` format.
+  /// Used by the PDF builder (keeps the existing plain-text format).
   String _weekLabel(int offset) {
     final start = _weekStartDate(offset);
     final end = start.add(const Duration(days: 6));
     String two(int n) => n.toString().padLeft(2, '0');
     String fmt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year}';
     return '${fmt(start)} – ${fmt(end)}';
+  }
+
+  /// Formats a [DateTime] as "Mon 27 Apr" for the calendar-style selector.
+  String _calendarDateFmt(DateTime d) {
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${dayNames[d.weekday - 1]} ${d.day} ${monthNames[d.month - 1]}';
+  }
+
+  /// Human-readable date range for the calendar selector.
+  /// Format: "Mon 27 Apr – Sun 3 May"
+  String _weekDateRange(int offset) {
+    final start = _weekStartDate(offset);
+    final end = start.add(const Duration(days: 6));
+    return '${_calendarDateFmt(start)} – ${_calendarDateFmt(end)}';
+  }
+
+  /// Short label for a week offset.
+  String _weekOffsetLabel(int offset) {
+    if (offset == 0) return 'This Week';
+    if (offset == -1) return 'Last Week';
+    return '2 Weeks Ago';
+  }
+
+  /// Opens the week-picker dialog.  Only three weeks are selectable:
+  ///   0  = This Week  (real data)
+  ///  -1  = Last Week  (sample data)
+  ///  -2  = 2 Weeks Ago (sample data)
+  void _showWeekPickerDialog() {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      builder: (ctx) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 8,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ───────────────────────────────────────────
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E8FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.calendar_month_rounded,
+                        color: Color(0xFF7C3AED), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Text('Select Week',
+                      style: _textStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF6B21A8))),
+                ]),
+                const SizedBox(height: 20),
+                // ── Three selectable week rows ────────────────────────
+                for (final offset in [0, -1, -2])
+                  _buildWeekPickerRow(ctx, offset),
+                // ── Footer note ───────────────────────────────────────
+                const SizedBox(height: 12),
+                Row(children: [
+                  Icon(Icons.info_outline_rounded,
+                      color: Colors.grey.shade400, size: 14),
+                  const SizedBox(width: 6),
+                  Text('Last Week & 2 Weeks Ago show sample data',
+                      style: _textStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade400)),
+                ]),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// One selectable row inside the week-picker dialog.
+  Widget _buildWeekPickerRow(BuildContext ctx, int offset) {
+    final isSelected = offset == _selectedWeekOffset;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedWeekOffset = offset;
+          _aiError = null;
+        });
+        Navigator.of(ctx).pop();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFF3E8FF)
+              : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF7C3AED)
+                : Colors.grey.shade200,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _weekOffsetLabel(offset),
+                  style: _textStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected
+                          ? const Color(0xFF6B21A8)
+                          : Colors.grey.shade700),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _weekDateRange(offset),
+                  style: _textStyle(
+                      fontSize: 13,
+                      color: isSelected
+                          ? const Color(0xFF9333EA)
+                          : Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ),
+          if (isSelected)
+            const Icon(Icons.check_circle_rounded,
+                color: Color(0xFF7C3AED), size: 22)
+          else
+            Icon(Icons.radio_button_unchecked_rounded,
+                color: Colors.grey.shade300, size: 22),
+        ]),
+      ),
+    );
   }
 
   // ── Real / fake week metrics dispatcher ──────────────────────────
@@ -1151,111 +1298,237 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       sessionsPerDay: List.generate(
           7, (i) => i <= dowMon ? m.sessionsPerDay[i] : 0),
       gameMinutes: m.gameMinutes,
+      // Pre/post frequency maps only contain days already logged — safe as-is.
+      preEmotionFreq: m.preEmotionFreq,
+      postEmotionFreq: m.postEmotionFreq,
+      prePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.prePerDay[i] : 0),
+      postPerDay: List.generate(
+          7, (i) => i <= dowSun ? m.postPerDay[i] : 0),
+      prePositivePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.prePositivePerDay[i] : 0),
+      preNegativePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.preNegativePerDay[i] : 0),
+      postPositivePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.postPositivePerDay[i] : 0),
+      postNegativePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.postNegativePerDay[i] : 0),
+      colorByEmotion: m.colorByEmotion,
+      goals: m.goals,
     );
   }
 
-  /// Build the prompt sent to Claude. Only describes data that actually
-  /// exists — empty days, zero-minute activities and unused emotions
-  /// are filtered out so the model can't hallucinate them.
+  /// Build the prompt sent to Claude.
+  ///
+  /// Covers exactly the data shown on the dashboard:
+  ///   • 6 Home tab flashcards (Total Sessions, Week's Emotion Trend,
+  ///     Top Pre/Post Emotion, Top Mood Colour, Top Activity)
+  ///   • 3 Progress tab charts (Emotion Trend, Emotion Distribution,
+  ///     Emotion–Colour Association)
+  ///
+  /// Goals, rewards and stars are intentionally excluded.
+  /// Empty days / zero-count entries are filtered so the model cannot
+  /// hallucinate data that was never logged.
   String _buildAiPrompt(_WeekMetrics m, int offset) {
     final start = _weekStartDate(offset);
     final end = start.add(const Duration(days: 6));
     String two(int n) => n.toString().padLeft(2, '0');
     String fmt(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year}';
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    const dayNamesSun = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    final dayLines = <String>[];
-    for (int i = 0; i < 7; i++) {
-      final pos = m.positivePerDay[i];
-      final neg = m.negativePerDay[i];
-      if (pos == 0 && neg == 0) continue;
-      dayLines.add(
-          '  - ${dayNamesSun[i]}: $pos positive, $neg negative emotion entries');
+    // ── Flashcard 1: Total Sessions ──────────────────────────────────
+    final totalSessions = m.sessionsPerDay.fold<int>(0, (s, v) => s + v);
+
+    // ── Flashcard 2: Week's Emotion Trend ────────────────────────────
+    int posCount = 0, negCount = 0;
+    m.preEmotionFreq.forEach((k, v) {
+      if (_kPositiveEmotions.contains(k)) posCount += v;
+      else if (_kNegativeEmotions.contains(k)) negCount += v;
+    });
+    m.postEmotionFreq.forEach((k, v) {
+      if (_kPositiveEmotions.contains(k)) posCount += v;
+      else if (_kNegativeEmotions.contains(k)) negCount += v;
+    });
+    final polarityTotal = posCount + negCount;
+    String trendLabel;
+    if (polarityTotal < 3) {
+      trendLabel = 'Not enough data';
+    } else {
+      final pct = posCount / polarityTotal;
+      trendLabel = pct >= 0.6
+          ? 'Positive Trend'
+          : (pct <= 0.4 ? 'Negative Trend' : 'Neutral');
     }
 
-    final emotionLines = m.emotionFreq.entries
-        .where((e) => e.value > 0)
-        .map((e) => '  - ${e.key}: ${e.value} time(s)')
-        .toList();
+    // ── Flashcard 3: Top Pre-Session Emotion ─────────────────────────
+    MapEntry<String, int>? preTop;
+    for (final e in m.preEmotionFreq.entries) {
+      if (e.value > 0 && (preTop == null || e.value > preTop!.value)) {
+        preTop = e;
+      }
+    }
+    final preTopStr = preTop != null ? '${preTop!.key} (${preTop!.value}×)' : '—';
 
-    final activityLines = m.gameMinutes.entries
-        .where((e) => e.value > 0)
-        .map((e) => '  - ${e.key}: ${e.value} min')
-        .toList();
+    // ── Flashcard 4: Top Post-Session Emotion ────────────────────────
+    MapEntry<String, int>? postTop;
+    for (final e in m.postEmotionFreq.entries) {
+      if (e.value > 0 && (postTop == null || e.value > postTop!.value)) {
+        postTop = e;
+      }
+    }
+    final postTopStr =
+        postTop != null ? '${postTop!.key} (${postTop!.value}×)' : '—';
 
-    final totalSessions =
-        m.sessionsPerDay.fold<int>(0, (sum, v) => sum + v);
+    // ── Flashcard 5: Top Mood Colour ─────────────────────────────────
+    String topColourEmotion = '—';
+    String topColourHex = '';
+    int topColourCount = 0;
+    m.colorByEmotion.forEach((emotion, byHex) {
+      byHex.forEach((hex, count) {
+        if (count > topColourCount) {
+          topColourCount = count;
+          topColourEmotion = emotion;
+          topColourHex = hex;
+        }
+      });
+    });
+    final topColourStr = topColourCount > 0
+        ? '$topColourEmotion — $topColourHex ($topColourCount×)'
+        : '—';
+
+    // ── Flashcard 6: Top Activity ─────────────────────────────────────
+    String topActivityName = '—';
+    int topActivityMins = 0;
+    m.gameMinutes.forEach((name, mins) {
+      if (mins > topActivityMins) {
+        topActivityMins = mins;
+        topActivityName = name;
+      }
+    });
+    final topActivityStr =
+        topActivityMins > 0 ? '$topActivityName ($topActivityMins min)' : '—';
+
+    // ── Chart 1: Emotion Trend (pre/post × positive/negative per day) ──
+    final trendLines = <String>[];
+    for (int i = 0; i < 7; i++) {
+      final preP = m.prePositivePerDay[i];
+      final preN = m.preNegativePerDay[i];
+      final postP = m.postPositivePerDay[i];
+      final postN = m.postNegativePerDay[i];
+      if (preP + preN + postP + postN == 0) continue;
+      trendLines
+          .add('  - ${dayNames[i]}: Pre(+$preP/-$preN)  Post(+$postP/-$postN)');
+    }
+
+    // ── Chart 2: Emotion Distribution ────────────────────────────────
+    final preFreqStr = m.preEmotionFreq.entries
+        .where((e) => e.value > 0)
+        .map((e) => '${e.key}: ${e.value}')
+        .join(', ');
+    final postFreqStr = m.postEmotionFreq.entries
+        .where((e) => e.value > 0)
+        .map((e) => '${e.key}: ${e.value}')
+        .join(', ');
+
+    // ── Chart 3: Emotion–Colour Association ──────────────────────────
+    final colourLines = <String>[];
+    m.colorByEmotion.forEach((emotion, byHex) {
+      final pairs = byHex.entries
+          .where((e) => e.value > 0)
+          .map((e) => '${e.key}(${e.value}×)')
+          .join(', ');
+      if (pairs.isNotEmpty) colourLines.add('  - $emotion → $pairs');
+    });
 
     final cutoffNote = offset == 0
-        ? 'NOTE: Only days from Sunday up to TODAY (${fmt(DateTime.now())}) '
-            'are listed. Do NOT mention any later days in the week.'
-        : 'NOTE: This is the complete summary for the past week '
-            '${fmt(start)} – ${fmt(end)}.';
+        ? 'IMPORTANT: Only days from Sunday up to TODAY (${fmt(DateTime.now())}) '
+            'have data. Do NOT mention any days that are not listed below.'
+        : 'This is the complete data for ${fmt(start)} – ${fmt(end)}.';
 
     return '''
-You are summarising one child's emotional + activity data for the parent.
+You are summarising one child's EMOLOR app usage for their parent or caregiver.
 
-Week range: ${fmt(start)} – ${fmt(end)}
+Week: ${fmt(start)} – ${fmt(end)}
 $cutoffNote
 
-EMOTION ENTRIES PER DAY:
-${dayLines.isEmpty ? '  (no entries)' : dayLines.join('\n')}
+=== HOME TAB FLASHCARDS ===
+Total Sessions this week: $totalSessions
+Week's Emotion Trend: $trendLabel
+Top Pre-Session Emotion: $preTopStr
+Top Post-Session Emotion: $postTopStr
+Top Mood Colour: $topColourStr
+Top Activity: $topActivityStr
 
-EMOTION FREQUENCY (whole week so far):
-${emotionLines.isEmpty ? '  (no entries)' : emotionLines.join('\n')}
+=== PROGRESS CHARTS ===
 
-ACTIVITY TIME (minutes spent on each game / activity):
-${activityLines.isEmpty ? '  (no activity)' : activityLines.join('\n')}
+CHART 1 — Emotion Trend (Pre vs Post, Positive vs Negative, per day):
+${trendLines.isEmpty ? '  (no data)' : trendLines.join('\n')}
 
-TOTAL SESSIONS LOGGED: $totalSessions
+CHART 2 — Emotion Distribution:
+  Pre-session:  ${preFreqStr.isEmpty ? '(none)' : preFreqStr}
+  Post-session: ${postFreqStr.isEmpty ? '(none)' : postFreqStr}
 
-Write 2–3 short, simple, parent-friendly, encouraging sentences that
-summarise the week. Stick STRICTLY to the data above — do not invent
-days, emotions, activities, goals or trends that are not listed. If a
-mix of positive and negative emotions appears, acknowledge both
-gently. Plain text only — no markdown, no headings, no emojis.
+CHART 3 — Emotion–Colour Association:
+${colourLines.isEmpty ? '  (no colour data)' : colourLines.join('\n')}
+
+=== INSTRUCTIONS ===
+Write 2–3 short, concise, parent-friendly, encouraging sentences that summarise
+this child's emotional wellbeing and activity for this week.
+- Stick STRICTLY to the data listed above.
+- Do NOT invent emotions, days, colours, activities, or trends not listed.
+- Do NOT mention goals, rewards, or stars — focus only on emotions and activities.
+- If both positive and negative emotions appear, acknowledge both gently.
+- Plain text only. No markdown, no bullet points, no headings, no emojis.
 ''';
   }
 
-  /// Triggered by the "Generate Insight Summary" button. Pulls the
-  /// metrics for the currently-selected week, short-circuits to a
-  /// fixed message when the week is empty, otherwise calls Claude.
+  /// Triggered by the "Generate Insight Summary" / "Regenerate" button.
+  ///
+  /// • Builds metrics for the selected week (trimmed to today for
+  ///   "This Week" so future days are never sent to the model).
+  /// • Short-circuits with a fixed message when the week has no data.
+  /// • Stores the result in [_aiInsightByWeek] keyed by week offset so
+  ///   switching weeks and switching back does not lose the summary.
   Future<void> _generateAiInsight() async {
     if (_aiLoading) return;
+    final weekKey = _selectedWeekOffset;
     setState(() {
       _aiLoading = true;
       _aiError = null;
-      _aiInsight = null;
+      // Clear only the current week's cached summary so a "Regenerate"
+      // click actually refetches.
+      _aiInsightByWeek.remove(weekKey);
     });
 
     try {
-      // For "This Week" we only feed Sun → today.  Past weeks (fake
+      // For "This Week" we only feed Sun → today.  Past weeks (sample
       // data) get the full snapshot.
-      var metrics = _metricsForWeek(_selectedWeekOffset);
-      if (_selectedWeekOffset == 0) {
+      var metrics = _metricsForWeek(weekKey);
+      if (weekKey == 0) {
         metrics = _trimMetricsToToday(metrics);
       }
 
-      // Empty-data short-circuit — never burn an API call on a blank
-      // week, and surface the exact copy the spec asks for.
-      final hasAny = metrics.emotionFreq.values.any((v) => v > 0) ||
+      // Empty-data short-circuit — never burn an API call on a blank week.
+      final hasAny =
+          metrics.preEmotionFreq.values.any((v) => v > 0) ||
+          metrics.postEmotionFreq.values.any((v) => v > 0) ||
           metrics.gameMinutes.values.any((v) => v > 0) ||
           metrics.sessionsPerDay.any((v) => v > 0);
       if (!hasAny) {
         if (!mounted) return;
         setState(() {
-          _aiInsight =
+          _aiInsightByWeek[weekKey] =
               'No data available yet. Start using EMOLOR this week to generate an insight summary.';
           _aiLoading = false;
         });
         return;
       }
 
-      final prompt = _buildAiPrompt(metrics, _selectedWeekOffset);
+      final prompt = _buildAiPrompt(metrics, weekKey);
       final summary = await AiInsightService.generateInsight(prompt);
       if (!mounted) return;
       setState(() {
-        _aiInsight = summary;
+        _aiInsightByWeek[weekKey] = summary;
         _aiLoading = false;
       });
     } catch (e) {
@@ -1301,13 +1574,13 @@ gently. Plain text only — no markdown, no headings, no emojis.
               ElevatedButton.icon(
                 onPressed: _aiLoading ? null : _generateAiInsight,
                 icon: Icon(
-                    _aiInsight == null
+                    _aiInsightByWeek[_selectedWeekOffset] == null
                         ? Icons.auto_awesome
                         : Icons.refresh_rounded,
                     color: Colors.white,
                     size: 18),
                 label: Text(
-                  _aiInsight == null
+                  _aiInsightByWeek[_selectedWeekOffset] == null
                       ? 'Generate Insight Summary'
                       : 'Regenerate',
                   style: _textStyle(
@@ -1360,9 +1633,9 @@ gently. Plain text only — no markdown, no headings, no emojis.
                 ),
               ]),
             )
-          else if (_aiInsight != null)
+          else if (_aiInsightByWeek[_selectedWeekOffset] != null)
             Text(
-              _aiInsight!,
+              _aiInsightByWeek[_selectedWeekOffset]!,
               style: _textStyle(
                       fontSize: 16,
                       color: const Color(0xFF4A044E),
@@ -1448,7 +1721,7 @@ gently. Plain text only — no markdown, no headings, no emojis.
         // Re-use whichever AI insight is currently on screen — if
         // none has been generated yet, the PDF builder falls back to
         // its deterministic auto-summary that covers all 4 charts.
-        aiSummary: _aiInsight,
+        aiSummary: _aiInsightByWeek[_selectedWeekOffset],
       );
 
       await WeeklyPdfReportService.generate(payload);
@@ -1465,71 +1738,69 @@ gently. Plain text only — no markdown, no headings, no emojis.
     }
   }
 
-  // ── Reusable week selector pill ──────────────────────────────────
+  // ── Calendar-style week selector pill ───────────────────────────
+  //
+  // Tapping the pill opens a dialog with three selectable week rows
+  // (This Week / Last Week / 2 Weeks Ago).  The pill itself shows:
+  //   • a calendar icon
+  //   • the short label ("This Week" / …) in small text above
+  //   • the full date range ("Mon 27 Apr – Sun 3 May") below
+  //   • a down-arrow to hint it is tappable
   Widget _buildWeekSelector() {
-    final atOldest = _selectedWeekOffset <= -2;
-    final atNewest = _selectedWeekOffset >= 0;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-            color: const Color(0xFF6B21A8).withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // ◀ prev (older) week
-          InkWell(
-            onTap: atOldest
-                ? null
-                : () => setState(() {
-                      _selectedWeekOffset--;
-                      _aiInsight = null;
-                      _aiError = null;
-                    }),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              child: Icon(Icons.chevron_left_rounded,
-                  color: atOldest
-                      ? Colors.grey.shade300
-                      : const Color(0xFF6B21A8),
-                  size: 22),
+    return GestureDetector(
+      onTap: _showWeekPickerDialog,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE9D5FF), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E8FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.calendar_month_rounded,
+                  color: Color(0xFF7C3AED), size: 18),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              _weekLabel(_selectedWeekOffset),
-              style: _textStyle(
-                  fontSize: 13,
-                  color: const Color(0xFF6B21A8),
-                  fontWeight: FontWeight.w600),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _weekOffsetLabel(_selectedWeekOffset),
+                  style: _textStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF9333EA)),
+                ),
+                Text(
+                  _weekDateRange(_selectedWeekOffset),
+                  style: _textStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF6B21A8)),
+                ),
+              ],
             ),
-          ),
-          // ▶ next (newer) week — disabled on This Week
-          InkWell(
-            onTap: atNewest
-                ? null
-                : () => setState(() {
-                      _selectedWeekOffset++;
-                      _aiInsight = null;
-                      _aiError = null;
-                    }),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              child: Icon(Icons.chevron_right_rounded,
-                  color: atNewest
-                      ? Colors.grey.shade300
-                      : const Color(0xFF6B21A8),
-                  size: 22),
-            ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            const Icon(Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFF7C3AED), size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -1734,31 +2005,34 @@ gently. Plain text only — no markdown, no headings, no emojis.
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Row 1: Total Sessions | Week's Emotion Trend
                 Expanded(
                   child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         card1,
                         const SizedBox(width: 12),
-                        card2,
-                      ]),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        card3,
-                        const SizedBox(width: 12),
-                        card4,
-                      ]),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
                         card5,
+                      ]),
+                ),
+                const SizedBox(height: 12),
+                // Row 2: Top Pre-Session Emotion | Top Post-Session Emotion
+                Expanded(
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        card2,
+                        const SizedBox(width: 12),
+                        card3,
+                      ]),
+                ),
+                const SizedBox(height: 12),
+                // Row 3: Top Mood Colour | Top Activity
+                Expanded(
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        card4,
                         const SizedBox(width: 12),
                         card6,
                       ]),

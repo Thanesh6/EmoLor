@@ -40,7 +40,8 @@ class AiInsightService {
         _endpoint,
         data: {
           'model': _model,
-          'max_tokens': 300,
+          'max_tokens': 350,
+          'temperature': 0.2,
           'messages': [
             {'role': 'user', 'content': prompt},
           ],
