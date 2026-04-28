@@ -356,6 +356,101 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
     });
   }
 
+  /// Caregiver shortcut — shows a profile picker then opens the analytics
+  /// dashboard directly for the selected child without starting a session.
+  void _showAnalyticsProfilePicker() {
+    if (_profiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a child profile first to view analytics.'),
+        ),
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.bar_chart_rounded,
+                  color: Color(0xFF6B21A8), size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'View Child Analytics',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                'Select a child to open their analytics dashboard.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ),
+            const Divider(),
+            ..._profiles.map((profile) => ListTile(
+                  leading: CircleAvatar(
+                    radius: 22,
+                    backgroundColor:
+                        const Color(0xFF6B21A8).withValues(alpha: 0.15),
+                    child: Text(
+                      profile.name[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6B21A8),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    profile.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: profile.age != null
+                      ? Text('Age ${profile.age}')
+                      : null,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.go('/child-analytics', extra: {
+                      'profileId': profile.profileId,
+                      'childName': profile.name,
+                    });
+                  },
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel',
+                style: TextStyle(color: Color(0xFF6B21A8))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -501,7 +596,30 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 color: const Color(0xFF6B21A8).withValues(alpha: 0.7),
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 16),
+            // ── Caregiver shortcut: view analytics without starting a session
+            OutlinedButton.icon(
+              onPressed: _showAnalyticsProfilePicker,
+              icon: const Icon(Icons.bar_chart_rounded,
+                  color: Color(0xFF6B21A8), size: 20),
+              label: Text(
+                'View Child Analytics',
+                style: GoogleFonts.baloo2(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF6B21A8),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF6B21A8), width: 2),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                backgroundColor: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 20),
             // Profile grid — 5 per row, spills onto new rows, scrolls
             // vertically via the outer SingleChildScrollView. No cap.
             SizedBox(
