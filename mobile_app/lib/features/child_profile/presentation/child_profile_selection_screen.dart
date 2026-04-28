@@ -70,6 +70,106 @@ class _ChildProfileSelectionScreenState
     context.go('/caregiver-dashboard');
   }
 
+  /// Shows a profile-picker dialog then navigates directly to the analytics
+  /// dashboard for the selected child — no session, no goals, no activity.
+  void _showAnalyticsProfilePicker() {
+    if (_profiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a child profile first to view analytics.'),
+        ),
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.bar_chart_rounded,
+                  color: Color(0xFF6B21A8), size: 22),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'View Child Analytics',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                'Select a child to open their analytics dashboard.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ),
+            const Divider(),
+            ..._profiles.map((profile) => ListTile(
+                  leading: CircleAvatar(
+                    radius: 22,
+                    backgroundColor:
+                        const Color(0xFF6B21A8).withValues(alpha: 0.15),
+                    backgroundImage: profile.avatarUrl != null
+                        ? NetworkImage(profile.avatarUrl!)
+                        : null,
+                    child: profile.avatarUrl == null
+                        ? Text(
+                            profile.name[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6B21A8),
+                            ),
+                          )
+                        : null,
+                  ),
+                  title: Text(
+                    profile.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: profile.age != null
+                      ? Text('Age ${profile.age}')
+                      : null,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    context.go('/child-analytics', extra: {
+                      'profileId': profile.profileId,
+                      'childName': profile.name,
+                    });
+                  },
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel',
+                style: TextStyle(color: Color(0xFF6B21A8))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,10 +225,24 @@ class _ChildProfileSelectionScreenState
                         color: Theme.of(context).primaryColor,
                       ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  onPressed: _navigateToCaregiverDashboard,
-                  tooltip: 'Caregiver Dashboard',
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Caregiver analytics shortcut ──────────────────
+                    Tooltip(
+                      message: 'View Child Analytics',
+                      child: IconButton(
+                        icon: const Icon(Icons.bar_chart_rounded),
+                        color: const Color(0xFF6B21A8),
+                        onPressed: _showAnalyticsProfilePicker,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      onPressed: _navigateToCaregiverDashboard,
+                      tooltip: 'Caregiver Dashboard',
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -143,6 +257,30 @@ class _ChildProfileSelectionScreenState
                     color: Colors.black54,
                   ),
               textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // ── View Child Analytics shortcut button ───────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: OutlinedButton.icon(
+              onPressed: _showAnalyticsProfilePicker,
+              icon: const Icon(Icons.bar_chart_rounded,
+                  color: Color(0xFF6B21A8), size: 18),
+              label: const Text(
+                'View Child Analytics',
+                style: TextStyle(
+                  color: Color(0xFF6B21A8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF6B21A8), width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              ),
             ),
           ),
           const SizedBox(height: 12),

@@ -294,6 +294,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      // Caregiver shortcut: view analytics for a specific child profile
+      // without starting a session.  Opened from the "Who's Playing Today?"
+      // profile-selection page.  Saves the profile ID to SharedPreferences so
+      // all services (StarService, CompletionService, GoalService, etc.) read
+      // the correct child's data.
+      GoRoute(
+        path: '/child-analytics',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final profileId = extra?['profileId'] as String?;
+          final childName = extra?['childName'] as String?;
+          if (profileId != null) {
+            // Scope all offline-first services to this child profile.
+            ChildSessionService.saveChildProfileId(profileId);
+          }
+          return AnalyticsDashboard(
+            childName: childName,
+            caregiverShortcut: true,
+          );
+        },
+      ),
       GoRoute(
         path: '/orgz-child-dashboard',
         builder: (context, state) => const OrgzChildDashboard(),

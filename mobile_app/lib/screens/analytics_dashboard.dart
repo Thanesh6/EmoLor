@@ -19,11 +19,16 @@ import '../features/child/models/completion_record.dart';
 class AnalyticsDashboard extends StatefulWidget {
   final String? childName;
   final bool showSwitchAccount;
+  /// When true the dashboard was opened via the caregiver shortcut on the
+  /// profile-selection page.  No session is started; back returns the
+  /// caregiver to "Who's Playing Today?" instead of the child dashboard.
+  final bool caregiverShortcut;
 
   const AnalyticsDashboard({
     super.key,
     this.childName,
     this.showSwitchAccount = false,
+    this.caregiverShortcut = false,
   });
 
   @override
@@ -739,7 +744,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                             horizontal: 12, vertical: 8),
                         child: InkWell(
                           onTap: () {
-                            if (widget.showSwitchAccount) {
+                            if (widget.caregiverShortcut) {
+                              context.go('/child-profiles');
+                            } else if (widget.showSwitchAccount) {
                               context.go('/child/home', extra: {
                                 'showSwitch': true,
                                 'childName': _childName,
@@ -766,7 +773,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                                 const Icon(Icons.arrow_back_rounded,
                                     color: Colors.white, size: 20),
                                 const SizedBox(width: 8),
-                                Text('Child Dashboard',
+                                Text(
+                                    widget.caregiverShortcut
+                                        ? 'Return to Profile Selection'
+                                        : 'Child Dashboard',
                                     style: GoogleFonts.baloo2(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
