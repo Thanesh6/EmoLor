@@ -745,7 +745,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
                         child: InkWell(
                           onTap: () {
                             if (widget.caregiverShortcut) {
-                              context.go('/child-profiles');
+                              context.go('/orgz-child-dashboard');
                             } else if (widget.showSwitchAccount) {
                               context.go('/child/home', extra: {
                                 'showSwitch': true,

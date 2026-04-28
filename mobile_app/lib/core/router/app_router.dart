@@ -13,7 +13,6 @@ import '../../screens/update_password_screen.dart';
 import '../../screens/child_dashboard.dart'; // Child Dashboard
 import '../../screens/analytics_dashboard.dart';
 import '../../screens/orgz_child_dashboard.dart';
-import '../../features/child_profile/presentation/child_profile_selection_screen.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
 import '../../features/child/presentation/how_i_feel_screen.dart';
 import '../../features/child/presentation/set_goals_screen.dart';
@@ -171,10 +170,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // `extra`, which silently hid the Switch Account button for org
       // caregivers. Everything now routes through '/child/home'.
       GoRoute(
-        path: '/child-profiles',
-        builder: (context, state) => const ChildProfileSelectionScreen(),
-      ),
-      GoRoute(
         path: '/child/create',
         builder: (context, state) => const CreateChildProfileScreen(),
       ),
@@ -206,7 +201,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               if (showSwitch) {
                 context.go('/orgz-child-dashboard');
               } else {
-                context.go('/child-profiles');
+                context.go('/orgz-child-dashboard');
               }
             },
             onContinue: () {
@@ -229,13 +224,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             mode: HowIFeelMode.start,
             childName: childName,
             // Back goes to the profile picker the child came from —
-            // org accounts return to /orgz-child-dashboard, otherwise
-            // to /child-profiles.
+            // all accounts return to /orgz-child-dashboard.
             onBack: () {
               if (showSwitch) {
                 context.go('/orgz-child-dashboard');
               } else {
-                context.go('/child-profiles');
+                context.go('/orgz-child-dashboard');
               }
             },
             onContinue: (_) async {
@@ -272,7 +266,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   context.go('/orgz-child-dashboard');
                   break;
                 case 'back-to-profiles':
-                  context.go('/child-profiles');
+                  context.go('/orgz-child-dashboard');
                   break;
                 case 'logout':
                 default:
