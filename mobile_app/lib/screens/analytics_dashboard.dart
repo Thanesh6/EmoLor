@@ -993,6 +993,12 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     final Map<String, int> postFreq = {};
     final prePerDay = List<int>.filled(7, 0);
     final postPerDay = List<int>.filled(7, 0);
+    // Pre/post split by sentiment so the trend chart can stack positive
+    // (green) on top of negative (red) per session phase.
+    final prePositivePerDay = List<int>.filled(7, 0);
+    final preNegativePerDay = List<int>.filled(7, 0);
+    final postPositivePerDay = List<int>.filled(7, 0);
+    final postNegativePerDay = List<int>.filled(7, 0);
     final Map<String, Map<String, int>> colorByEmotion = {};
     int totalSessions = 0;
 
@@ -1014,12 +1020,26 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
 
       if (preName != null && preName.isNotEmpty) {
         preFreq[preName] = (preFreq[preName] ?? 0) + 1;
-        if (dow >= 0 && dow < 7) prePerDay[dow]++;
+        if (dow >= 0 && dow < 7) {
+          prePerDay[dow]++;
+          if (positiveSet.contains(preName)) {
+            prePositivePerDay[dow]++;
+          } else if (negativeSet.contains(preName)) {
+            preNegativePerDay[dow]++;
+          }
+        }
         incColour(preName, (s['pre_emotion_colour'] as String?)?.trim());
       }
       if (postName != null && postName.isNotEmpty) {
         postFreq[postName] = (postFreq[postName] ?? 0) + 1;
-        if (dow >= 0 && dow < 7) postPerDay[dow]++;
+        if (dow >= 0 && dow < 7) {
+          postPerDay[dow]++;
+          if (positiveSet.contains(postName)) {
+            postPositivePerDay[dow]++;
+          } else if (negativeSet.contains(postName)) {
+            postNegativePerDay[dow]++;
+          }
+        }
         incColour(postName, (s['post_emotion_colour'] as String?)?.trim());
         // A session is "complete" only once post is saved.
         if (preName != null && preName.isNotEmpty) totalSessions++;
@@ -1051,6 +1071,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       postEmotionFreq: postFreq,
       prePerDay: prePerDay,
       postPerDay: postPerDay,
+      prePositivePerDay: prePositivePerDay,
+      preNegativePerDay: preNegativePerDay,
+      postPositivePerDay: postPositivePerDay,
+      postNegativePerDay: postNegativePerDay,
       colorByEmotion: colorByEmotion,
       goals: goalSnapshots,
       starsEarned: starsEarned,
@@ -1571,24 +1595,74 @@ gently. Plain text only — no markdown, no headings, no emojis.
         ? '${_humanHex(topColourHex)} • $topColourCount×'
         : 'No colour pairs yet';
 
-    // ── Card 5 — Goals Completed ─────────────────────────────────
-    final int goalsTotal = metrics.goals.length;
-    final int goalsDone =
-        metrics.goals.where((g) => g.isCompleted).length;
-    final String goalsValue =
-        goalsTotal == 0 ? '—' : '$goalsDone / $goalsTotal';
-    final String goalsSub = goalsTotal == 0
-        ? 'No goals set'
-        : (goalsDone == goalsTotal
-            ? 'All complete!'
-            : '${goalsTotal - goalsDone} in progress');
+    // ── Card 5 — Week's Emotion Trend ────────────────────────────
+    // Aggregates positive vs negative emotion choices across BOTH
+    // pre-session and post-session selections for the selected week.
+    // Drives the same calculation the Progress-tab Emotion Trend chart
+    // visualises, so the home flashcard and the chart can never disagree.
+    int countByPolarity(Map<String, int> freq, Set<String> set) {
+      var n = 0;
+      freq.forEach((emotion, count) {
+        if (set.contains(emotion)) n += count;
+      });
+      return n;
+    }
 
-    // ── Card 6 — Stars Earned ────────────────────────────────────
-    final int stars = metrics.starsEarned;
-    final String starsValue = '$stars';
-    final String starsSub = stars == 0
-        ? 'No stars yet'
-        : (stars == 1 ? 'star this week' : 'stars this week');
+    final int posCount =
+        countByPolarity(metrics.preEmotionFreq, _kPositiveEmotions) +
+            countByPolarity(metrics.postEmotionFreq, _kPositiveEmotions);
+    final int negCount =
+        countByPolarity(metrics.preEmotionFreq, _kNegativeEmotions) +
+            countByPolarity(metrics.postEmotionFreq, _kNegativeEmotions);
+    final int polarityTotal = posCount + negCount;
+
+    String trendEmoji;
+    String trendValue;
+    Color trendColour;
+    String trendSub;
+    if (polarityTotal < 3) {
+      trendEmoji = '🌤️';
+      trendValue = 'Not Enough Data';
+      trendColour = const Color(0xFF9CA3AF);
+      trendSub = 'Log a few more sessions to see this';
+    } else {
+      final double posPct = posCount / polarityTotal;
+      if (posPct >= 0.60) {
+        trendEmoji = '🌈';
+        trendValue = 'Positive Trend';
+        trendColour = const Color(0xFF10B981);
+      } else if (posPct <= 0.40) {
+        trendEmoji = '🌧️';
+        trendValue = 'Negative Trend';
+        trendColour = const Color(0xFFEF4444);
+      } else {
+        trendEmoji = '⚖️';
+        trendValue = 'Neutral';
+        trendColour = const Color(0xFFF59E0B);
+      }
+      trendSub = '$posCount positive · $negCount negative';
+    }
+
+    // ── Card 6 — Top Activity ────────────────────────────────────
+    // Activity (game / Draw) with the largest total time-spent in the
+    // selected week. metrics.gameMinutes is profile-scoped via
+    // _allCompletions which CompletionService loads per child profile.
+    String topActivityName = '—';
+    int topActivityMinutes = 0;
+    metrics.gameMinutes.forEach((name, mins) {
+      if (mins > topActivityMinutes) {
+        topActivityMinutes = mins;
+        topActivityName = name;
+      }
+    });
+    // Render a friendly Title-case label for the games (the raw ids are
+    // ALL CAPS in the completion records — _brandedGameName already
+    // handles this everywhere else in the dashboard).
+    final String topActivityValue =
+        topActivityMinutes > 0 ? _brandedGameName(topActivityName) : '—';
+    final String topActivitySub = topActivityMinutes > 0
+        ? '$topActivityMinutes min this week'
+        : 'No activity time logged';
 
     final card1 = _buildHomeCard(
         '🎯', 'Total Sessions', sessionsValue,
@@ -1599,10 +1673,10 @@ gently. Plain text only — no markdown, no headings, no emojis.
         postName, const Color(0xFF10B981), postSub);
     final card4 = _buildHomeCard('🎨', 'Top Mood Colour',
         topColourValue, topColourSwatch, topColourSub);
-    final card5 = _buildHomeCard('🏁', 'Goals Completed',
-        goalsValue, const Color(0xFF8B5CF6), goalsSub);
-    final card6 = _buildHomeCard('⭐', 'Stars Earned',
-        starsValue, const Color(0xFFF59E0B), starsSub);
+    final card5 = _buildHomeCard(trendEmoji, "Week's Emotion Trend",
+        trendValue, trendColour, trendSub);
+    final card6 = _buildHomeCard('🎮', 'Top Activity',
+        topActivityValue, const Color(0xFFF59E0B), topActivitySub);
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -2329,48 +2403,71 @@ gently. Plain text only — no markdown, no headings, no emojis.
           radius: _pieRadius, titleStyle: _pieLabelStyle));
     }
 
-    // ── Emotion Trend (PRE vs POST session per day) ─────────────────
-    final List<int> prePerDay = metrics.prePerDay;
-    final List<int> postPerDay = metrics.postPerDay;
+    // ── Emotion Trend (PRE vs POST session per day, stacked by sentiment) ─
+    // Each day shows two bars side-by-side: Pre (left) and Post (right).
+    // Each bar is internally stacked — green = positive emotions logged,
+    // red = negative — so the chart conveys all three dimensions at once:
+    //   · weekday (x-axis)
+    //   · pre vs post (the two bars per day)
+    //   · positive vs negative trend (the colour stacks)
+    final prePos = metrics.prePositivePerDay;
+    final preNeg = metrics.preNegativePerDay;
+    final postPos = metrics.postPositivePerDay;
+    final postNeg = metrics.postNegativePerDay;
 
-    final emotionLineBars = [
-      LineChartBarData(
-        spots: List.generate(
-            7, (day) => FlSpot(day.toDouble(), prePerDay[day].toDouble())),
-        color: const Color(0xFF6366F1), // Indigo for pre-session
-        barWidth: 3,
-        isCurved: true,
-        curveSmoothness: 0.3,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(
-          show: true,
-          color: const Color(0xFF6366F1).withValues(alpha: 0.18),
-        ),
-      ),
-      LineChartBarData(
-        spots: List.generate(
-            7, (day) => FlSpot(day.toDouble(), postPerDay[day].toDouble())),
-        color: const Color(0xFF10B981), // Green for post-session
-        barWidth: 3,
-        isCurved: true,
-        curveSmoothness: 0.3,
-        dotData: const FlDotData(show: true),
-        belowBarData: BarAreaData(
-          show: true,
-          color: const Color(0xFF10B981).withValues(alpha: 0.18),
-        ),
-      ),
-    ];
+    const Color cPrePos = Color(0xFF6366F1);   // indigo  — pre, positive
+    const Color cPreNeg = Color(0xFFC7D2FE);   // light indigo — pre, negative
+    const Color cPostPos = Color(0xFF10B981);  // green   — post, positive
+    const Color cPostNeg = Color(0xFFFCA5A5);  // light red — post, negative
 
-    final maxPrePostValue = max(
-      prePerDay.reduce(max),
-      postPerDay.reduce(max),
-    ).toDouble();
+    BarChartGroupData buildDayGroup(int day) {
+      final preTotal = prePos[day] + preNeg[day];
+      final postTotal = postPos[day] + postNeg[day];
+      return BarChartGroupData(
+        x: day,
+        barsSpace: 4,
+        barRods: [
+          BarChartRodData(
+            toY: preTotal.toDouble(),
+            width: 11,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(4)),
+            rodStackItems: [
+              BarChartRodStackItem(
+                  0, preNeg[day].toDouble(), cPreNeg),
+              BarChartRodStackItem(preNeg[day].toDouble(),
+                  preTotal.toDouble(), cPrePos),
+            ],
+          ),
+          BarChartRodData(
+            toY: postTotal.toDouble(),
+            width: 11,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(4)),
+            rodStackItems: [
+              BarChartRodStackItem(
+                  0, postNeg[day].toDouble(), cPostNeg),
+              BarChartRodStackItem(postNeg[day].toDouble(),
+                  postTotal.toDouble(), cPostPos),
+            ],
+          ),
+        ],
+      );
+    }
+
+    final emotionTrendGroups = List.generate(7, buildDayGroup);
+
+    final int maxBarValue = [
+      ...List.generate(7, (i) => prePos[i] + preNeg[i]),
+      ...List.generate(7, (i) => postPos[i] + postNeg[i]),
+    ].fold<int>(0, (a, b) => b > a ? b : a);
     final double maxEmotionY =
-        maxPrePostValue < 1 ? 1.0 : maxPrePostValue.ceilToDouble();
+        maxBarValue < 1 ? 1.0 : (maxBarValue + 1).toDouble();
+    final bool hasPrePostData = maxBarValue > 0;
 
-    // ── Goals Progress data ─────────────────────────────────────────
-    final List<_GoalSnapshot> goals = metrics.goals;
+    // ── Goals Progress chart was removed in 3-chart redesign. The
+    // metrics.goals list is still populated by the data layer because
+    // the PDF report continues to render a goals section.
 
     // ── Emotion Color Association data ──────────────────────────────
     // Flatten the emotion → (hex → count) map into a list of bars, one
@@ -2393,8 +2490,7 @@ gently. Plain text only — no markdown, no headings, no emojis.
     // Empty-state flags — used below to overlay a "No data yet" message
     // on each chart instead of showing a flat / empty plot. We do NOT
     // hide the chart container itself so the layout stays stable.
-    final bool hasPrePostData = maxPrePostValue > 0;
-    final bool hasGoals = goals.isNotEmpty;
+    // NOTE: hasPrePostData is computed alongside the bar groups above.
     final bool hasAssocData = topAssoc.isNotEmpty;
 
     return Column(
@@ -2410,13 +2506,13 @@ gently. Plain text only — no markdown, no headings, no emojis.
               action: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Same week selector as the Home tab — drives all 4 charts.
+                  // Same week selector as the Home tab — drives all 3 charts.
                   _buildWeekSelector(),
                   const SizedBox(width: 10),
                   // ── Generate PDF Report ────────────────────────────
-                  // Builds an A4 PDF whose data exactly mirrors the 4
-                  // charts above for the currently-selected week
-                  // (real for "This Week", fake for past weeks).
+                  // Builds an A4 PDF whose data mirrors the 3 charts
+                  // above for the currently-selected week (real for
+                  // "This Week", fake for past weeks).
                   ElevatedButton.icon(
                     icon: _pdfGenerating
                         ? const SizedBox(
@@ -2455,132 +2551,130 @@ gently. Plain text only — no markdown, no headings, no emojis.
               children: [
                 _buildChartCard(
                   '📈 Emotion Trend',
-                  'Pre-session vs Post-session emotions throughout the week',
-                  height: 260,
-                  // Extra top padding keeps the plotted lines clear of the
-                  // subtitle — they used to sit right underneath it.
+                  'Pre-session vs Post-session, split by positive & negative',
+                  height: 290,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Legend sits above the chart in a single horizontal
+                        // strip so it never competes with the plot for width.
+                        // Wrap so the four chips fall to two lines on narrow
+                        // tablet widths instead of overflowing on the right.
+                        Wrap(
+                          spacing: 14,
+                          runSpacing: 6,
+                          children: [
+                            _buildLegendItem('Pre · Positive', cPrePos),
+                            _buildLegendItem('Pre · Negative', cPreNeg),
+                            _buildLegendItem('Post · Positive', cPostPos),
+                            _buildLegendItem('Post · Negative', cPostNeg),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Expanded(
                           child: _emptyChartOverlay(
                             hasData: hasPrePostData,
                             message:
                                 'No pre/post-session data yet this week.',
-                            child: LineChart(
-                            LineChartData(
-                              minX: 0,
-                              maxX: 6,
-                              lineBarsData: emotionLineBars,
-                              minY: 0,
-                              maxY: maxEmotionY,
-                              clipData: const FlClipData.all(),
-                              lineTouchData: LineTouchData(
-                                handleBuiltInTouches: true,
-                                touchTooltipData: LineTouchTooltipData(
-                                  getTooltipColor: (_) =>
-                                      const Color(0xFF1F2937),
-                                  fitInsideHorizontally: true,
-                                  fitInsideVertically: true,
-                                  getTooltipItems: (spots) => spots.map((spot) {
-                                    final label = spot.barIndex == 0
-                                        ? 'Pre-session'
-                                        : 'Post-session';
-                                    return LineTooltipItem(
-                                      '$label: ${spot.y.toInt()}',
-                                      const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                              titlesData: FlTitlesData(
-                                // Hide the Y-axis scale entirely — the tap
-                                // tooltip already reveals exact counts, and
-                                // Engagement Trend uses the same no-label
-                                // treatment.
-                                leftTitles: const AxisTitles(
-                                    sideTitles: SideTitles(showTitles: false)),
-                                rightTitles: const AxisTitles(
-                                    sideTitles: SideTitles(
-                                        showTitles: false, reservedSize: 8)),
-                                topTitles: const AxisTitles(
-                                    sideTitles: SideTitles(showTitles: false)),
-                                bottomTitles: AxisTitles(
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: 30,
-                                    interval: 1,
-                                    getTitlesWidget: (v, _) {
-                                      const days = [
-                                        'Sun',
-                                        'Mon',
-                                        'Tue',
-                                        'Wed',
-                                        'Thu',
-                                        'Fri',
-                                        'Sat'
+                            child: BarChart(
+                              BarChartData(
+                                alignment: BarChartAlignment.spaceAround,
+                                maxY: maxEmotionY,
+                                minY: 0,
+                                groupsSpace: 12,
+                                barGroups: emotionTrendGroups,
+                                barTouchData: BarTouchData(
+                                  enabled: true,
+                                  touchTooltipData: BarTouchTooltipData(
+                                    getTooltipColor: (_) =>
+                                        const Color(0xFF1F2937),
+                                    fitInsideHorizontally: true,
+                                    fitInsideVertically: true,
+                                    getTooltipItem:
+                                        (group, gi, rod, ri) {
+                                      const labels = [
+                                        'Sun', 'Mon', 'Tue', 'Wed',
+                                        'Thu', 'Fri', 'Sat'
                                       ];
-
-                                      if (v < 0 || v > 6 || v != v.roundToDouble()) {
-                                        return const SizedBox.shrink();
-                                      }
-
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Text(
-                                          days[v.toInt()],
-                                          style: _textStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey[600]!,
-                                          ),
+                                      final phase =
+                                          ri == 0 ? 'Pre' : 'Post';
+                                      final pos = ri == 0
+                                          ? prePos[group.x]
+                                          : postPos[group.x];
+                                      final neg = ri == 0
+                                          ? preNeg[group.x]
+                                          : postNeg[group.x];
+                                      return BarTooltipItem(
+                                        '${labels[group.x]} · $phase\n'
+                                        '+ $pos positive\n'
+                                        '− $neg negative',
+                                        const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
                                         ),
                                       );
                                     },
                                   ),
                                 ),
-                              ),
-                              // Same horizontal-line treatment as the
-                              // Engagement Trend chart: thin grey lines at
-                              // every default tick, no vertical gridlines.
-                              gridData: FlGridData(
-                                drawVerticalLine: false,
-                                getDrawingHorizontalLine: (_) => FlLine(
-                                  color: Colors.grey.withValues(alpha: 0.15),
-                                  strokeWidth: 1,
+                                titlesData: FlTitlesData(
+                                  leftTitles: const AxisTitles(
+                                      sideTitles:
+                                          SideTitles(showTitles: false)),
+                                  rightTitles: const AxisTitles(
+                                      sideTitles: SideTitles(
+                                          showTitles: false,
+                                          reservedSize: 6)),
+                                  topTitles: const AxisTitles(
+                                      sideTitles:
+                                          SideTitles(showTitles: false)),
+                                  bottomTitles: AxisTitles(
+                                    sideTitles: SideTitles(
+                                      showTitles: true,
+                                      reservedSize: 28,
+                                      interval: 1,
+                                      getTitlesWidget: (v, _) {
+                                        const days = [
+                                          'Sun', 'Mon', 'Tue', 'Wed',
+                                          'Thu', 'Fri', 'Sat'
+                                        ];
+                                        final i = v.toInt();
+                                        if (i < 0 || i > 6) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 6),
+                                          child: Text(
+                                            days[i],
+                                            style: _textStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600]!,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
                                 ),
+                                gridData: FlGridData(
+                                  show: true,
+                                  drawVerticalLine: false,
+                                  getDrawingHorizontalLine: (_) => FlLine(
+                                    color:
+                                        Colors.grey.withValues(alpha: 0.15),
+                                    strokeWidth: 1,
+                                  ),
+                                ),
+                                borderData: FlBorderData(show: false),
                               ),
-                              borderData: FlBorderData(show: false),
                             ),
                           ),
-                          ), // _emptyChartOverlay
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Legend column — sits at the top-right corner of the
-                      // chart card, clear of the plotted lines.
-                      SizedBox(
-                        width: 86,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            _buildLegendItem(
-                                'Pre-session', const Color(0xFF6366F1)),
-                            const SizedBox(height: 10),
-                            _buildLegendItem(
-                                'Post-session', const Color(0xFF10B981)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -2627,19 +2721,7 @@ gently. Plain text only — no markdown, no headings, no emojis.
                   ),
                 ),
                 const SizedBox(height: 14),
-                // ── Goals Progress (replaces Activity Performance) ──
-                _buildChartCard(
-                  '🏁 Goals Progress',
-                  'How each active goal is tracking this week',
-                  height: hasGoals ? max<double>(120, 60.0 * goals.length) : 120,
-                  child: _emptyChartOverlay(
-                    hasData: hasGoals,
-                    message: 'No goals set yet for this week.',
-                    child: _buildGoalsProgressChart(goals),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // ── Emotion Color Association (replaces Engagement Trend) ──
+                // ── Emotion Color Association (3rd & final chart) ──
                 _buildChartCard(
                   '🎨 Emotion Color Association',
                   'Which colours the child paired with each emotion',
@@ -4828,6 +4910,13 @@ class _WeekMetrics {
   final Map<String, int> postEmotionFreq;
   final List<int> prePerDay;
   final List<int> postPerDay;
+  // Per-day pre/post split into positive vs negative emotion counts. Drives
+  // the stacked-grouped Emotion Trend bar chart in the Progress tab.
+  // index 0 = Sun … 6 = Sat.
+  final List<int> prePositivePerDay;
+  final List<int> preNegativePerDay;
+  final List<int> postPositivePerDay;
+  final List<int> postNegativePerDay;
   final Map<String, Map<String, int>> colorByEmotion;
   final List<_GoalSnapshot> goals;
   final int starsEarned;
@@ -4843,6 +4932,10 @@ class _WeekMetrics {
     this.postEmotionFreq = const {},
     this.prePerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.postPerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.prePositivePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.preNegativePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.postPositivePerDay = const [0, 0, 0, 0, 0, 0, 0],
+    this.postNegativePerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.colorByEmotion = const {},
     this.goals = const [],
     this.starsEarned = 0,
@@ -4908,8 +5001,15 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
     postEmotionFreq: {
       'Happy': 9, 'Excited': 5, 'Calm': 3, 'Proud': 2,
     },
-    prePerDay: [2, 3, 2, 2, 4, 4, 2],
-    postPerDay: [2, 3, 2, 2, 4, 4, 2],
+    // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+    prePerDay:  [2, 3, 2, 2, 4, 4, 2],
+    postPerDay: [2, 3, 3, 2, 4, 5, 2],
+    // Pre split: most days mostly positive, a couple mixed
+    prePositivePerDay:  [2, 2, 1, 2, 3, 3, 2],
+    preNegativePerDay:  [0, 1, 1, 0, 1, 1, 0],
+    // Post split: noticeably more positive than pre — the "lift" story
+    postPositivePerDay: [2, 3, 3, 2, 4, 5, 2],
+    postNegativePerDay: [0, 0, 0, 0, 0, 0, 0],
     colorByEmotion: {
       'Happy':   {'#FFE66D': 4, '#FF9F43': 3, '#FFB088': 1},
       'Calm':    {'#4ECDC4': 5, '#74B9FF': 1},
@@ -4962,8 +5062,16 @@ const Map<int, _WeekMetrics> _kFakeWeeks = {
     postEmotionFreq: {
       'Calm': 5, 'Happy': 4, 'Excited': 2, 'Sad': 2, 'Tired': 1,
     },
-    prePerDay: [3, 2, 2, 1, 3, 2, 1],
-    postPerDay: [3, 2, 2, 1, 3, 2, 1],
+    // Pre/post differ on purpose — pre carries more negative weight,
+    // post bounces back showing the regulating effect of EmoLor activities.
+    prePerDay:  [3, 2, 2, 1, 3, 2, 1],
+    postPerDay: [3, 2, 2, 1, 3, 3, 0],
+    // Pre split: mostly negative / tired starts
+    prePositivePerDay:  [1, 0, 1, 0, 1, 1, 1],
+    preNegativePerDay:  [2, 2, 1, 1, 2, 1, 0],
+    // Post split: lifts back to mixed-positive
+    postPositivePerDay: [2, 1, 2, 1, 2, 3, 0],
+    postNegativePerDay: [1, 1, 0, 0, 1, 0, 0],
     colorByEmotion: {
       'Happy':   {'#FFE66D': 3, '#FFB088': 2},
       'Calm':    {'#4ECDC4': 3, '#74B9FF': 1},
