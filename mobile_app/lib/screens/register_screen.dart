@@ -61,14 +61,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    if (_emailController.text.trim().toLowerCase() == 'admint@gmail.com') {
-      setState(() {
-        _errorMessage =
-            '⚠️ This email is reserved. Please use a different email.';
-      });
-      return;
-    }
-
     if (_passwordController.text.length < 8) {
       setState(() {
         _errorMessage = '⚠️ Password must be 8+ characters!';

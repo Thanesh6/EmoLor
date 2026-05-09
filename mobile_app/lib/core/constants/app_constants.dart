@@ -19,12 +19,6 @@ class AppConstants {
 
   // User Roles (Children don't have auth accounts, only profiles)
   static const String roleCaregiver = 'caregiver';
-  static const String roleAdmin = 'admin';
-
-  // Admin Gate – only this email + password can access the admin dashboard.
-  // The admin account must be pre-created in Supabase with role = 'admin'.
-  static const String adminEmail = 'admint@gmail.com';
-  static const String adminPassword = 'AdminT15!';
 
   // Routes
   static const String routeSplash = '/';
@@ -41,7 +35,6 @@ class AppConstants {
   static const String routeCommConfig = '/comm-config';
   static const String routeSessionOversight = '/session-oversight';
   static const String routeClientRecord = '/client-record';
-  static const String routeAdmin = '/admin';
 
   // Storage Keys
   static const String keyUserRole = 'user_role';

@@ -114,7 +114,8 @@ class ChildProfileService {
       'p_child_user_id': childUserId,
     });
 
-    final deleted = (result is int) ? result : int.tryParse(result.toString()) ?? 0;
+    final deleted =
+        (result is int) ? result : int.tryParse(result.toString()) ?? 0;
     if (deleted == 0) {
       throw Exception('No profile was deleted — link not found');
     }
@@ -141,19 +142,6 @@ class ChildProfileService {
         .order('full_name');
 
     return (profiles as List)
-        .map((json) => ChildProfile.fromJson(json))
-        .toList();
-  }
-
-  /// Get all child profiles (admin only — profiles with role = 'child')
-  Future<List<ChildProfile>> getAllChildProfiles() async {
-    final response = await _client
-        .from('profiles')
-        .select()
-        .eq('role', 'child')
-        .order('full_name');
-
-    return (response as List)
         .map((json) => ChildProfile.fromJson(json))
         .toList();
   }

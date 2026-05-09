@@ -59,8 +59,7 @@ lib/
 │   ├── auth/               # Authentication screens
 │   ├── child/              # Child dashboard
 │   ├── caregiver/          # Caregiver dashboard
-│   ├── therapist/          # Therapist dashboard
-│   └── admin/              # Admin dashboard
+│
 ├── shared/
 │   ├── widgets/            # Reusable widgets
 │   └── models/             # Data models

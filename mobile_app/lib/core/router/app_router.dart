@@ -18,7 +18,6 @@ import '../../features/child/presentation/how_i_feel_screen.dart';
 import '../../features/child/presentation/set_goals_screen.dart';
 
 import '../../features/child/services/child_session_service.dart';
-import '../../features/admin/admin_dashboard_screen.dart';
 import '../../features/child/presentation/browse_activities_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/edit_profile_screen.dart';
@@ -104,24 +103,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
 
           final userId = client.auth.currentUser!.id;
-          final userEmail = client.auth.currentUser!.email?.toLowerCase() ?? '';
           final response = await client
               .rpc('get_user_role', params: {'p_user_id': userId}).single();
 
           final role = response['role'] as String?;
           final accountType =
               (response['account_type'] as String?)?.toLowerCase();
-
-          // Admin gate: only the designated admin email may access admin
-          if (role == 'admin') {
-            if (userEmail == 'admint@gmail.com') {
-              return '/admin-dashboard';
-            } else {
-              // Non-authorised admin role → sign out
-              await client.auth.signOut();
-              return '/login';
-            }
-          }
 
           if (role == 'caregiver' && accountType == 'organization') {
             return '/orgz-child-dashboard';
@@ -320,10 +307,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             showSwitchAccount: extra?['showSwitch'] == true,
           );
         },
-      ),
-      GoRoute(
-        path: '/admin-dashboard',
-        builder: (context, state) => const AdminDashboardScreen(),
       ),
       GoRoute(
         path: '/browse-activities',

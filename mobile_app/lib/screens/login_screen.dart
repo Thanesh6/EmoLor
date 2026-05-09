@@ -51,14 +51,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
 
-      // Admin gate: require exact email + password match
-      if (email == 'admint@gmail.com' && password != 'AdminT15!') {
-        setState(() {
-          _errorMessage = '⚠️ Invalid email or password!';
-        });
-        return;
-      }
-
       await ref.read(authProvider.notifier).signIn(
             email: email,
             password: password,

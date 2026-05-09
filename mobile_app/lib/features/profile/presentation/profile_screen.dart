@@ -51,8 +51,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     switch (role) {
       case 'caregiver':
         return 'Caregiver';
-      case 'admin':
-        return 'Administrator';
       default:
         return role[0].toUpperCase() + role.substring(1);
     }
