@@ -5,31 +5,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../core/widgets/parent_gate_dialog.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'play_screen.dart';
 import 'draw_screen.dart';
-import 'express_cards_screen.dart';
-import 'rewards_screen.dart';
+import 'emoji_puzzle_screen.dart';
+import 'emotion_bubbles_screen.dart';
+import 'emoji_spelling_screen.dart';
+import 'emo_match_screen.dart';
+import 'emotion_slash_screen.dart';
+import 'emotion_catcher_screen.dart';
+import 'animal_sound_screen.dart';
 import '../core/services/bg_music_player.dart';
 import '../core/services/star_service.dart';
+import '../features/child/services/child_rewards_service.dart';
 import '../features/caregiver/services/goal_notification_service.dart';
 import '../features/caregiver/services/goal_service.dart';
 
 class ChildDashboard extends ConsumerStatefulWidget {
   final bool showSwitchAccount;
   final String? childName;
+  final String avatarUrl;
 
   const ChildDashboard({
     super.key,
     this.showSwitchAccount = false,
     this.childName,
+    this.avatarUrl = '',
   });
 
   @override
   ConsumerState<ChildDashboard> createState() => _ChildDashboardState();
 }
 
-class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTickerProviderStateMixin {
-
+class _ChildDashboardState extends ConsumerState<ChildDashboard>
+    with SingleTickerProviderStateMixin {
   String? _resolvedChildName;
   String? _avatarEmoji;
   late final AnimationController _pulseController;
@@ -40,6 +47,10 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
   void initState() {
     super.initState();
     _resolvedChildName = widget.childName;
+    // Use avatar passed from profile selection directly
+    if (widget.avatarUrl.isNotEmpty) {
+      _avatarEmoji = widget.avatarUrl;
+    }
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
@@ -89,7 +100,6 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
     }
   }
 
-
   Future<void> _fetchChildName() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -129,7 +139,8 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
     }
   }
 
-  Future<void> _openScreenAndRefresh(Widget screen, {bool checkStars = false}) async {
+  Future<void> _openScreenAndRefresh(Widget screen,
+      {bool checkStars = false}) async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => screen),
@@ -196,48 +207,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
             ),
           ),
 
-          // Top Right: Switch Account button (org only)
-          if (widget.showSwitchAccount)
-            Positioned(
-              top: 40,
-              right: 25,
-              child: GestureDetector(
-                onTap: () => _switchProfile(context),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.purple.withValues(alpha: 0.5),
-                        blurRadius: 15,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                    border: Border.all(color: Colors.white, width: 3),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.swap_horiz_rounded,
-                          color: Colors.white, size: 26),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Switch',
-                        style: _cuteTextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          // Switch button moved to bottom left corner
 
           // Title Banner
           Positioned(
@@ -271,272 +241,259 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                 borderRadius: BorderRadius.circular(22),
                 child: SizedBox(
                   height: 48,
-                child: Center(
-                  child: AnimatedBuilder(
-                    animation: _pulseController,
-                    builder: (context, child) {
-                      final titleText = 'WELCOME TO EMOLOR, ${(_resolvedChildName ?? 'CHILD').toUpperCase()}';
-                      final avatarText = ' ${_avatarEmoji ?? '😊'}';
-                      final baseStyle = GoogleFonts.fredoka(
-                        fontSize: 37,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.5,
-                      );
-                      return Transform.scale(
-                        scale: _scaleAnim.value,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Title text with gold shiny outline
-                            Stack(
-                              children: [
-                                // Gold outline (stroke)
-                                Text(
-                                  titleText,
-                                  style: baseStyle.copyWith(
-                                    foreground: Paint()
-                                      ..style = PaintingStyle.stroke
-                                      ..strokeWidth = 2.5
-                                      ..color = const Color(0xFFFFD700),
+                  child: Center(
+                    child: AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        final titleText =
+                            'WELCOME TO EMOLOR, ${(_resolvedChildName ?? 'CHILD').toUpperCase()}';
+                        final avatarText = ' ${_avatarEmoji ?? '😊'}';
+                        final baseStyle = GoogleFonts.fredoka(
+                          fontSize: 37,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                        );
+                        return Transform.scale(
+                          scale: _scaleAnim.value,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Title text with gold shiny outline
+                              Stack(
+                                children: [
+                                  // Gold outline (stroke)
+                                  Text(
+                                    titleText,
+                                    style: baseStyle.copyWith(
+                                      foreground: Paint()
+                                        ..style = PaintingStyle.stroke
+                                        ..strokeWidth = 2.5
+                                        ..color = const Color(0xFFFFD700),
+                                    ),
                                   ),
-                                ),
-                                // White fill on top
-                                Text(
-                                  titleText,
-                                  style: baseStyle.copyWith(
-                                    color: _colorAnim.value,
-                                    shadows: const [
-                                      Shadow(
-                                        offset: Offset(2, 2),
-                                        blurRadius: 6,
-                                        color: Colors.black38,
-                                      ),
-                                    ],
+                                  // White fill on top
+                                  Text(
+                                    titleText,
+                                    style: baseStyle.copyWith(
+                                      color: _colorAnim.value,
+                                      shadows: const [
+                                        Shadow(
+                                          offset: Offset(2, 2),
+                                          blurRadius: 6,
+                                          color: Colors.black38,
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            // Avatar emoji — normal, no outline
-                            Text(
-                              avatarText,
-                              style: const TextStyle(fontSize: 37),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                                ],
+                              ),
+                              // Avatar emoji — normal, no outline
+                              Text(
+                                avatarText,
+                                style: const TextStyle(fontSize: 37),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
                 ),
               ),
             ),
           ),
 
-          // 4 Action Buttons — 2×2 grid, evenly spaced
+          // 8 Game Grid
           Positioned(
-            top: 180,
+            top: 130,
+            left: 16,
+            right: 16,
+            bottom: 100,
+            child: GridView.count(
+              crossAxisCount: 4,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.25,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildGameBox(
+                  emoji: '🧩',
+                  label: 'EMOZZLE',
+                  gradientColors: [
+                    const Color(0xFFEF4444),
+                    const Color(0xFFB91C1C)
+                  ],
+                  shadowColor: Colors.red,
+                  onTap: () => _openScreenAndRefresh(const EmojiPuzzleScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🫧',
+                  label: 'EMOPOP',
+                  gradientColors: [
+                    const Color(0xFFA78BFA),
+                    const Color(0xFF7C3AED)
+                  ],
+                  shadowColor: Colors.purple,
+                  onTap: () =>
+                      _openScreenAndRefresh(const EmotionBubblesScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🔤',
+                  label: 'EMOSPELL',
+                  gradientColors: [
+                    const Color.fromARGB(255, 240, 145, 219),
+                    const Color.fromARGB(255, 252, 76, 222)
+                  ],
+                  shadowColor: Colors.pink,
+                  onTap: () =>
+                      _openScreenAndRefresh(const EmojiSpellingScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🌟',
+                  label: 'EMOMATCH',
+                  gradientColors: [
+                    const Color(0xFFF472B6),
+                    const Color(0xFFDB2777)
+                  ],
+                  shadowColor: Colors.pink,
+                  onTap: () => _openScreenAndRefresh(const EmoMatchScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '⚔️',
+                  label: 'EMOSLASH',
+                  gradientColors: [
+                    const Color.fromARGB(255, 87, 202, 122),
+                    const Color.fromARGB(255, 81, 201, 107)
+                  ],
+                  shadowColor: Colors.green,
+                  onTap: () =>
+                      _openScreenAndRefresh(const EmotionSlashScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🧺',
+                  label: 'EMOCATCH',
+                  gradientColors: [
+                    const Color(0xFF60A5FA),
+                    const Color(0xFF2563EB)
+                  ],
+                  shadowColor: Colors.blue,
+                  onTap: () =>
+                      _openScreenAndRefresh(const EmotionCatcherScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🐾',
+                  label: 'ANIMATCH',
+                  gradientColors: [
+                    const Color(0xFFFBBF24),
+                    const Color(0xFFD97706)
+                  ],
+                  shadowColor: Colors.amber,
+                  onTap: () => _openScreenAndRefresh(const AnimalSoundScreen()),
+                ),
+                _buildGameBox(
+                  emoji: '🖌️',
+                  label: 'DRAW',
+                  gradientColors: [
+                    const Color(0xFF2DD4BF),
+                    const Color(0xFF0D9488)
+                  ],
+                  shadowColor: Colors.teal,
+                  onTap: () => _openScreenAndRefresh(const DrawScreen()),
+                ),
+              ],
+            ),
+          ),
+
+          // Bottom Centre: Current reward display
+          Positioned(
+            bottom: 18,
             left: 0,
             right: 0,
-            bottom: 80,
             child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Row 1: Play, Draw
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildActionButton(
-                        emoji: '🎮',
-                        label: 'Play',
-                        gradientColors: [
-                          const Color(0xFFFB923C),
-                          const Color(0xFFEF4444),
-                        ],
-                        shadowColor: Colors.orange,
-                        onTap: () => _openScreenAndRefresh(const PlayScreen(), checkStars: true),
-                      ),
-                      _buildActionButton(
-                        emoji: '🖌️',
-                        label: 'Draw',
-                        gradientColors: [
-                          const Color(0xFF60A5FA),
-                          const Color(0xFF3B82F6),
-                        ],
-                        shadowColor: Colors.blue,
-                        onTap: () => _openScreenAndRefresh(const DrawScreen(), checkStars: true),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  // Row 2: Express, Rewards
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildActionButton(
-                        emoji: '🗣️',
-                        label: 'Express',
-                        gradientColors: [
-                          const Color(0xFFA78BFA),
-                          const Color(0xFF8B5CF6),
-                        ],
-                        shadowColor: Colors.purple,
-                        onTap: () =>
-                            _openScreenAndRefresh(const ExpressCardsScreen()),
-                      ),
-                      _buildActionButton(
-                        emoji: '🎁',
-                        label: 'Rewards',
-                        gradientColors: [
-                          const Color(0xFF34D399),
-                          const Color(0xFF10B981),
-                        ],
-                        shadowColor: Colors.teal,
-                        onTap: () => _openScreenAndRefresh(const RewardsScreen()),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Left: Logout
-          Positioned(
-            bottom: 18,
-            left: 18,
-            child: GestureDetector(
-              onTap: () => _confirmLogout(context, ref),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
+              child: FutureBuilder<List<ChildReward>>(
+                future: ChildRewardsService.getAllRewards(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox.shrink();
+                  final unlocked = snapshot.data!
+                      .where((r) => r.isUnlocked)
+                      .toList()
+                    ..sort((a, b) => b.unlockedAt!.compareTo(a.unlockedAt!));
+                  if (unlocked.isEmpty) return const SizedBox.shrink();
+                  final latest = unlocked.first;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                          width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withValues(alpha: 0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                  border: Border.all(color: const Color(0xFFFF6B6B), width: 2),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.logout_rounded,
-                        color: Color(0xFFFF6B6B), size: 25),
-                    const SizedBox(width: 7),
-                    Text(
-                      'Logout',
-                      style: GoogleFonts.fredoka(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFFFF6B6B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Bottom Right: Caregiver + Profile Switcher (org only)
-          Positioned(
-            bottom: 18,
-            right: 18,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Profile Switcher — only for org accounts
-                if (widget.showSwitchAccount)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: GestureDetector(
-                      onTap: () => _switchProfile(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(latest.emoji,
+                            style: const TextStyle(fontSize: 28)),
+                        const SizedBox(width: 8),
+                        Text(
+                          latest.title,
+                          style: GoogleFonts.fredoka(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF6B21A8),
                           ),
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withValues(alpha: 0.4),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                          border: Border.all(color: Colors.white, width: 2),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.switch_account_rounded,
-                                color: Colors.white, size: 25),
-                            const SizedBox(width: 7),
-                            Text(
-                              'Switch',
-                              style: GoogleFonts.fredoka(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              // Dashboard button — PIN protected
-              GestureDetector(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => ParentGateDialog(
-                      onSuccess: () async {
-                        await context.push('/centre-dashboard', extra: {
-                          'childName': _resolvedChildName,
-                          'showSwitch': widget.showSwitchAccount,
-                        });
-                        // Refresh goals upon return
-                        if (mounted) {
-                          _startActiveTimeGoal();
-                        }
-                      },
+                      ],
                     ),
                   );
                 },
+              ),
+            ),
+          ),
+
+          // Bottom Left: Switch Profile (org only)
+          if (widget.showSwitchAccount)
+            Positioned(
+              bottom: 18,
+              left: 18,
+              child: GestureDetector(
+                onTap: () => _switchProfile(context),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF6B21A8), Color(0xFF4C1D95)],
+                      colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
                     ),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.purple.withValues(alpha: 0.4),
-                        blurRadius: 8,
+                        blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
-                    border: Border.all(color: Colors.white, width: 2),
+                    border: Border.all(color: Colors.white, width: 3),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.dashboard_rounded,
-                          color: Colors.white, size: 25),
-                      const SizedBox(width: 7),
+                      const Icon(Icons.swap_horiz_rounded,
+                          color: Colors.white, size: 24),
+                      const SizedBox(width: 8),
                       Text(
-                        'Dashboard',
+                        'Switch',
                         style: GoogleFonts.fredoka(
                           fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
@@ -544,90 +501,107 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
                   ),
                 ),
               ),
-              ],
             ),
-          ),
         ],
       ),
     );
   }
 
-  // Uniform action button for all 5 buttons
-  Widget _buildActionButton({
+  Widget _buildGameBox({
     required String emoji,
     required String label,
     required List<Color> gradientColors,
     required Color shadowColor,
     required VoidCallback onTap,
   }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: 169,
-            height: 169,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: gradientColors,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: shadowColor.withValues(alpha: 0.5),
-                  blurRadius: 22,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-              border: Border.all(color: Colors.white, width: 6),
-            ),
-            child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 78)),
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: gradientColors,
           ),
-        ),
-        const SizedBox(height: 12),
-        Stack(
-          children: [
-            // Outline/stroke layer
-            Text(
-              label,
-              style: _cuteTextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.w800,
-                color: Colors.black,
-                shadows: const [],
-              ).copyWith(
-                foreground: Paint()
-                  ..style = PaintingStyle.stroke
-                  ..strokeWidth = 3
-                  ..color = Colors.black54,
-              ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: shadowColor.withValues(alpha: 0.45),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
-            // Fill layer
+          ],
+          border: Border.all(color: Colors.white, width: 3.5),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 70)),
+            const SizedBox(height: 12),
             Text(
               label,
               style: _cuteTextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.w800,
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
                 shadows: const [
                   Shadow(
-                      offset: Offset(2, 2),
-                      blurRadius: 6,
-                      color: Colors.black54),
+                    offset: Offset(1, 1),
+                    blurRadius: 4,
+                    color: Colors.black38,
+                  ),
                 ],
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 
   Future<void> _switchProfile(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        titlePadding: const EdgeInsets.fromLTRB(32, 28, 32, 0),
+        contentPadding: const EdgeInsets.fromLTRB(32, 16, 32, 12),
+        actionsPadding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+        title: Text(
+          'Switch Profile?',
+          style: GoogleFonts.fredoka(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to switch to a different profile?',
+          style: GoogleFonts.fredoka(fontSize: 20),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'No',
+              style: GoogleFonts.fredoka(fontSize: 20, color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              'Proceed',
+              style: GoogleFonts.fredoka(fontSize: 20, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     // Profile switch mid-session — wipe per-session goals so the next
     // child starts with a clean slate.
     await GoalService.clearAll();
@@ -637,49 +611,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard> with SingleTick
     }
   }
 
-  void _confirmLogout(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-        contentPadding: const EdgeInsets.fromLTRB(32, 20, 32, 12),
-        actionsPadding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
-        titlePadding: const EdgeInsets.fromLTRB(32, 28, 32, 0),
-        title: Text('Log Out?',
-            style:
-                GoogleFonts.fredoka(fontSize: 30, fontWeight: FontWeight.bold)),
-        content: Text(
-          'Are you sure you want to log out?',
-          style: GoogleFonts.fredoka(fontSize: 21),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Cancel',
-                style: GoogleFonts.fredoka(fontSize: 20, color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-            ),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              // Goals are per-session — clear them so the next sign-in starts
-              // fresh and reset the in-memory star alert tracking too.
-              await GoalService.clearAll();
-              GoalNotificationService.instance.resetAllStarAlerts();
-              await ref.read(authProvider.notifier).signOut();
-            },
-            child: Text('Log Out',
-                style: GoogleFonts.fredoka(fontSize: 20, color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
+  // _confirmLogout removed — logout handled from profile selection page
 }
 
 class HillsPainter extends CustomPainter {

@@ -161,7 +161,7 @@ class _ExpressCardsScreenState extends State<ExpressCardsScreen>
         'gradient': [const Color(0xFFFF7675), const Color(0xFFD63031)]
       },
       {
-        'name': 'Sensory',
+        'name': 'Hear',
         'emoji': '🎧',
         'color': const Color(0xFFA29BFE),
         'gradient': [const Color(0xFFA29BFE), const Color(0xFF6C5CE7)]

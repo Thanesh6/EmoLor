@@ -71,12 +71,28 @@ class AuthNotifier extends AsyncNotifier<User?> {
     }
   }
 
-  /// Sign Out — clears auth session AND local cached data
   Future<void> signOut() async {
     state = const AsyncLoading();
-    // Wipe local storage / cached user data
+    // Only clear auth/session keys — preserve star and reward data
     final prefs = await SharedPreferences.getInstance();
+    final keysToKeep = prefs
+        .getKeys()
+        .where((k) =>
+            k.startsWith('stars_') ||
+            k.startsWith('child_rewards_') ||
+            k.startsWith('child_equipped_reward_'))
+        .toList();
+    final preserved = {
+      for (final k in keysToKeep) k: prefs.get(k),
+    };
     await prefs.clear();
+    for (final entry in preserved.entries) {
+      final v = entry.value;
+      if (v is String) await prefs.setString(entry.key, v);
+      if (v is int) await prefs.setInt(entry.key, v);
+      if (v is bool) await prefs.setBool(entry.key, v);
+      if (v is double) await prefs.setDouble(entry.key, v);
+    }
     // End Supabase session
     await _authService.signOut();
     state = const AsyncData(null);
@@ -117,6 +133,7 @@ class AuthNotifier extends AsyncNotifier<User?> {
     // Soft delete (mark is_active = false)
     // softDeleteUser also calls signOut internally
     state = const AsyncLoading();
+    // Full clear is fine for deactivation — account is being deleted
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     await _authService.softDeleteUser();

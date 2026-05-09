@@ -93,7 +93,9 @@
       "Bash(Get-Content \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-User-EMOLOR--claude-worktrees-elegant-leavitt\\\\3fe625d5-567e-4474-b0ab-a75d14677465\\\\tasks\\\\bbc2f0i7g.output\" -Tail 40)",
       "Bash(findstr /i \"built installed error flutter\")",
       "Bash(curl -s \"http://127.0.0.1:57858/W5tVWiYl-Pk=/reloadSources\" -X POST -H \"Content-Type: application/json\" -d \"{}\")",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\User\\\\EMOLOR - Cleanup\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

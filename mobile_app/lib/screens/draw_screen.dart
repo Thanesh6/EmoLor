@@ -16,6 +16,8 @@ class _DrawScreenState extends State<DrawScreen> {
   double _brushSize = 8.0;
   final List<DrawingPoint> _points = [];
 
+  final Stopwatch _stopwatch = Stopwatch();
+
   // Adaptive Engine for stroke frequency tracking
   final AdaptiveEngine _adaptiveEngine = AdaptiveEngine(
     overloadTapsPerSecond: 5.0,
@@ -36,6 +38,7 @@ class _DrawScreenState extends State<DrawScreen> {
   @override
   void initState() {
     super.initState();
+    _stopwatch.start();
   }
 
   TextStyle _cuteTextStyle({
@@ -338,6 +341,7 @@ class _DrawScreenState extends State<DrawScreen> {
                     activityId: 'draw_free',
                     activityName: 'Draw',
                     activityEmoji: '🖌️',
+                    elapsedSeconds: _stopwatch.elapsed.inSeconds,
                     buildProgressData: () => {
                       'strokeCount': _points.length,
                     },

@@ -50,8 +50,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
 
   static const List<_Q> _bank = [
     _Q(
-      emoji: '🪥', label: 'Toothbrush',
-      correctEmoji: '🦷', correctLabel: 'Teeth',
+      emoji: '🪥',
+      label: 'Toothbrush',
+      correctEmoji: '🦷',
+      correctLabel: 'Teeth',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '👂', label: 'Ears'),
@@ -59,8 +61,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧴', label: 'Soap',
-      correctEmoji: '🤲', correctLabel: 'Hands',
+      emoji: '🧴',
+      label: 'Soap',
+      correctEmoji: '🤲',
+      correctLabel: 'Hands',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '👃', label: 'Nose'),
@@ -68,8 +72,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🍴', label: 'Fork',
-      correctEmoji: '👄', correctLabel: 'Mouth',
+      emoji: '🍴',
+      label: 'Fork',
+      correctEmoji: '👄',
+      correctLabel: 'Mouth',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '👂', label: 'Ears'),
@@ -77,8 +83,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🛏️', label: 'Bed',
-      correctEmoji: '😴', correctLabel: 'Sleep',
+      emoji: '🛏️',
+      label: 'Bed',
+      correctEmoji: '😴',
+      correctLabel: 'Sleep',
       distractors: [
         (emoji: '🏃', label: 'Run'),
         (emoji: '🍽️', label: 'Eat'),
@@ -86,8 +94,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '👟', label: 'Shoes',
-      correctEmoji: '🦶', correctLabel: 'Feet',
+      emoji: '👟',
+      label: 'Shoes',
+      correctEmoji: '🦶',
+      correctLabel: 'Feet',
       distractors: [
         (emoji: '🤲', label: 'Hands'),
         (emoji: '👀', label: 'Eyes'),
@@ -95,8 +105,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🎒', label: 'School Bag',
-      correctEmoji: '🏫', correctLabel: 'School',
+      emoji: '🎒',
+      label: 'School Bag',
+      correctEmoji: '🏫',
+      correctLabel: 'School',
       distractors: [
         (emoji: '🏠', label: 'Home'),
         (emoji: '🏖️', label: 'Beach'),
@@ -104,8 +116,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🚿', label: 'Shower',
-      correctEmoji: '🧼', correctLabel: 'Body',
+      emoji: '🚿',
+      label: 'Shower',
+      correctEmoji: '🧼',
+      correctLabel: 'Body',
       distractors: [
         (emoji: '🦷', label: 'Teeth'),
         (emoji: '📖', label: 'Read'),
@@ -113,8 +127,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧢', label: 'Hat',
-      correctEmoji: '🧠', correctLabel: 'Head',
+      emoji: '🧢',
+      label: 'Hat',
+      correctEmoji: '👤',
+      correctLabel: 'Head',
       distractors: [
         (emoji: '🦶', label: 'Feet'),
         (emoji: '🤲', label: 'Hands'),
@@ -122,8 +138,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧤', label: 'Gloves',
-      correctEmoji: '🤲', correctLabel: 'Hands',
+      emoji: '🧤',
+      label: 'Gloves',
+      correctEmoji: '🤲',
+      correctLabel: 'Hands',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '🦶', label: 'Feet'),
@@ -131,8 +149,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧣', label: 'Scarf',
-      correctEmoji: '❄️', correctLabel: 'Cold',
+      emoji: '🧣',
+      label: 'Scarf',
+      correctEmoji: '❄️',
+      correctLabel: 'Cold',
       distractors: [
         (emoji: '☀️', label: 'Hot'),
         (emoji: '🌧️', label: 'Rain'),
@@ -140,8 +160,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '📚', label: 'Book',
-      correctEmoji: '👀', correctLabel: 'Read',
+      emoji: '📚',
+      label: 'Book',
+      correctEmoji: '👀',
+      correctLabel: 'Read',
       distractors: [
         (emoji: '🎵', label: 'Sing'),
         (emoji: '🍽️', label: 'Eat'),
@@ -149,8 +171,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🥤', label: 'Cup',
-      correctEmoji: '💧', correctLabel: 'Drink',
+      emoji: '🥤',
+      label: 'Cup',
+      correctEmoji: '💧',
+      correctLabel: 'Drink',
       distractors: [
         (emoji: '🍽️', label: 'Eat'),
         (emoji: '😴', label: 'Sleep'),
@@ -158,8 +182,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🪞', label: 'Mirror',
-      correctEmoji: '😊', correctLabel: 'Face',
+      emoji: '🪞',
+      label: 'Mirror',
+      correctEmoji: '😊',
+      correctLabel: 'Face',
       distractors: [
         (emoji: '🦶', label: 'Feet'),
         (emoji: '🤲', label: 'Hands'),
@@ -167,8 +193,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧹', label: 'Broom',
-      correctEmoji: '🏠', correctLabel: 'Floor',
+      emoji: '🧹',
+      label: 'Broom',
+      correctEmoji: '🏠',
+      correctLabel: 'Floor',
       distractors: [
         (emoji: '🛁', label: 'Bath'),
         (emoji: '🍽️', label: 'Eat'),
@@ -176,8 +204,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '💊', label: 'Medicine',
-      correctEmoji: '👄', correctLabel: 'Mouth',
+      emoji: '💊',
+      label: 'Medicine',
+      correctEmoji: '👄',
+      correctLabel: 'Mouth',
       distractors: [
         (emoji: '🤲', label: 'Hands'),
         (emoji: '👀', label: 'Eyes'),
@@ -185,8 +215,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '✏️', label: 'Pencil',
-      correctEmoji: '✍️', correctLabel: 'Write',
+      emoji: '✏️',
+      label: 'Pencil',
+      correctEmoji: '✍️',
+      correctLabel: 'Write',
       distractors: [
         (emoji: '📖', label: 'Read'),
         (emoji: '🎵', label: 'Sing'),
@@ -194,8 +226,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🎵', label: 'Music',
-      correctEmoji: '👂', correctLabel: 'Ears',
+      emoji: '🎵',
+      label: 'Music',
+      correctEmoji: '👂',
+      correctLabel: 'Ears',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '👃', label: 'Nose'),
@@ -203,8 +237,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🌡️', label: 'Thermometer',
-      correctEmoji: '🤒', correctLabel: 'Fever',
+      emoji: '🌡️',
+      label: 'Thermometer',
+      correctEmoji: '🤒',
+      correctLabel: 'Fever',
       distractors: [
         (emoji: '😴', label: 'Sleep'),
         (emoji: '🍽️', label: 'Eat'),
@@ -212,8 +248,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🧺', label: 'Laundry',
-      correctEmoji: '👕', correctLabel: 'Clothes',
+      emoji: '🧺',
+      label: 'Laundry',
+      correctEmoji: '👕',
+      correctLabel: 'Clothes',
       distractors: [
         (emoji: '🍽️', label: 'Food'),
         (emoji: '📚', label: 'Books'),
@@ -221,8 +259,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🪣', label: 'Bucket',
-      correctEmoji: '💧', correctLabel: 'Water',
+      emoji: '🪣',
+      label: 'Bucket',
+      correctEmoji: '💧',
+      correctLabel: 'Water',
       distractors: [
         (emoji: '🍽️', label: 'Food'),
         (emoji: '📚', label: 'Books'),
@@ -230,8 +270,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🛁', label: 'Bathtub',
-      correctEmoji: '🧼', correctLabel: 'Wash',
+      emoji: '🛁',
+      label: 'Bathtub',
+      correctEmoji: '🧼',
+      correctLabel: 'Wash',
       distractors: [
         (emoji: '🦷', label: 'Teeth'),
         (emoji: '📖', label: 'Read'),
@@ -239,8 +281,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🌙', label: 'Moon',
-      correctEmoji: '😴', correctLabel: 'Bedtime',
+      emoji: '🌙',
+      label: 'Moon',
+      correctEmoji: '😴',
+      correctLabel: 'Bedtime',
       distractors: [
         (emoji: '🏃', label: 'Run'),
         (emoji: '🍽️', label: 'Eat'),
@@ -248,8 +292,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '☀️', label: 'Sun',
-      correctEmoji: '⏰', correctLabel: 'Wake Up',
+      emoji: '☀️',
+      label: 'Sun',
+      correctEmoji: '⏰',
+      correctLabel: 'Wake Up',
       distractors: [
         (emoji: '😴', label: 'Sleep'),
         (emoji: '🍽️', label: 'Eat'),
@@ -257,8 +303,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🍳', label: 'Pan',
-      correctEmoji: '🍽️', correctLabel: 'Cook',
+      emoji: '🍳',
+      label: 'Pan',
+      correctEmoji: '🍽️',
+      correctLabel: 'Cook',
       distractors: [
         (emoji: '📖', label: 'Read'),
         (emoji: '😴', label: 'Sleep'),
@@ -266,8 +314,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🚌', label: 'Bus',
-      correctEmoji: '🏫', correctLabel: 'School',
+      emoji: '🚌',
+      label: 'Bus',
+      correctEmoji: '🏫',
+      correctLabel: 'School',
       distractors: [
         (emoji: '🏠', label: 'Home'),
         (emoji: '🏖️', label: 'Beach'),
@@ -275,8 +325,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🪴', label: 'Plant',
-      correctEmoji: '💧', correctLabel: 'Water',
+      emoji: '🪴',
+      label: 'Plant',
+      correctEmoji: '💧',
+      correctLabel: 'Water',
       distractors: [
         (emoji: '🍽️', label: 'Food'),
         (emoji: '📚', label: 'Books'),
@@ -284,8 +336,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🩺', label: 'Stethoscope',
-      correctEmoji: '🏥', correctLabel: 'Doctor',
+      emoji: '💉',
+      label: 'Needle',
+      correctEmoji: '🏥',
+      correctLabel: 'Hospital',
       distractors: [
         (emoji: '🏫', label: 'School'),
         (emoji: '🏠', label: 'Home'),
@@ -293,8 +347,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🖌️', label: 'Paintbrush',
-      correctEmoji: '🎨', correctLabel: 'Art',
+      emoji: '🖌️',
+      label: 'Paintbrush',
+      correctEmoji: '🎨',
+      correctLabel: 'Art',
       distractors: [
         (emoji: '📖', label: 'Read'),
         (emoji: '🎵', label: 'Sing'),
@@ -302,8 +358,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🍼', label: 'Baby Bottle',
-      correctEmoji: '👶', correctLabel: 'Baby',
+      emoji: '🍼',
+      label: 'Baby Bottle',
+      correctEmoji: '👶',
+      correctLabel: 'Baby',
       distractors: [
         (emoji: '🐱', label: 'Cat'),
         (emoji: '🌸', label: 'Flower'),
@@ -311,8 +369,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🔦', label: 'Torch',
-      correctEmoji: '🌙', correctLabel: 'Night',
+      emoji: '🔦',
+      label: 'Torch',
+      correctEmoji: '🌙',
+      correctLabel: 'Night',
       distractors: [
         (emoji: '☀️', label: 'Sunny'),
         (emoji: '🌧️', label: 'Rain'),
@@ -320,8 +380,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '📱', label: 'Phone',
-      correctEmoji: '📞', correctLabel: 'Call',
+      emoji: '📱',
+      label: 'Phone',
+      correctEmoji: '📞',
+      correctLabel: 'Call',
       distractors: [
         (emoji: '📖', label: 'Read'),
         (emoji: '🎵', label: 'Music'),
@@ -329,8 +391,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🎸', label: 'Guitar',
-      correctEmoji: '🎵', correctLabel: 'Music',
+      emoji: '🎸',
+      label: 'Guitar',
+      correctEmoji: '🎵',
+      correctLabel: 'Music',
       distractors: [
         (emoji: '👀', label: 'Eyes'),
         (emoji: '🤲', label: 'Hands'),
@@ -338,8 +402,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🏋️', label: 'Weights',
-      correctEmoji: '💪', correctLabel: 'Exercise',
+      emoji: '🏋️',
+      label: 'Weights',
+      correctEmoji: '💪',
+      correctLabel: 'Exercise',
       distractors: [
         (emoji: '😴', label: 'Sleep'),
         (emoji: '🍽️', label: 'Eat'),
@@ -347,8 +413,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🎲', label: 'Dice',
-      correctEmoji: '🎮', correctLabel: 'Play',
+      emoji: '🎲',
+      label: 'Dice',
+      correctEmoji: '🎮',
+      correctLabel: 'Play',
       distractors: [
         (emoji: '📖', label: 'Read'),
         (emoji: '🍽️', label: 'Eat'),
@@ -356,8 +424,10 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       ],
     ),
     _Q(
-      emoji: '🛒', label: 'Shopping Cart',
-      correctEmoji: '🏪', correctLabel: 'Shop',
+      emoji: '🛒',
+      label: 'Shopping Cart',
+      correctEmoji: '🏪',
+      correctLabel: 'Shop',
       distractors: [
         (emoji: '🏠', label: 'Home'),
         (emoji: '🏫', label: 'School'),
@@ -368,6 +438,7 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
 
   // ── State ─────────────────────────────────────────────────────────────────
 
+  final Stopwatch _stopwatch = Stopwatch();
   late List<_Q> _shuffled;
   int _qIndex = 0;
   int _sessionStars = 0;
@@ -414,7 +485,8 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
-    _enterAnim = CurvedAnimation(parent: _enterController, curve: Curves.elasticOut);
+    _enterAnim =
+        CurvedAnimation(parent: _enterController, curve: Curves.elasticOut);
     _hintController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 650),
@@ -422,6 +494,7 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
 
     _shuffled = List.of(_bank)..shuffle(_rng);
     _loadQuestion();
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -477,6 +550,7 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emoMatch,
       sessionStars: _sessionStars,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
   }
 
@@ -620,12 +694,14 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(36),
                             border: Border.all(
-                              color: const Color(0xFF7C3AED).withValues(alpha: 0.35),
+                              color: const Color(0xFF7C3AED)
+                                  .withValues(alpha: 0.35),
                               width: 2.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF6B21A8).withValues(alpha: 0.12),
+                                color: const Color(0xFF6B21A8)
+                                    .withValues(alpha: 0.12),
                                 blurRadius: 24,
                                 offset: const Offset(0, 8),
                               ),
@@ -739,8 +815,7 @@ class _EmoMatchScreenState extends State<EmoMatchScreen>
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_sessionStars',
-                            style: _cute(sz: 26)),
+                        child: Text('⭐ $_sessionStars', style: _cute(sz: 26)),
                       ),
                     ],
                   ),

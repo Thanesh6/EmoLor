@@ -45,6 +45,7 @@ class _Bubble {
 class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
   static const String _activityId = 'game_bubble_pop';
   final ActivityProgressService _progressService = ActivityProgressService();
+  final Stopwatch _stopwatch = Stopwatch();
 
   final Random _rng = Random();
   final AdaptiveEngine _engine = AdaptiveEngine(
@@ -97,6 +98,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     _pickTarget();
     _spawnBubbles();
     _ticker = Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -149,6 +151,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionBubbles,
       sessionStars: _sessionStars,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
     // If still mounted, user chose Keep Playing — restart ticker
     if (mounted) {
@@ -437,8 +440,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(26),
                         ),
-                        child: Text('⭐ $_sessionStars',
-                            style: _cute(size: 26)),
+                        child: Text('⭐ $_sessionStars', style: _cute(size: 26)),
                       ),
                     ],
                   ),

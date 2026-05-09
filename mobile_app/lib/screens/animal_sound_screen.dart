@@ -29,29 +29,41 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
   final AudioPlayer _animalPlayer = AudioPlayer();
 
   static const List<Map<String, String>> _animals = [
-    {'emoji': '🐶', 'name': 'Dog',      'sound': 'Woof',       'file': 'dog.mp3'},
-    {'emoji': '🐱', 'name': 'Cat',      'sound': 'Meow',       'file': 'cat.mp3'},
-    {'emoji': '🐮', 'name': 'Cow',      'sound': 'Moo',        'file': 'cow.mp3'},
-    {'emoji': '🐷', 'name': 'Pig',      'sound': 'Oink',       'file': 'pig.mp3'},
-    {'emoji': '🐸', 'name': 'Frog',     'sound': 'Ribbit',     'file': 'frog.mp3'},
-    {'emoji': '🦆', 'name': 'Duck',     'sound': 'Quack',      'file': 'duck.mp3'},
-    {'emoji': '🦁', 'name': 'Lion',     'sound': 'Roar',       'file': 'lion.mp3'},
-    {'emoji': '🐘', 'name': 'Elephant', 'sound': 'Trumpet',    'file': 'elephant.mp3'},
-    {'emoji': '🐴', 'name': 'Horse',    'sound': 'Neigh',      'file': 'horse.mp3'},
-    {'emoji': '🐑', 'name': 'Sheep',    'sound': 'Baa',        'file': 'sheep.mp3'},
-    {'emoji': '🐺', 'name': 'Wolf',     'sound': 'Howl',       'file': 'wolf.mp3'},
-    {'emoji': '🐝', 'name': 'Bee',      'sound': 'Buzz',       'file': 'bee.mp3'},
-    {'emoji': '🐓', 'name': 'Rooster',  'sound': 'Cock a doo', 'file': 'rooster.mp3'},
-    {'emoji': '🐻', 'name': 'Bear',     'sound': 'Growl',      'file': 'bear.mp3'},
-    {'emoji': '🦊', 'name': 'Fox',      'sound': 'Yip',        'file': 'fox.mp3'},
-    {'emoji': '🐔', 'name': 'Chicken',  'sound': 'Cluck',      'file': 'chicken.mp3'},
-    {'emoji': '🐦', 'name': 'Bird',     'sound': 'Tweet',      'file': 'bird.mp3'},
-    {'emoji': '🫏', 'name': 'Donkey',   'sound': 'Hee-haw',    'file': 'donkey.mp3'},
-    {'emoji': '🐐', 'name': 'Goat',     'sound': 'Maa',        'file': 'goat.mp3'},
-    {'emoji': '🐒', 'name': 'Monkey',   'sound': 'Ooh ooh',    'file': 'monkey.mp3'},
-    {'emoji': '🐯', 'name': 'Tiger',    'sound': 'Roar',       'file': 'tiger.mp3'},
-    {'emoji': '🐍', 'name': 'Snake',    'sound': 'Hiss',       'file': 'snake.mp3'},
+    {'emoji': '🐶', 'name': 'Dog', 'sound': 'Woof', 'file': 'dog.mp3'},
+    {'emoji': '🐱', 'name': 'Cat', 'sound': 'Meow', 'file': 'cat.mp3'},
+    {'emoji': '🐮', 'name': 'Cow', 'sound': 'Moo', 'file': 'cow.mp3'},
+    {'emoji': '🐷', 'name': 'Pig', 'sound': 'Oink', 'file': 'pig.mp3'},
+    {'emoji': '🐸', 'name': 'Frog', 'sound': 'Ribbit', 'file': 'frog.mp3'},
+    {'emoji': '🦆', 'name': 'Duck', 'sound': 'Quack', 'file': 'duck.mp3'},
+    {'emoji': '🦁', 'name': 'Lion', 'sound': 'Roar', 'file': 'lion.mp3'},
+    {
+      'emoji': '🐘',
+      'name': 'Elephant',
+      'sound': 'Trumpet',
+      'file': 'elephant.mp3'
+    },
+    {'emoji': '🐴', 'name': 'Horse', 'sound': 'Neigh', 'file': 'horse.mp3'},
+    {'emoji': '🐑', 'name': 'Sheep', 'sound': 'Baa', 'file': 'sheep.mp3'},
+    {'emoji': '🐺', 'name': 'Wolf', 'sound': 'Howl', 'file': 'wolf.mp3'},
+    {'emoji': '🐝', 'name': 'Bee', 'sound': 'Buzz', 'file': 'bee.mp3'},
+    {
+      'emoji': '🐓',
+      'name': 'Rooster',
+      'sound': 'Cock a doo',
+      'file': 'rooster.mp3'
+    },
+    {'emoji': '🐻', 'name': 'Bear', 'sound': 'Growl', 'file': 'bear.mp3'},
+    {'emoji': '🦊', 'name': 'Fox', 'sound': 'Yip', 'file': 'fox.mp3'},
+    {'emoji': '🐔', 'name': 'Chicken', 'sound': 'Cluck', 'file': 'chicken.mp3'},
+    {'emoji': '🐦', 'name': 'Bird', 'sound': 'Tweet', 'file': 'bird.mp3'},
+    {'emoji': '🫏', 'name': 'Donkey', 'sound': 'Hee-haw', 'file': 'donkey.mp3'},
+    {'emoji': '🐐', 'name': 'Goat', 'sound': 'Maa', 'file': 'goat.mp3'},
+    {'emoji': '🐒', 'name': 'Monkey', 'sound': 'Ooh ooh', 'file': 'monkey.mp3'},
+    {'emoji': '🐯', 'name': 'Tiger', 'sound': 'Roar', 'file': 'tiger.mp3'},
+    {'emoji': '🐍', 'name': 'Snake', 'sound': 'Hiss', 'file': 'snake.mp3'},
   ];
+
+  final Stopwatch _stopwatch = Stopwatch();
 
   // ── Mode ──────────────────────────────────────────────────────────────────
   bool _isVoiceMode = false;
@@ -125,6 +137,7 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
     _initTts();
     _shuffledAnimals = List.from(_animals)..shuffle(_rng);
     _loadEmojiQuestion();
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -235,6 +248,7 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
       buildProgressData: _buildProgressData,
       starGameKey: StarService.animalSound,
       sessionStars: _sessionStars,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
   }
 
@@ -265,7 +279,10 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
 
   void _loadEmojiQuestion() {
     final correct = _currentAnimal['sound']!;
-    final pool = _animals.map((a) => a['sound']!).where((s) => s != correct).toList()
+    final pool = _animals
+        .map((a) => a['sound']!)
+        .where((s) => s != correct)
+        .toList()
       ..shuffle(_rng);
     _soundChoices = [correct, ...pool.take(3)]..shuffle(_rng);
     _selectedSound = null;
@@ -279,7 +296,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
     if (_showFeedback) return;
     setState(() => _selectedSound = sound);
     // Play the tapped sound
-    final animal = _animals.firstWhere((a) => a['sound'] == sound, orElse: () => {});
+    final animal =
+        _animals.firstWhere((a) => a['sound'] == sound, orElse: () => {});
     if (animal.isNotEmpty) _playAnimalSound(animal);
   }
 
@@ -448,7 +466,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                         color: const Color(0xFFFFF7E6).withValues(alpha: 0.96),
                         borderRadius: BorderRadius.circular(30),
                         border: Border.all(
-                            color: const Color(0xFF7C3AED).withValues(alpha: 0.7),
+                            color:
+                                const Color(0xFF7C3AED).withValues(alpha: 0.7),
                             width: 2.5),
                       ),
                       child: Row(
@@ -488,8 +507,7 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                           color: const Color(0xFF6B21A8),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Text('⭐ $_sessionStars',
-                            style: _cute(sz: 22)),
+                        child: Text('⭐ $_sessionStars', style: _cute(sz: 22)),
                       ),
                     ],
                   ),
@@ -531,11 +549,13 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(22),
                         border: Border.all(
-                            color: const Color(0xFF7C3AED).withValues(alpha: 0.4),
+                            color:
+                                const Color(0xFF7C3AED).withValues(alpha: 0.4),
                             width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                              color: const Color(0xFF6B21A8).withValues(alpha: 0.12),
+                              color: const Color(0xFF6B21A8)
+                                  .withValues(alpha: 0.12),
                               blurRadius: 8,
                               offset: const Offset(0, 3)),
                         ],
@@ -608,7 +628,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                     AnimatedBuilder(
                       animation: _bounceController,
                       builder: (ctx, ch) => Transform.translate(
-                        offset: Offset(0, -sin(_bounceController.value * pi) * 20),
+                        offset:
+                            Offset(0, -sin(_bounceController.value * pi) * 20),
                         child: ch,
                       ),
                       child: Text(animal['emoji']!,
@@ -618,7 +639,9 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                     Text(
                       animal['name']!,
                       style: _cute(
-                          sz: 42, fw: FontWeight.w900, c: const Color(0xFF4C1D95)),
+                          sz: 42,
+                          fw: FontWeight.w900,
+                          c: const Color(0xFF4C1D95)),
                     ),
                   ],
                 ),
@@ -636,7 +659,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                   final shake = (!_feedbackCorrect && _showFeedback)
                       ? sin(_shakeController.value * 3 * pi) * 9
                       : 0.0;
-                  return Transform.translate(offset: Offset(shake, 0), child: ch);
+                  return Transform.translate(
+                      offset: Offset(shake, 0), child: ch);
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -811,8 +835,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF6B21A8)
-                                        .withValues(alpha: _isPlayingSound ? 0.4 : 0.15),
+                                    color: const Color(0xFF6B21A8).withValues(
+                                        alpha: _isPlayingSound ? 0.4 : 0.15),
                                     blurRadius: _isPlayingSound ? 28 : 12,
                                     spreadRadius: _isPlayingSound ? 4 : 0,
                                   ),
@@ -1002,8 +1026,8 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
     if (_voiceRevealHint && isCorrect) {
       card = AnimatedBuilder(
         animation: _hintController,
-        builder: (_, ch) =>
-            Transform.scale(scale: 1.0 + _hintController.value * 0.07, child: ch),
+        builder: (_, ch) => Transform.scale(
+            scale: 1.0 + _hintController.value * 0.07, child: ch),
         child: card,
       );
     }

@@ -10,8 +10,7 @@ class OrgzChildDashboard extends ConsumerStatefulWidget {
   const OrgzChildDashboard({super.key});
 
   @override
-  ConsumerState<OrgzChildDashboard> createState() =>
-      _OrgzChildDashboardState();
+  ConsumerState<OrgzChildDashboard> createState() => _OrgzChildDashboardState();
 }
 
 class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
@@ -29,9 +28,18 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
   String? _nameError;
 
   final List<String> _avatarOptions = [
-    '👧', '👦', '🧒', '👶',
-    '🦄', '🐻', '🐼', '🐨',
-    '🦊', '🐱', '🐶', '🐰',
+    '👧',
+    '👦',
+    '🧒',
+    '👶',
+    '🦄',
+    '🐻',
+    '🐼',
+    '🐨',
+    '🦊',
+    '🐱',
+    '🐶',
+    '🐰',
   ];
 
   // Profiles render 5-per-row; the outer SingleChildScrollView handles
@@ -117,6 +125,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
           'showSwitch': true,
           'childName': profile.name,
           'profileId': profile.profileId,
+          'avatarUrl': profile.avatarUrl ?? '',
         });
       }
     } catch (e) {
@@ -148,8 +157,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
             return Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(26)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
               ),
               child: Column(
                 children: [
@@ -201,8 +209,8 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (_, i) {
                         final p = _profiles[i];
-                        final avatarIsEmoji = p.avatarUrl != null &&
-                            p.avatarUrl!.length <= 2;
+                        final avatarIsEmoji =
+                            p.avatarUrl != null && p.avatarUrl!.length <= 2;
                         return Material(
                           color: Colors.grey[50],
                           borderRadius: BorderRadius.circular(18),
@@ -230,15 +238,14 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                                     alignment: Alignment.center,
                                     child: avatarIsEmoji
                                         ? Text(p.avatarUrl!,
-                                            style: const TextStyle(
-                                                fontSize: 30))
+                                            style:
+                                                const TextStyle(fontSize: 30))
                                         : Text(
                                             p.name[0].toUpperCase(),
                                             style: GoogleFonts.baloo2(
                                               fontSize: 24,
                                               fontWeight: FontWeight.w800,
-                                              color:
-                                                  const Color(0xFF6B21A8),
+                                              color: const Color(0xFF6B21A8),
                                             ),
                                           ),
                                   ),
@@ -253,8 +260,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                                           style: GoogleFonts.baloo2(
                                             fontSize: 22,
                                             fontWeight: FontWeight.w700,
-                                            color:
-                                                const Color(0xFF1F2937),
+                                            color: const Color(0xFF1F2937),
                                           ),
                                         ),
                                         if (p.age != null)
@@ -291,11 +297,10 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: Text('Delete ${profile.name}?',
-            style: GoogleFonts.baloo2(
-                fontSize: 24, fontWeight: FontWeight.w800)),
+            style:
+                GoogleFonts.baloo2(fontSize: 24, fontWeight: FontWeight.w800)),
         content: Text(
           'This profile will be removed from your account. '
           'You can always re-add it later.',
@@ -305,16 +310,14 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
           TextButton(
             onPressed: () => Navigator.pop(d, false),
             child: Text('Cancel',
-                style: GoogleFonts.baloo2(
-                    fontSize: 17, color: Colors.grey)),
+                style: GoogleFonts.baloo2(fontSize: 17, color: Colors.grey)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 22, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
             ),
             onPressed: () => Navigator.pop(d, true),
             child: Text('Delete',
@@ -348,11 +351,11 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
   }
 
   void _selectChild(ChildProfile profile) {
-    // Enter the phased onboarding (Set Goals → How I Feel → My Colours → Dashboard).
     context.go('/child/set-goals', extra: {
       'showSwitch': true,
       'childName': profile.name,
       'profileId': profile.profileId,
+      'avatarUrl': profile.avatarUrl ?? '',
     });
   }
 
@@ -361,92 +364,198 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
   void _showAnalyticsProfilePicker() {
     if (_profiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Add a child profile first to view analytics.'),
+        SnackBar(
+          content: Text(
+            'Add a child profile first to view analytics.',
+            style: GoogleFonts.baloo2(fontSize: 16),
+          ),
         ),
       );
       return;
     }
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6B21A8).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.bar_chart_rounded,
-                  color: Color(0xFF6B21A8), size: 22),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'View Child Analytics',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1F2937),
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 10,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header ─────────────────────────────────────────
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF8B5CF6), Color(0xFF6B21A8)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFF6B21A8).withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.bar_chart_rounded,
+                          color: Colors.white, size: 26),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        'View Child Analytics',
+                        style: GoogleFonts.baloo2(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF6B21A8),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text(
-                'Select a child to open their analytics dashboard.',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ),
-            const Divider(),
-            ..._profiles.map((profile) => ListTile(
-                  leading: CircleAvatar(
-                    radius: 22,
-                    backgroundColor:
-                        const Color(0xFF6B21A8).withValues(alpha: 0.15),
+                const SizedBox(height: 8),
+                Text(
+                  'Select a child to open their analytics dashboard.',
+                  style: GoogleFonts.baloo2(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // ── Profiles list ──────────────────────────────────
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: _profiles.map((profile) {
+                        final avatarIsEmoji = profile.avatarUrl != null &&
+                            profile.avatarUrl!.length <= 2;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Material(
+                            color: const Color(0xFFF5F3FF),
+                            borderRadius: BorderRadius.circular(18),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () {
+                                Navigator.of(ctx).pop();
+                                context.go('/child-analytics', extra: {
+                                  'profileId': profile.profileId,
+                                  'childName': profile.name,
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                        border: Border.all(
+                                            color: const Color(0xFF6B21A8),
+                                            width: 2.5),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: avatarIsEmoji
+                                          ? Text(profile.avatarUrl!,
+                                              style:
+                                                  const TextStyle(fontSize: 28))
+                                          : Text(
+                                              profile.name[0].toUpperCase(),
+                                              style: GoogleFonts.baloo2(
+                                                fontSize: 24,
+                                                fontWeight: FontWeight.w800,
+                                                color: const Color(0xFF6B21A8),
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            profile.name,
+                                            style: GoogleFonts.baloo2(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF1F2937),
+                                            ),
+                                          ),
+                                          if (profile.age != null)
+                                            Text(
+                                              'Age ${profile.age}',
+                                              style: GoogleFonts.baloo2(
+                                                fontSize: 16,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF6B21A8)
+                                            .withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                          Icons.arrow_forward_rounded,
+                                          color: Color(0xFF6B21A8),
+                                          size: 22),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // ── Cancel button ──────────────────────────────────
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                    ),
                     child: Text(
-                      profile.name[0].toUpperCase(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6B21A8),
+                      'Cancel',
+                      style: GoogleFonts.baloo2(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey[600],
                       ),
                     ),
                   ),
-                  title: Text(
-                    profile.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: profile.age != null
-                      ? Text('Age ${profile.age}')
-                      : null,
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    context.go('/child-analytics', extra: {
-                      'profileId': profile.profileId,
-                      'childName': profile.name,
-                    });
-                  },
-                )),
-            const SizedBox(height: 8),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel',
-                style: TextStyle(color: Color(0xFF6B21A8))),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -471,7 +580,8 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
         ),
         child: SafeArea(
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.white))
+              ? const Center(
+                  child: CircularProgressIndicator(color: Colors.white))
               : Stack(
                   children: [
                     Column(
@@ -491,10 +601,11 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                       child: GestureDetector(
                         onTap: _showAnalyticsProfilePicker,
                         child: Container(
-                          padding: const EdgeInsets.all(15),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 12),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.12),
@@ -505,22 +616,37 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                             border: Border.all(
                                 color: const Color(0xFF6B21A8), width: 2.5),
                           ),
-                          child: const Icon(Icons.bar_chart_rounded,
-                              color: Color(0xFF6B21A8), size: 31),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.bar_chart_rounded,
+                                  color: Color(0xFF6B21A8), size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Dashboard',
+                                style: GoogleFonts.baloo2(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF6B21A8),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    // Bottom-left: Logout (+10% bigger than the old header one)
+                    // Bottom-left: Logout
                     Positioned(
                       bottom: 20,
                       left: 20,
                       child: GestureDetector(
                         onTap: _confirmLogout,
                         child: Container(
-                          padding: const EdgeInsets.all(15),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 12),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.12),
@@ -531,8 +657,22 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                             border: Border.all(
                                 color: const Color(0xFFFF6B6B), width: 2.5),
                           ),
-                          child: const Icon(Icons.logout_rounded,
-                              color: Color(0xFFFF6B6B), size: 31),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.logout_rounded,
+                                  color: Color(0xFFFF6B6B), size: 28),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Logout',
+                                style: GoogleFonts.baloo2(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFFFF6B6B),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -609,7 +749,10 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 fontWeight: FontWeight.w800,
                 color: const Color(0xFF6B21A8),
                 shadows: const [
-                  Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black12),
+                  Shadow(
+                      offset: Offset(1, 1),
+                      blurRadius: 3,
+                      color: Colors.black12),
                 ],
               ),
             ),
@@ -753,10 +896,13 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white.withValues(alpha: 0.6),
-              border: Border.all(color: const Color(0xFF6B21A8).withValues(alpha: 0.5), width: 4),
+              border: Border.all(
+                  color: const Color(0xFF6B21A8).withValues(alpha: 0.5),
+                  width: 4),
             ),
             child: const Center(
-              child: Icon(Icons.add_rounded, color: Color(0xFF6B21A8), size: 62),
+              child:
+                  Icon(Icons.add_rounded, color: Color(0xFF6B21A8), size: 62),
             ),
           ),
           const SizedBox(height: 14),
@@ -907,7 +1053,8 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
               fontWeight: FontWeight.w800,
               color: const Color(0xFF6B21A8),
               shadows: const [
-                Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black12),
+                Shadow(
+                    offset: Offset(1, 1), blurRadius: 3, color: Colors.black12),
               ],
             ),
           ),
@@ -942,7 +1089,9 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 // Name field
                 Text("Child's Name",
                     style: GoogleFonts.baloo2(
-                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF4C1D95))),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _nameController,
@@ -958,7 +1107,8 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                   },
                   decoration: InputDecoration(
                     hintText: 'e.g. Thanesh',
-                    hintStyle: GoogleFonts.baloo2(fontSize: 22, color: Colors.grey[400]),
+                    hintStyle: GoogleFonts.baloo2(
+                        fontSize: 22, color: Colors.grey[400]),
                     prefixIcon: Icon(
                       Icons.person_rounded,
                       color: _nameError != null
@@ -981,8 +1131,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
                       borderSide: _nameError != null
-                          ? const BorderSide(
-                              color: Color(0xFFDC2626), width: 2)
+                          ? const BorderSide(color: Color(0xFFDC2626), width: 2)
                           : BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
@@ -1001,7 +1150,8 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                         borderRadius: BorderRadius.circular(20),
                         borderSide: const BorderSide(
                             color: Color(0xFFDC2626), width: 2)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 18),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -1009,7 +1159,9 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 // Age field
                 Text('Age',
                     style: GoogleFonts.baloo2(
-                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF4C1D95))),
                 const SizedBox(height: 10),
                 TextField(
                   controller: _ageController,
@@ -1017,16 +1169,21 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     hintText: 'e.g. 7',
-                    hintStyle: GoogleFonts.baloo2(fontSize: 22, color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.cake_rounded, color: Color(0xFF6B21A8), size: 30),
+                    hintStyle: GoogleFonts.baloo2(
+                        fontSize: 22, color: Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.cake_rounded,
+                        color: Color(0xFF6B21A8), size: 30),
                     filled: true,
                     fillColor: const Color(0xFFF5F3FF),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none),
                     focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
-                        borderSide: const BorderSide(color: Color(0xFF6B21A8), width: 2)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        borderSide: const BorderSide(
+                            color: Color(0xFF6B21A8), width: 2)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 18),
                   ),
                 ),
                 const SizedBox(height: 30),
@@ -1034,7 +1191,9 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                 // Avatar selection
                 Text('Choose an Avatar',
                     style: GoogleFonts.baloo2(
-                        fontSize: 24, fontWeight: FontWeight.w700, color: const Color(0xFF4C1D95))),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF4C1D95))),
                 const SizedBox(height: 16),
                 GridView.builder(
                   shrinkWrap: true,
@@ -1059,15 +1218,24 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                               : const Color(0xFFF5F3FF),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: isSelected ? const Color(0xFF6B21A8) : Colors.grey[300]!,
+                            color: isSelected
+                                ? const Color(0xFF6B21A8)
+                                : Colors.grey[300]!,
                             width: isSelected ? 3.5 : 2,
                           ),
                           boxShadow: isSelected
-                              ? [BoxShadow(color: const Color(0xFF6B21A8).withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4))]
+                              ? [
+                                  BoxShadow(
+                                      color: const Color(0xFF6B21A8)
+                                          .withValues(alpha: 0.2),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4))
+                                ]
                               : [],
                         ),
                         child: Center(
-                          child: Text(avatar, style: TextStyle(fontSize: isSelected ? 42 : 36)),
+                          child: Text(avatar,
+                              style: TextStyle(fontSize: isSelected ? 42 : 36)),
                         ),
                       ),
                     );
@@ -1084,17 +1252,22 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6B21A8),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(22)),
                       elevation: 4,
-                      shadowColor: const Color(0xFF6B21A8).withValues(alpha: 0.4),
+                      shadowColor:
+                          const Color(0xFF6B21A8).withValues(alpha: 0.4),
                     ),
                     child: _isCreating
                         ? const SizedBox(
-                            width: 30, height: 30,
-                            child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                            width: 30,
+                            height: 30,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 3, color: Colors.white),
                           )
                         : Text('Create & Start Playing',
-                            style: GoogleFonts.baloo2(fontSize: 28, fontWeight: FontWeight.w700)),
+                            style: GoogleFonts.baloo2(
+                                fontSize: 28, fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -1128,17 +1301,13 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(23)),
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 46, vertical: 28),
-        titlePadding:
-            const EdgeInsets.fromLTRB(28, 28, 28, 14),
-        contentPadding:
-            const EdgeInsets.fromLTRB(28, 0, 28, 10),
-        actionsPadding:
-            const EdgeInsets.fromLTRB(18, 6, 18, 18),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 46, vertical: 28),
+        titlePadding: const EdgeInsets.fromLTRB(28, 28, 28, 14),
+        contentPadding: const EdgeInsets.fromLTRB(28, 0, 28, 10),
+        actionsPadding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
         title: Text('Log Out?',
-            style: GoogleFonts.fredoka(
-                fontSize: 26, fontWeight: FontWeight.bold)),
+            style:
+                GoogleFonts.fredoka(fontSize: 26, fontWeight: FontWeight.bold)),
         content: Text(
           'Are you sure you want to log out?',
           style: GoogleFonts.fredoka(fontSize: 18.4),
@@ -1150,8 +1319,7 @@ class _OrgzChildDashboardState extends ConsumerState<OrgzChildDashboard> {
             ),
             onPressed: () => Navigator.pop(dialogContext),
             child: Text('Cancel',
-                style:
-                    GoogleFonts.fredoka(color: Colors.grey, fontSize: 18.4)),
+                style: GoogleFonts.fredoka(color: Colors.grey, fontSize: 18.4)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(

@@ -17,7 +17,7 @@ class AiInsightService {
   static const String _endpoint = 'https://api.anthropic.com/v1/messages';
   static const String _apiKey =
       String.fromEnvironment('ANTHROPIC_API_KEY', defaultValue: '');
-  static const String _model = 'claude-haiku-4-5';
+  static const String _model = 'claude-haiku-4-5-20251001';
   static const String _anthropicVersion = '2023-06-01';
 
   static final Dio _dio = Dio(BaseOptions(
@@ -36,11 +36,15 @@ class AiInsightService {
     }
 
     try {
+      debugPrint('Claude API key present: ${_apiKey.isNotEmpty}');
+      debugPrint(
+          'Claude API key prefix: ${_apiKey.length > 10 ? _apiKey.substring(0, 10) : _apiKey}');
+      debugPrint('Calling Claude API...');
       final response = await _dio.post(
         _endpoint,
         data: {
           'model': _model,
-          'max_tokens': 350,
+          'max_tokens': 800,
           'temperature': 0.2,
           'messages': [
             {'role': 'user', 'content': prompt},
@@ -73,8 +77,11 @@ class AiInsightService {
       }
       return text.trim();
     } on DioException catch (e) {
-      debugPrint('Claude API DioException: ${e.message} — ${e.response?.data}');
-      throw Exception('Network error contacting AI service.');
+      debugPrint('Claude API DioException: ${e.message}');
+      debugPrint('Claude API response status: ${e.response?.statusCode}');
+      debugPrint('Claude API response data: ${e.response?.data}');
+      debugPrint('Claude API error type: ${e.type}');
+      throw Exception('Network error: ${e.message}');
     }
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/logic/adaptive_engine.dart';
 import '../core/services/star_service.dart';
+import '../features/caregiver/services/goal_notification_service.dart';
 import '../core/widgets/star_reward_widget.dart';
 import '../features/child/presentation/help_button.dart';
 import '../features/child/presentation/activity_exit_handler.dart';
@@ -226,7 +227,7 @@ class _ColorMemoryTilesScreenState extends State<ColorMemoryTilesScreen>
       stars++; // no replay
     }
 
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: 2), () async {
       if (!mounted) return;
       if (_level >= 8) {
         // UCD018 — show completion feedback overlay.
@@ -248,7 +249,12 @@ class _ColorMemoryTilesScreenState extends State<ColorMemoryTilesScreen>
         );
       } else {
         // Per-level reward.
-        StarService.addStars(StarService.colorMemory, stars);
+        await StarService.addStars(StarService.colorMemory, stars);
+        if (mounted) {
+          await GoalNotificationService.instance.checkAllActiveStarGoals(
+            context: context,
+          );
+        }
         StarRewardWidget.show(context);
         _level++;
         if (_level % 2 == 0 && _seqLength < 6) _seqLength++;

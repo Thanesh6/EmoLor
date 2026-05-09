@@ -8,7 +8,6 @@ import '../services/instructions_service.dart';
 import '../../../core/logic/adaptive_engine.dart';
 import '../../../screens/play_screen.dart';
 import '../../../screens/draw_screen.dart';
-import '../../../screens/stories_screen.dart';
 import 'instructions_overlay.dart';
 
 /// UCD013 + UCD014 – Activity Launcher.
@@ -188,10 +187,16 @@ class _ActivityLauncherScreenState extends State<ActivityLauncherScreen>
     switch (widget.activity.category) {
       case ActivityCategory.games:
         return const PlayScreen();
+
       case ActivityCategory.drawing:
         return const DrawScreen();
+
       case ActivityCategory.stories:
-        return const StoriesScreen();
+        return const Scaffold(
+          body: Center(
+            child: Text('Activity not available'),
+          ),
+        );
     }
   }
 

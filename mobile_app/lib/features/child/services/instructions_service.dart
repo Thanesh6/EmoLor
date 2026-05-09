@@ -51,6 +51,13 @@ class InstructionsService {
     'game_emotion_catcher': 'Emotion faces will fall from the sky!\n'
         'Move your basket left and right to catch the target emotion.\n'
         'Avoid catching the wrong one — you only have 3 lives!',
+    'game_emo_match': 'Look at the item shown on the card.\n'
+        'Tap the picture that goes with it!\n'
+        'If you get it wrong twice, the right answer will glow for you.',
+    'game_animal_sound':
+        'In Emoji Mode, look at the animal and pick the sound it makes.\n'
+            'In Voice Mode, listen to the sound and tap the correct animal.\n'
+            'Tap the speaker to hear the sound again!',
     'game_emotion_sorting':
         'Look at each emoji and decide what emotion it shows.\n'
             'Drag it into the correct emotion group to sort it!\n'
@@ -75,7 +82,7 @@ class InstructionsService {
   Future<void> _ensureInit() async {
     if (_ttsInitialised) return;
     await _tts.setLanguage('en-US');
-    await _tts.setSpeechRate(0.7); // comfortable pace for children
+    await _tts.setSpeechRate(0.30); // slow pace for children
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.2); // slightly higher pitch for a female feel
     await _setFemaleVoice();

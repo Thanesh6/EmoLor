@@ -29,7 +29,7 @@ class SoundService {
   ///   the music; neither stream interrupts the other.
   static AudioContext get _sfxContext => AudioContext(
         android: AudioContextAndroid(
-          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          audioFocus: AndroidAudioFocus.none,
           stayAwake: false,
           contentType: AndroidContentType.sonification,
           usageType: AndroidUsageType.assistanceSonification,
@@ -130,8 +130,7 @@ class SoundService {
     for (int i = 0; i < numSamples; i++) {
       final t = i / sampleRate;
       // Short fade-in + fade-out to prevent click artefacts
-      final fadeIn =
-          i < sampleRate * 0.012 ? i / (sampleRate * 0.012) : 1.0;
+      final fadeIn = i < sampleRate * 0.012 ? i / (sampleRate * 0.012) : 1.0;
       final fadeOut = i > numSamples - sampleRate * 0.06
           ? (numSamples - i) / (sampleRate * 0.06)
           : 1.0;

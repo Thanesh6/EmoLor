@@ -20,24 +20,33 @@ class EmojiPuzzleScreen extends StatefulWidget {
   State<EmojiPuzzleScreen> createState() => _EmojiPuzzleScreenState();
 }
 
-class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
+class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen>
+    with TickerProviderStateMixin {
   static const String _activityId = 'game_emoji_puzzle';
   // Feelings first, then the rest — so puzzles start with core facial emojis
   static final List<Map<String, dynamic>> _puzzles = [
     ...GameEmojis.byCategory('feelings').map((e) => e.toMap()),
-    ...GameEmojis.all.where((e) => e.category != 'feelings').map((e) => e.toMap()),
+    ...GameEmojis.all
+        .where((e) => e.category != 'feelings')
+        .map((e) => e.toMap()),
   ];
 
   static const int _gridSize = 3; // 3x3 puzzle
   static const int _totalPieces = _gridSize * _gridSize;
 
+  final Stopwatch _stopwatch = Stopwatch();
   int _currentPuzzle = 0;
   int _sessionStars = 0;
   bool _showComplete = false;
   final ActivityProgressService _progressService = ActivityProgressService();
 
-  // Adaptive heuristic: track errors per level
-  int _levelErrors = 0;
+// Adaptive heuristic: track which pieces the child has misplaced.
+  // Hint shows only for a piece that has erred before, and only while it's being dragged.
+  final Set<int> _erroredPieces = {};
+
+  // Pulse animation for hint slot
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
 
   // Each piece has a correct index (0..8) and is either placed or in the tray
   late List<int> _trayPieces; // piece indices still in tray (shuffled)
@@ -48,8 +57,22 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
     _setupPuzzle();
+    _stopwatch.start();
     _restoreProgress();
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 
   Future<void> _restoreProgress() async {
@@ -96,6 +119,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emojiPuzzle,
       sessionStars: _sessionStars,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
   }
 
@@ -103,7 +127,7 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
     _showComplete = false;
     _draggedPiece = null;
     _hoveredSlot = null;
-    _levelErrors = 0; // reset errors for new level
+    _erroredPieces.clear(); // reset per-piece errors for new level
     // All pieces start in tray, shuffled
     _trayPieces = List.generate(_totalPieces, (i) => i);
     _trayPieces.shuffle(Random());
@@ -127,10 +151,10 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
         _onPuzzleComplete();
       }
     } else {
-      // Wrong slot — bounce back and track error
+      // Wrong slot — bounce back and remember THIS piece erred
       AudioService.instance.playSfx(SoundEffect.wrong);
       setState(() {
-        _levelErrors++;
+        _erroredPieces.add(pieceIndex);
         _draggedPiece = null;
         _hoveredSlot = null;
       });
@@ -357,20 +381,13 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
               final placedPiece = _boardSlots[slotIndex];
               final isHovered =
                   _hoveredSlot == slotIndex && _boardSlots[slotIndex] == null;
-              // Adaptive hint: 0 errors = no hint, 1 error = hint only for
-              // the piece being dragged, 2+ errors = hint for all empty slots
-              final bool isHintSlot;
-              if (_levelErrors == 0 || _draggedPiece == null) {
-                isHintSlot = false;
-              } else if (_levelErrors == 1) {
-                // Highlight only the correct slot for the dragged piece
-                isHintSlot = _draggedPiece == slotIndex &&
-                    _boardSlots[slotIndex] == null;
-              } else {
-                // 2+ errors: highlight every empty slot that matches a tray piece
-                isHintSlot = _boardSlots[slotIndex] == null &&
-                    _trayPieces.contains(slotIndex);
-              }
+              // Adaptive hint: only when the child is dragging a piece that
+              // has previously been misplaced — highlight just its correct slot.
+              // Pieces that haven't errored yet get no clue.
+              final bool isHintSlot = _draggedPiece != null &&
+                  _draggedPiece == slotIndex &&
+                  _boardSlots[slotIndex] == null &&
+                  _erroredPieces.contains(_draggedPiece);
 
               return DragTarget<int>(
                 onWillAcceptWithDetails: (details) {
@@ -381,56 +398,61 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                 onAcceptWithDetails: (details) =>
                     _onPiecePlaced(details.data, slotIndex),
                 builder: (context, candidateData, rejectedData) {
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      color: placedPiece != null
-                          ? color.withValues(alpha: 0.15)
-                          : isHintSlot
-                              ? const Color(0xFF22C55E).withValues(alpha: 0.22)
+                  return ScaleTransition(
+                    scale: isHintSlot
+                        ? _pulseAnimation
+                        : const AlwaysStoppedAnimation(1.0),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: placedPiece != null
+                            ? color.withValues(alpha: 0.15)
+                            : isHintSlot
+                                ? const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.22)
+                                : isHovered
+                                    ? color.withValues(alpha: 0.25)
+                                    : Colors.white.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isHintSlot
+                              ? const Color(0xFF22C55E)
                               : isHovered
-                                  ? color.withValues(alpha: 0.25)
-                                  : Colors.white.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isHintSlot
-                            ? const Color(0xFF22C55E)
-                            : isHovered
-                                ? color
-                                : placedPiece != null
-                                    ? color.withValues(alpha: 0.4)
-                                    : Colors.grey.shade300,
-                        width: (isHovered || isHintSlot) ? 3.5 : 2,
+                                  ? color
+                                  : placedPiece != null
+                                      ? color.withValues(alpha: 0.4)
+                                      : Colors.grey.shade300,
+                          width: (isHovered || isHintSlot) ? 3.5 : 2,
+                        ),
+                        boxShadow: (isHovered || isHintSlot)
+                            ? [
+                                BoxShadow(
+                                    color: (isHintSlot
+                                            ? const Color(0xFF22C55E)
+                                            : color)
+                                        .withValues(alpha: 0.3),
+                                    blurRadius: 12)
+                              ]
+                            : [],
                       ),
-                      boxShadow: (isHovered || isHintSlot)
-                          ? [
-                              BoxShadow(
-                                  color: (isHintSlot
-                                          ? const Color(0xFF22C55E)
-                                          : color)
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 12)
-                            ]
-                          : [],
+                      child: placedPiece != null
+                          ? _buildPieceContent(emoji, placedPiece, cellSize - 6)
+                          : Center(
+                              child: isHovered
+                                  ? Icon(Icons.add_rounded,
+                                      color: color, size: 28)
+                                  : Text(
+                                      '${slotIndex + 1}',
+                                      style: _cute(
+                                          sz: 28,
+                                          c: isHintSlot
+                                              ? const Color(0xFF22C55E)
+                                              : Colors.grey.shade500,
+                                          fw: FontWeight.w900),
+                                    ),
+                            ),
                     ),
-                    child: placedPiece != null
-                        ? _buildPieceContent(emoji, placedPiece, cellSize - 6)
-                        : Center(
-                            child: isHovered
-                                ? Icon(Icons.add_rounded,
-                                    color: color, size: 28)
-                                : isHintSlot
-                                    ? const Icon(Icons.place_rounded,
-                                        color: Color(0xFFEF4444), size: 30)
-                                    : Text(
-                                        '${slotIndex + 1}',
-                                        style: _cute(
-                                            sz: 16,
-                                            c: Colors.grey.shade400,
-                                            fw: FontWeight.w600),
-                                      ),
-                          ),
                   );
                 },
               );
@@ -458,13 +480,16 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
                 onDragEnd: (_) => setState(() => _draggedPiece = null),
                 feedback: Material(
                   color: Colors.transparent,
-                  child: _buildDragPiece(emoji, pieceIndex, 127, color, true),
+                  child: _buildDragPieceWithBadge(
+                      emoji, pieceIndex, 127, color, true),
                 ),
                 childWhenDragging: Opacity(
                   opacity: 0.3,
-                  child: _buildDragPiece(emoji, pieceIndex, 115, color, false),
+                  child: _buildDragPieceWithBadge(
+                      emoji, pieceIndex, 115, color, false),
                 ),
-                child: _buildDragPiece(emoji, pieceIndex, 115, color, false),
+                child: _buildDragPieceWithBadge(
+                    emoji, pieceIndex, 115, color, false),
               ),
             );
           }).toList(),
@@ -499,6 +524,45 @@ class _EmojiPuzzleScreenState extends State<EmojiPuzzleScreen> {
         borderRadius: BorderRadius.circular(12),
         child: _buildPieceContent(emoji, pieceIndex, size - 5),
       ),
+    );
+  }
+
+  /// Wraps a drag piece with a number badge when the piece has previously errored
+  Widget _buildDragPieceWithBadge(
+      String emoji, int pieceIndex, double size, Color color, bool isDragging) {
+    final hasErrored = _erroredPieces.contains(pieceIndex);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _buildDragPiece(emoji, pieceIndex, size, color, isDragging),
+        if (hasErrored)
+          Positioned(
+            top: -6,
+            right: -6,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 4),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  '${pieceIndex + 1}',
+                  style: GoogleFonts.baloo2(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

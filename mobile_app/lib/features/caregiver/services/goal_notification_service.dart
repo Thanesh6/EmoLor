@@ -1,24 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/services/sound_service.dart';
 import '../presentation/widgets/goal_alert_overlay.dart';
 import 'goal_service.dart';
+import '../../../core/services/star_service.dart';
 
 /// Singleton service that manages in-app goal notifications.
 ///
-/// **Time Goal** — call [startTimeGoal] when the child enters the game area.
-/// Alert thresholds:
-///   target > 10 min  → alerts at 10, 5, 1 min left
-///   target 6–10 min  → alerts at 5, 1 min left
-///   target 2–5 min   → alert at 1 min left
-///   target ≤ 1 min   → only "Time's Up!"
-/// On time-up: shows a countdown banner, then navigates to the post-session
-/// mood screen ("How do you feel now?").
-///
-/// **Star Goal** — call [checkStarGoal] whenever stars change.
-/// Milestones: 50%, 80%, 100%.
-/// At 100% a dismissible banner is shown — the child can continue playing.
+/// Goal notifications are intentionally SILENT.
+/// Background music should continue playing during all goal popups.
 class GoalNotificationService {
   GoalNotificationService._();
   static final GoalNotificationService instance = GoalNotificationService._();
@@ -36,9 +26,6 @@ class GoalNotificationService {
 
   // ── Time Goal ────────────────────────────────────────────────────
 
-  /// [showSwitch] — true when the child is under an organisation account.
-  /// When time is up, [showSwitch] decides whether to return to
-  /// /orgz-child-dashboard (true) or /child-profiles (false).
   void startTimeGoal({
     required BuildContext context,
     required int targetMinutes,
@@ -64,21 +51,16 @@ class GoalNotificationService {
         stopTimeGoal();
         if (!context.mounted) return;
 
-        // Play time-up sound
-        SoundService.instance.playTimeUp();
-
-        // Show time-up banner with 5-second countdown, then redirect
-        // to the post-session mood screen ("How do you feel now?").
+        // Silent popup only — do not play notification sound.
         GoalAlertOverlay.show(
           context: context,
           message: "Time's Up! Amazing effort today! 🌟",
           alertType: GoalAlertType.timeUp,
           holdDuration: const Duration(seconds: 5),
           onDone: () async {
-            // Time goal achieved — wipe the per-session goal set so the next
-            // session starts fresh, and reset our star-alert tracking too.
             await GoalService.clearAll();
             resetAllStarAlerts();
+
             if (context.mounted) {
               context.go('/how-i-feel-end', extra: {
                 'childName': childName,
@@ -96,9 +78,7 @@ class GoalNotificationService {
         _firedTimeAlerts.add(remaining);
         if (!context.mounted) return;
 
-        // Play warning sound scaled to urgency
-        SoundService.instance.playTimeWarning(remaining);
-
+        // Silent popup only — background music continues.
         GoalAlertOverlay.show(
           context: context,
           message: remaining == 1
@@ -144,10 +124,7 @@ class GoalNotificationService {
       fired.add('80pct');
       fired.add('50pct');
 
-      SoundService.instance.playStarMilestone(1.0);
-
       if (context.mounted) {
-        // Dismissible banner — child can keep playing
         GoalAlertOverlay.show(
           context: context,
           message:
@@ -156,6 +133,7 @@ class GoalNotificationService {
           holdDuration: const Duration(seconds: 30),
         );
       }
+
       await GoalService.updateProgress(goalId, currentStars);
       return;
     }
@@ -164,8 +142,6 @@ class GoalNotificationService {
     if (fraction >= 0.8 && !fired.contains('80pct')) {
       fired.add('80pct');
       final starsLeft = targetStars - currentStars;
-
-      SoundService.instance.playStarMilestone(0.8);
 
       if (context.mounted) {
         GoalAlertOverlay.show(
@@ -183,8 +159,6 @@ class GoalNotificationService {
       fired.add('50pct');
       final starsLeft = targetStars - currentStars;
 
-      SoundService.instance.playStarMilestone(0.5);
-
       if (context.mounted) {
         GoalAlertOverlay.show(
           context: context,
@@ -199,13 +173,27 @@ class GoalNotificationService {
     await GoalService.updateProgress(goalId, currentStars);
   }
 
+  Future<void> checkAllActiveStarGoals({
+    required BuildContext context,
+  }) async {
+    final currentStars = await StarService.getTotalStars();
+    final activeStarGoals = await getActiveStarGoals();
+
+    for (final goal in activeStarGoals) {
+      await checkStarGoal(
+        context: context,
+        currentStars: currentStars,
+        targetStars: goal.target,
+        goalId: goal.id,
+      );
+    }
+  }
+
   void resetStarAlerts(String goalId) {
     _firedStarAlerts.remove(goalId);
   }
 
-  /// Clears every per-goal star-alert tracking entry. Call this when the
-  /// goal set itself is wiped (end of session / logout / profile switch)
-  /// so the next session's milestones can fire fresh.
+  /// Clears every per-goal star-alert tracking entry.
   void resetAllStarAlerts() {
     _firedStarAlerts.clear();
   }
@@ -223,6 +211,8 @@ class GoalNotificationService {
 
   static Future<List<PerformanceGoal>> getActiveStarGoals() async {
     final goals = await GoalService.getActiveGoals();
-    return goals.where((g) => g.category == GoalCategory.starCollection).toList();
+    return goals
+        .where((g) => g.category == GoalCategory.starCollection)
+        .toList();
   }
 }

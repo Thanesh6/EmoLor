@@ -7,6 +7,8 @@ import '../../caregiver/services/goal_notification_service.dart';
 import '../../caregiver/services/goal_service.dart';
 import '../domain/models/emotion.dart';
 import '../services/child_session_service.dart';
+import '../../../core/services/bg_music_player.dart';
+import '../../../core/constants/sensory_palette.dart';
 
 enum HowIFeelMode { start, end }
 
@@ -15,7 +17,8 @@ enum _Phase { pickEmotion, colorForSelected }
 class HowIFeelEmotionChoice {
   final String id, name, emoji, valence;
   final Color color;
-  const HowIFeelEmotionChoice(this.id, this.name, this.emoji, this.color, this.valence);
+  const HowIFeelEmotionChoice(
+      this.id, this.name, this.emoji, this.color, this.valence);
 }
 
 /// Session-time emotion screen.
@@ -51,11 +54,10 @@ class HowIFeelScreen extends StatefulWidget {
 
 class _HowIFeelScreenState extends State<HowIFeelScreen>
     with TickerProviderStateMixin {
-
   // ── Phase state ──────────────────────────────────────────────────────────
   _Phase _phase = _Phase.pickEmotion;
-  Emotion? _selectedEmotion;   // emotion child tapped in phase 1
-  Color? _pickedColor;         // colour chosen in current picker phase
+  Emotion? _selectedEmotion; // emotion child tapped in phase 1
+  Color? _pickedColor; // colour chosen in current picker phase
 
   // ── Data ─────────────────────────────────────────────────────────────────
   List<Emotion> _emotions = EmotionService.defaultEmotions;
@@ -65,31 +67,31 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   late final AnimationController _pulseCtrl;
   bool _busy = false;
 
-  // ── 12-colour palette (same as My Colours) ───────────────────────────────
-  static const List<Color> _palette = [
-    Color(0xFFEF4444), // Red
-    Color(0xFFF97316), // Orange
-    Color(0xFFFFE66D), // Yellow
-    Color(0xFF22C55E), // Green
-    Color(0xFF4ECDC4), // Teal
-    Color(0xFF60A5FA), // Sky Blue
-    Color(0xFF74B9FF), // Light Blue
-    Color(0xFF8B5CF6), // Purple
-    Color(0xFFEC4899), // Pink
-    Color(0xFFFF7EB3), // Rose
-    Color(0xFFFF9F43), // Amber
-    Color(0xFF9CA3AF), // Gray
-  ];
+  // ── Standardized 9-colour sensory palette ────────────────────────────────
+  static List<Color> get _palette =>
+      SensoryPalette.colors.map((c) => c.color).toList();
+
+  // Background flush color when child taps a color bubble
+  Color? _flushColor;
+
+  // Shuffled palette — randomized each time color picker is shown
+  List<Color> _shuffledPalette = [];
 
   static const Color _unassignedBg = Color(0xFFD1D5DB); // grey for unassigned
 
   @override
   void initState() {
     super.initState();
+
+    if (widget.mode == HowIFeelMode.start) {
+      BgMusicPlayer.instance.play();
+    }
+
     _pulseCtrl = AnimationController(
       duration: const Duration(milliseconds: 900),
       vsync: this,
     )..repeat(reverse: true);
+    _shuffledPalette = [..._palette]..shuffle();
     _init();
   }
 
@@ -139,14 +141,31 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   // ── Phase transitions ────────────────────────────────────────────────────
 
   void _onEmotionTapped(Emotion e) {
+    final shuffled = [..._palette]..shuffle();
     setState(() {
       _selectedEmotion = e;
       _pickedColor = null;
+      _shuffledPalette = shuffled;
     });
 
     final isAssigned = _assignedIds.contains(e.id);
-    if (!isAssigned) {
-      setState(() => _phase = _Phase.colorForSelected);
+
+    // Pre-session:
+    // - If emotion is not assigned, ask child to pick a colour.
+    // - If already assigned, continue.
+    //
+    // Post-session:
+    // - Always ask child to pick a colour, even if the same emotion was selected.
+    if (widget.mode == HowIFeelMode.end) {
+      setState(() {
+        _shuffledPalette = [..._palette]..shuffle();
+        _phase = _Phase.colorForSelected;
+      });
+    } else if (!isAssigned) {
+      setState(() {
+        _shuffledPalette = [..._palette]..shuffle();
+        _phase = _Phase.colorForSelected;
+      });
     } else {
       _afterSelectedHandled();
     }
@@ -176,7 +195,7 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
     if (widget.mode == HowIFeelMode.start) {
       await ChildSessionService.setSessionPreEmotion(
         emotionId: id,
-        colourHex: _colorToHex(color),
+        colourHex: _canonicalHex(color),
       );
     }
 
@@ -208,6 +227,10 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
 
     try {
       await widget.onContinue(choice);
+
+      if (widget.mode == HowIFeelMode.end) {
+        await BgMusicPlayer.instance.stop();
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -219,28 +242,42 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
       final suffix = widget.mode == HowIFeelMode.start ? 'start' : 'end';
       await prefs.setString('how_i_feel_${suffix}_id', choice.id);
       await prefs.setString('how_i_feel_${suffix}_name', choice.name);
-      await prefs.setString('how_i_feel_${suffix}_at', DateTime.now().toIso8601String());
+      await prefs.setString(
+          'how_i_feel_${suffix}_at', DateTime.now().toIso8601String());
     } catch (_) {}
   }
 
   Future<void> _saveMoodToDatabase(HowIFeelEmotionChoice choice) async {
-    final hex = EmotionColourMapping.hexFor(choice.name);
+    final hex = _colorToHex(choice.color);
+
+    debugPrint(
+      'HowIFeelScreen._saveMoodToDatabase called | '
+      'mode=${widget.mode} | '
+      'emotion=${choice.name} | '
+      'valence=${choice.valence} | '
+      'hex=$hex',
+    );
+
     try {
       if (widget.mode == HowIFeelMode.start) {
+        debugPrint('Calling ChildSessionService.recordPreEmotion...');
         await ChildSessionService.recordPreEmotion(
           emotionName: choice.name,
           emotionValence: choice.valence,
           emotionColourHex: hex,
         );
+        debugPrint('Finished ChildSessionService.recordPreEmotion');
       } else {
+        debugPrint('Calling ChildSessionService.recordPostEmotion...');
         await ChildSessionService.recordPostEmotion(
           emotionName: choice.name,
           emotionValence: choice.valence,
           emotionColourHex: hex,
         );
+        debugPrint('Finished ChildSessionService.recordPostEmotion');
       }
     } catch (e) {
-      debugPrint('HowIFeelScreen._saveMoodToDatabase: $e');
+      debugPrint('HowIFeelScreen._saveMoodToDatabase ERROR: $e');
     }
   }
 
@@ -252,7 +289,8 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
     Color color = Colors.white,
     List<Shadow>? shadows,
   }) =>
-      GoogleFonts.baloo2(fontSize: size, fontWeight: weight, color: color, shadows: shadows);
+      GoogleFonts.baloo2(
+          fontSize: size, fontWeight: weight, color: color, shadows: shadows);
 
   Color _cardBg(Emotion e) =>
       _assignedIds.contains(e.id) ? e.color : _unassignedBg;
@@ -270,6 +308,16 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   static String _colorToHex(Color c) =>
       '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
 
+  /// Returns the canonical hex from SensoryPalette for a given Color,
+  /// falling back to computed hex if not found.
+  static String _canonicalHex(Color c) {
+    final computed = _colorToHex(c);
+    final found = SensoryPalette.colors
+        .where((s) => s.color.toARGB32() == c.toARGB32())
+        .firstOrNull;
+    return found?.hex ?? computed;
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -278,29 +326,63 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFFE8F0), Color(0xFFE0C3FC), Color(0xFF8EC5FC)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF7DD3FC),
+              Color(0xFFFDE68A),
+              Color(0xFF86EFAC),
+            ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
-        child: SafeArea(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 340),
-            transitionBuilder: (child, animation) {
-              final slide = Tween<Offset>(
-                begin: const Offset(1.0, 0.0),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-              return SlideTransition(position: slide, child: FadeTransition(opacity: animation, child: child));
-            },
-            child: switch (_phase) {
-              _Phase.pickEmotion    => _buildPickPhase(),
-              _Phase.colorForSelected => _buildColorPickerPhase(
-                key: const ValueKey('color-selected'),
-                emotion: _selectedEmotion!,
-                onConfirm: _confirmSelectedColor,
-              ),
-            },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          decoration: BoxDecoration(
+            gradient: _flushColor != null
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      _flushColor!.withValues(alpha: 0.6),
+                      _flushColor!.withValues(alpha: 0.3),
+                      const Color(0xFF86EFAC),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  )
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF7DD3FC),
+                      Color(0xFFFDE68A),
+                      Color(0xFF86EFAC),
+                    ],
+                    stops: [0.0, 0.5, 1.0],
+                  ),
+          ),
+          child: SafeArea(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 340),
+              transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: const Offset(1.0, 0.0),
+                  end: Offset.zero,
+                ).animate(CurvedAnimation(
+                    parent: animation, curve: Curves.easeOutCubic));
+                return SlideTransition(
+                    position: slide,
+                    child: FadeTransition(opacity: animation, child: child));
+              },
+              child: switch (_phase) {
+                _Phase.pickEmotion => _buildPickPhase(),
+                _Phase.colorForSelected => _buildColorPickerPhase(
+                    key: const ValueKey('color-selected'),
+                    emotion: _selectedEmotion!,
+                    onConfirm: _confirmSelectedColor,
+                  ),
+              },
+            ),
           ),
         ),
       ),
@@ -327,158 +409,214 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
               child: Column(
                 children: [
                   Text(greeting,
-                      style: _cute(size: 26, color: const Color(0xFF6B21A8))),
-                  const SizedBox(height: 4),
+                      style: _cute(size: 22, color: const Color(0xFF6B21A8))),
+                  const SizedBox(height: 2),
                   Text(title,
                       style: _cute(
-                        size: 38,
+                        size: 30,
                         weight: FontWeight.w900,
                         color: const Color(0xFF1B2541),
-                        shadows: const [Shadow(offset: Offset(2, 2), blurRadius: 4, color: Colors.black26)],
+                        shadows: const [
+                          Shadow(
+                              offset: Offset(2, 2),
+                              blurRadius: 4,
+                              color: Colors.black26)
+                        ],
                       ),
                       textAlign: TextAlign.center),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(subtitle,
-                      style: _cute(size: 17, weight: FontWeight.w500, color: Colors.black54),
+                      style: _cute(
+                          size: 14,
+                          weight: FontWeight.w500,
+                          color: Colors.black54),
                       textAlign: TextAlign.center),
                 ],
               ),
             ),
 
-            // Emotion grid
+            /// Emotion grid — sized to actual available space, no clipping
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 6),
-                child: GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: 0.88,
-                  ),
-                  itemCount: _emotions.length,
-                  itemBuilder: (context, i) {
-                    final e = _emotions[i];
-                    final bg = _cardBg(e);
-                    final isAssigned = _assignedIds.contains(e.id);
-                    final isSelected = _selectedEmotion?.id == e.id;
-                    return AnimatedBuilder(
-                      animation: _pulseCtrl,
-                      builder: (_, child) => Transform.scale(
-                        scale: isSelected ? 1.0 + _pulseCtrl.value * 0.04 : 1.0,
-                        child: child,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Compute cell dimensions from BOTH width and height to guarantee fit
+                  final availableWidth = constraints.maxWidth - 16 * 2;
+                  final availableHeight = constraints.maxHeight -
+                      8 -
+                      80; // 80 = button overlay clearance
+                  final cellWidth = (availableWidth - 8 * 3) / 4;
+                  final cellHeight = (availableHeight - 8) / 2;
+                  final emojiSize = cellHeight * 0.40;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: GridView.builder(
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: cellWidth / cellHeight,
                       ),
-                      child: GestureDetector(
-                        onTap: () => _onEmotionTapped(e),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [bg, bg.withValues(alpha: 0.75)],
-                            ),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: isSelected ? Colors.yellow : Colors.white,
-                              width: isSelected ? 4.5 : 3.0,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: bg.withValues(alpha: isSelected ? 0.65 : 0.3),
-                                blurRadius: isSelected ? 20 : 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
+                      itemCount: _emotions.length,
+                      itemBuilder: (context, i) {
+                        final e = _emotions[i];
+                        final bg = _cardBg(e);
+                        final isAssigned = _assignedIds.contains(e.id);
+                        final isSelected = _selectedEmotion?.id == e.id;
+                        return AnimatedBuilder(
+                          animation: _pulseCtrl,
+                          builder: (_, child) => Transform.scale(
+                            scale: isSelected
+                                ? 1.0 + _pulseCtrl.value * 0.04
+                                : 1.0,
+                            child: child,
                           ),
-                          child: Stack(
-                            children: [
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(e.emoji, style: const TextStyle(fontSize: 68)),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      e.name,
-                                      style: _cute(
-                                        size: 24,
-                                        weight: FontWeight.w800,
-                                        color: isAssigned ? Colors.white : Colors.black54,
-                                        shadows: isAssigned
-                                            ? const [Shadow(offset: Offset(1, 1), blurRadius: 3, color: Colors.black26)]
-                                            : null,
+                          child: GestureDetector(
+                            onTap: () => _onEmotionTapped(e),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [bg, bg.withValues(alpha: 0.75)],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color:
+                                      isSelected ? Colors.yellow : Colors.white,
+                                  width: isSelected ? 3.5 : 2.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: bg.withValues(
+                                        alpha: isSelected ? 0.65 : 0.3),
+                                    blurRadius: isSelected ? 20 : 10,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                children: [
+                                  Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(e.emoji,
+                                            style:
+                                                TextStyle(fontSize: emojiSize)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          e.name,
+                                          style: _cute(
+                                            size: 30,
+                                            weight: FontWeight.w800,
+                                            color: isAssigned
+                                                ? Colors.white
+                                                : Colors.black54,
+                                            shadows: isAssigned
+                                                ? const [
+                                                    Shadow(
+                                                        offset: Offset(1, 1),
+                                                        blurRadius: 3,
+                                                        color: Colors.black26)
+                                                  ]
+                                                : null,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (!isAssigned)
+                                    Positioned(
+                                      top: 5,
+                                      right: 5,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.7),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.palette_rounded,
+                                            size: 12, color: Color(0xFF6B21A8)),
                                       ),
                                     ),
-                                  ],
-                                ),
+                                ],
                               ),
-                              // Paint icon hint for unassigned emotions —
-                              // tapping these leads to the colour picker.
-                              if (!isAssigned)
-                                Positioned(
-                                  top: 8,
-                                  right: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.7),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.palette_rounded, size: 16, color: Color(0xFF6B21A8)),
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            // Continue button (appears after selection)
-            AnimatedOpacity(
-              opacity: _selectedEmotion != null ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 250),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
-                child: SizedBox(
-                  width: 320,
-                  height: 64,
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedEmotion == null || _busy ? null : () {
-                      final e = _selectedEmotion!;
-                      final isAssigned = _assignedIds.contains(e.id);
-                      if (!isAssigned) {
-                        setState(() => _phase = _Phase.colorForSelected);
-                      } else {
-                        _afterSelectedHandled();
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedEmotion != null ? _cardBg(_selectedEmotion!) : Colors.grey.shade300,
-                      foregroundColor: Colors.white,
-                      elevation: 6,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                        );
+                      },
                     ),
-                    icon: _busy
-                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-                        : const Icon(Icons.arrow_forward_rounded, size: 28),
-                    label: Text(
-                      widget.mode == HowIFeelMode.start ? 'Continue' : 'Done',
-                      style: _cute(size: 24, weight: FontWeight.w800),
-                    ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ],
+        ),
+
+        // Continue button overlay
+        Positioned(
+          bottom: 12,
+          left: 0,
+          right: 0,
+          child: AnimatedOpacity(
+            opacity: _selectedEmotion != null ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 250),
+            child: Center(
+              child: SizedBox(
+                width: 320,
+                height: 64,
+                child: ElevatedButton.icon(
+                  onPressed: _selectedEmotion == null || _busy
+                      ? null
+                      : () {
+                          final e = _selectedEmotion!;
+                          final isAssigned = _assignedIds.contains(e.id);
+                          if (widget.mode == HowIFeelMode.end) {
+                            setState(() {
+                              _shuffledPalette = [..._palette]..shuffle();
+                              _phase = _Phase.colorForSelected;
+                            });
+                          } else if (!isAssigned) {
+                            setState(() {
+                              _shuffledPalette = [..._palette]..shuffle();
+                              _phase = _Phase.colorForSelected;
+                            });
+                          } else {
+                            _afterSelectedHandled();
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _selectedEmotion != null
+                        ? _cardBg(_selectedEmotion!)
+                        : Colors.grey.shade300,
+                    foregroundColor: Colors.white,
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26)),
+                  ),
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 3, color: Colors.white))
+                      : const Icon(Icons.arrow_forward_rounded, size: 28),
+                  label: Text(
+                    widget.mode == HowIFeelMode.start ? 'Continue' : 'Done',
+                    style: _cute(size: 24, weight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
 
         // Back button
@@ -493,9 +631,15 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4))],
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4))
+                  ],
                 ),
-                child: const Icon(Icons.arrow_back_rounded, color: Color(0xFF6B21A8), size: 30),
+                child: const Icon(Icons.arrow_back_rounded,
+                    color: Color(0xFF6B21A8), size: 30),
               ),
             ),
           ),
@@ -504,6 +648,53 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
   }
 
   // ── Phase 2: inline colour picker ────────────────────────────────────────
+
+  Widget _buildColorBubble(Color c) {
+    final isChosen = _pickedColor?.toARGB32() == c.toARGB32();
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _pickedColor = c;
+          _flushColor = c;
+        });
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) setState(() => _flushColor = null);
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: isChosen ? 80 : 72,
+        height: isChosen ? 80 : 72,
+        decoration: BoxDecoration(
+          color: c,
+          shape: BoxShape.circle,
+          // Always visible outline — white inner + dark outer so any color pops
+          border: Border.all(
+            color: isChosen ? Colors.white : Colors.white,
+            width: isChosen ? 5 : 3,
+          ),
+          boxShadow: [
+            // Dark outer ring so light colors (yellow/green) are always visible
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isChosen ? 0.35 : 0.20),
+              blurRadius: isChosen ? 16 : 8,
+              spreadRadius: isChosen ? 3 : 1,
+            ),
+            // Color glow when chosen
+            if (isChosen)
+              BoxShadow(
+                color: c.withValues(alpha: 0.6),
+                blurRadius: 24,
+                spreadRadius: 4,
+              ),
+          ],
+        ),
+        child: isChosen
+            ? const Icon(Icons.check_rounded, color: Colors.white, size: 36)
+            : null,
+      ),
+    );
+  }
 
   Widget _buildColorPickerPhase({
     required Key key,
@@ -518,107 +709,122 @@ class _HowIFeelScreenState extends State<HowIFeelScreen>
       children: [
         // Header
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
           child: Column(
             children: [
               Text(title,
-                  style: _cute(size: 38, weight: FontWeight.w900, color: const Color(0xFF1B2541)),
+                  style: _cute(
+                      size: 44,
+                      weight: FontWeight.w900,
+                      color: const Color(0xFF1B2541)),
                   textAlign: TextAlign.center),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(subtitle,
-                  style: _cute(size: 26, weight: FontWeight.w600, color: Colors.black54),
+                  style: _cute(
+                      size: 30, weight: FontWeight.w600, color: Colors.black54),
                   textAlign: TextAlign.center),
             ],
           ),
         ),
 
-        // Big colour preview circle with emoji
+        const SizedBox(height: 20),
+
+        // Big colour preview circle with emoji — bigger and more eye-catching
         AnimatedContainer(
           duration: const Duration(milliseconds: 280),
-          width: 180,
-          height: 180,
+          width: 240,
+          height: 240,
           decoration: BoxDecoration(
             color: _pickedColor ?? _unassignedBg,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 6),
+            border: Border.all(color: Colors.white, width: 8),
             boxShadow: [
               BoxShadow(
-                color: (_pickedColor ?? _unassignedBg).withValues(alpha: 0.5),
-                blurRadius: 36,
-                spreadRadius: 6,
+                color: (_pickedColor ?? _unassignedBg).withValues(alpha: 0.55),
+                blurRadius: 44,
+                spreadRadius: 8,
               ),
             ],
           ),
           child: Center(
-            child: Text(emotion.emoji, style: const TextStyle(fontSize: 86)),
+            child: Text(emotion.emoji, style: const TextStyle(fontSize: 120)),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 32),
 
-        // 12-colour palette — constrained width keeps circles compact
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 6,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 1,
-              ),
-              itemCount: _palette.length,
-              itemBuilder: (context, i) {
-                final c = _palette[i];
-                final isChosen = _pickedColor?.toARGB32() == c.toARGB32();
-                return GestureDetector(
-                  onTap: () => setState(() => _pickedColor = c),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    decoration: BoxDecoration(
-                      color: c,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isChosen ? Colors.white : Colors.transparent,
-                        width: isChosen ? 4 : 0,
-                      ),
-                      boxShadow: isChosen
-                          ? [BoxShadow(color: c.withValues(alpha: 0.7), blurRadius: 16, spreadRadius: 2)]
-                          : [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 4)],
-                    ),
-                    child: isChosen
-                        ? const Icon(Icons.check_rounded, color: Colors.white, size: 22)
-                        : null,
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Confirm button
+        // 9-colour sensory palette — 5 top row, 4 bottom row
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // Row 1 — first 5 colors (shuffled)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(5, (i) {
+                  final c = _shuffledPalette[i];
+                  return _buildColorBubble(c);
+                }),
+              ),
+              const SizedBox(height: 16),
+              // Row 2 — last 4 colors (shuffled), centered
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  const SizedBox(width: 36),
+                  ...List.generate(4, (i) {
+                    final c = _shuffledPalette[i + 5];
+                    return _buildColorBubble(c);
+                  }),
+                  const SizedBox(width: 36),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Confirm button — bigger and more prominent
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
           child: SizedBox(
-            width: 380,
-            height: 72,
+            width: 460,
+            height: 70,
             child: ElevatedButton.icon(
               onPressed: _pickedColor == null || _busy ? null : onConfirm,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _pickedColor ?? Colors.grey.shade300,
                 disabledBackgroundColor: Colors.grey.shade200,
                 foregroundColor: Colors.white,
-                elevation: _pickedColor != null ? 6 : 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                elevation: _pickedColor != null ? 8 : 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30)),
               ),
               icon: _busy
-                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-                  : const Icon(Icons.check_rounded, size: 28),
-              label: Text(
-                "That's my colour! ✓",
-                style: _cute(size: 26, weight: FontWeight.w800),
+                  ? const SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 3, color: Colors.white))
+                  : const Icon(Icons.check_rounded, size: 34),
+              label: Stack(
+                children: [
+                  // Outline layer
+                  Text(
+                    "That's my colour! ✓",
+                    style: _cute(size: 30, weight: FontWeight.w800).copyWith(
+                      foreground: Paint()
+                        ..style = PaintingStyle.stroke
+                        ..strokeWidth = 3
+                        ..color = Colors.black.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  // Fill layer
+                  Text(
+                    "That's my colour! ✓",
+                    style: _cute(size: 30, weight: FontWeight.w800),
+                  ),
+                ],
               ),
             ),
           ),

@@ -10,7 +10,7 @@ import '../../screens/register_screen.dart';
 import '../../screens/verification_screen.dart';
 import '../../screens/forgot_password_screen.dart';
 import '../../screens/update_password_screen.dart';
-import '../../screens/child_dashboard.dart'; // Child Dashboard
+import '../../screens/child_dashboard.dart';
 import '../../screens/analytics_dashboard.dart';
 import '../../screens/orgz_child_dashboard.dart';
 import '../../features/child_profile/presentation/create_child_profile_screen.dart';
@@ -92,21 +92,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           // dashboard. The recovery flag persists in the URL fragment until
           // the password is updated.
           final amr = client.auth.currentSession?.user.appMetadata['amr'];
-          if (amr is List && amr.any((e) => e is Map && e['method'] == 'recovery')) {
+          if (amr is List &&
+              amr.any((e) => e is Map && e['method'] == 'recovery')) {
             return '/update-password';
           }
 
           // If email is not confirmed yet (and they're not explicitly on the verification screen),
           // don't let them securely enter the app
           if (client.auth.currentUser?.emailConfirmedAt == null) {
-              return null; // they will need to verify or sign out
+            return null; // they will need to verify or sign out
           }
 
           final userId = client.auth.currentUser!.id;
           final userEmail = client.auth.currentUser!.email?.toLowerCase() ?? '';
           final response = await client
-              .rpc('get_user_role', params: {'p_user_id': userId})
-              .single();
+              .rpc('get_user_role', params: {'p_user_id': userId}).single();
 
           final role = response['role'] as String?;
           final accountType =
@@ -129,7 +129,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         } catch (e) {
           debugPrint('Error fetching role in redirect: $e');
         }
-        return '/child/home'; // Default for caregivers (single child)
+        return '/orgz-child-dashboard';
       }
 
       return null;
@@ -180,6 +180,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return ChildDashboard(
             showSwitchAccount: extra?['showSwitch'] == true,
             childName: extra?['childName'] as String?,
+            avatarUrl: extra?['avatarUrl'] as String? ?? '',
           );
         },
       ),
@@ -208,6 +209,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               context.go('/how-i-feel-start', extra: {
                 'childName': childName,
                 'showSwitch': showSwitch,
+                'avatarUrl': extra?['avatarUrl'] as String? ?? '',
               });
             },
           );
@@ -220,25 +222,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final childName = extra?['childName'] as String?;
           final showSwitch = extra?['showSwitch'] == true;
+          final avatarUrl = extra?['avatarUrl'] as String? ?? '';
           return HowIFeelScreen(
             mode: HowIFeelMode.start,
             childName: childName,
-            // Back goes to the profile picker the child came from —
-            // all accounts return to /orgz-child-dashboard.
             onBack: () {
-              if (showSwitch) {
-                context.go('/orgz-child-dashboard');
-              } else {
-                context.go('/orgz-child-dashboard');
-              }
+              context.go('/orgz-child-dashboard');
             },
             onContinue: (_) async {
-              // Go straight to the dashboard — colours are picked gradually
-              // during the session flow inside HowIFeelScreen itself.
               if (context.mounted) {
                 context.go('/child/home', extra: {
                   'childName': childName,
                   'showSwitch': showSwitch,
+                  'avatarUrl': avatarUrl,
                 });
               }
             },

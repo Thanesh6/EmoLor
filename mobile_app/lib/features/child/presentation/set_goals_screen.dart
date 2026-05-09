@@ -23,7 +23,7 @@ class SetGoalsScreen extends StatefulWidget {
 class _SetGoalsScreenState extends State<SetGoalsScreen>
     with SingleTickerProviderStateMixin {
   // ── Time goal ────────────────────────────────────────────────────
-  bool _timeEnabled = false;
+  bool _timeEnabled = true; // compulsory — always on
   int _hours = 0;
   int _minutes = 15;
   late final FixedExtentScrollController _hourCtrl;
@@ -74,10 +74,9 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
 
   int get _totalMinutes => _hours * 60 + _minutes;
   int get _starTarget => _starTargetValue;
-  bool get _hasGoal => _timeEnabled || _starsEnabled;
-  bool get _timeValid => !_timeEnabled || _totalMinutes > 0;
+  bool get _timeValid => _timeEnabled && _totalMinutes > 0;
   bool get _starValid => !_starsEnabled || _starTarget > 0;
-  bool get _canStart => _hasGoal && _timeValid && _starValid;
+  bool get _canStart => _timeValid && _starValid;
 
   Future<void> _save() async {
     setState(() => _isSaving = true);
@@ -168,7 +167,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Enable at least one goal to continue',
+                          'Set a time goal to continue ⏱️ (stars are optional)',
                           style: GoogleFonts.baloo2(
                             fontSize: 16,
                             color: const Color(0xFF6B7280),
@@ -221,13 +220,13 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
       subtitle: 'How long to play?',
       enabled: _timeEnabled,
       color: color,
-      onToggle: (v) => setState(() => _timeEnabled = v),
+      onToggle: null, // time goal is compulsory — toggle disabled
       child: _timeEnabled
           ? Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 6),
                   // Drum-roll pickers (scaled up to fill the card)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -309,11 +308,12 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
         const SizedBox(height: 6),
         Container(
           width: 100,
-          height: 220,
+          height: 180,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.07),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: 0.28), width: 1.5),
+            border:
+                Border.all(color: color.withValues(alpha: 0.28), width: 1.5),
           ),
           child: Stack(
             alignment: Alignment.center,
@@ -370,10 +370,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 8),
-                  // Wheel picker — replaces the keyboard-based input.
-                  // Children pick a number by scrolling, just like the
-                  // hours / minutes pickers on the Time card.
+                  const SizedBox(height: 4),
                   _buildWheelPicker(
                     controller: _starCtrl,
                     itemCount: _starMax - _starMin + 1,
@@ -383,7 +380,7 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                         setState(() => _starTargetValue = _starMin + i),
                     formatItem: (i) => (_starMin + i).toString(),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 4),
                   Text(
                     'stars ⭐',
                     style: GoogleFonts.baloo2(
@@ -420,9 +417,8 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
           child: ElevatedButton(
             onPressed: (_isSaving || !_canStart) ? null : _save,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _canStart
-                  ? const Color(0xFF10B981)
-                  : const Color(0xFFD1D5DB),
+              backgroundColor:
+                  _canStart ? const Color(0xFF10B981) : const Color(0xFFD1D5DB),
               disabledBackgroundColor: const Color(0xFFD1D5DB),
               foregroundColor: Colors.white,
               disabledForegroundColor: Colors.white,
@@ -450,13 +446,13 @@ class _SetGoalsScreenState extends State<SetGoalsScreen>
                   ),
           ),
         ),
-        if (!_hasGoal) ...[
+        if (!_timeValid) ...[
           const SizedBox(height: 8),
           Text(
-            'Please enable at least one goal to continue',
+            'Please set a time goal of at least 1 minute to continue',
             style: GoogleFonts.baloo2(
               fontSize: 12,
-              color: const Color(0xFF6B7280),
+              color: Colors.red[400],
             ),
             textAlign: TextAlign.center,
           ),
@@ -474,7 +470,7 @@ class _GoalCard extends StatelessWidget {
   final String subtitle;
   final bool enabled;
   final Color color;
-  final ValueChanged<bool> onToggle;
+  final ValueChanged<bool>? onToggle;
   final Widget child;
 
   const _GoalCard({
@@ -541,12 +537,13 @@ class _GoalCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Switch(
-                value: enabled,
-                onChanged: onToggle,
-                activeColor: color,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
+              if (onToggle != null)
+                Switch(
+                  value: enabled,
+                  onChanged: onToggle,
+                  activeColor: color,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
             ],
           ),
           // Picker / input area

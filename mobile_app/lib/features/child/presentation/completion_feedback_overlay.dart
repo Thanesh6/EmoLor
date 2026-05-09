@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/completion_record.dart';
 import '../services/completion_service.dart';
 import '../../../core/services/star_service.dart';
+import '../../../features/caregiver/services/goal_notification_service.dart';
 import '../services/activity_progress_service.dart';
 
 /// UCD018 — reusable completion-feedback overlay.
@@ -50,8 +51,13 @@ class CompletionFeedbackOverlay {
     int timeSpentSeconds = 0,
     VoidCallback? onPlayAgain,
   }) async {
-    // 1. Award stars.
+    // 1. Award stars + immediately check star goals.
     await StarService.addStars(starGameKey, starsEarned);
+    if (context.mounted) {
+      await GoalNotificationService.instance.checkAllActiveStarGoals(
+        context: context,
+      );
+    }
 
     // 2. Clear mid-game save (completed activities shouldn't show "resume").
     await ActivityProgressService().deleteProgress(activityId);

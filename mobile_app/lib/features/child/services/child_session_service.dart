@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/constants/sensory_palette.dart';
 
 /// Manages child app-usage sessions in Supabase `child_sessions` table.
 ///
@@ -17,7 +18,9 @@ class ChildSessionService {
   // these to colour the matching emotion card on the post-session screen
   // without polluting the persistent personalized palette.
   static const _sessionPreEmotionIdKey = 'current_session_pre_emotion_id';
-  static const _sessionPreEmotionColourKey = 'current_session_pre_emotion_colour';
+  static const _sessionPreEmotionColourKey =
+      'current_session_pre_emotion_colour';
+  static const _sessionPreZoneKey = 'current_session_pre_zone_value';
 
   /// Save the colour the child just picked for their pre-session emotion.
   /// Stored only for the duration of this session.
@@ -71,20 +74,32 @@ class ChildSessionService {
   }) async {
     try {
       final profileId = await getChildProfileId();
-      if (profileId == null) return;
+      debugPrint('recordPreEmotion profileId: $profileId');
+
+      if (profileId == null) {
+        debugPrint('recordPreEmotion skipped: profileId is null');
+        return;
+      }
+      // Look up zone value from standardized sensory palette
+      final zoneValue = SensoryPalette.zoneFromHex(emotionColourHex);
 
       final client = Supabase.instance.client;
-      final row = await client.from('child_sessions').insert({
-        'child_profile_id': profileId,
-        'pre_emotion_name': emotionName,
-        'pre_emotion_valence': emotionValence,
-        'pre_emotion_colour': emotionColourHex,
-        'session_date': DateTime.now().toIso8601String(),
-      }).select('id').single();
+      final sessionId = await client.rpc('upsert_child_session', params: {
+        'p_profile_id': profileId,
+        'p_pre_emotion_name': emotionName,
+        'p_pre_emotion_colour': emotionColourHex,
+        'p_pre_emotion_valence': emotionValence,
+        'p_pre_zone_value': zoneValue,
+      }) as String;
 
-      final sessionId = row['id'] as String;
+      debugPrint('recordPreEmotion created sessionId: $sessionId');
+
+      // Also store pre zone locally for mismatch calculation at post-session
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_pendingSessionKey, sessionId);
+      if (zoneValue != null) {
+        await prefs.setInt(_sessionPreZoneKey, zoneValue);
+      }
     } catch (e) {
       debugPrint('ChildSessionService.recordPreEmotion: $e');
     }
@@ -100,20 +115,70 @@ class ChildSessionService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final sessionId = prefs.getString(_pendingSessionKey);
-      if (sessionId == null) return;
+      debugPrint('recordPostEmotion pending sessionId: $sessionId');
+
+      if (sessionId == null) {
+        debugPrint('recordPostEmotion skipped: pending sessionId is null');
+        return;
+      }
+
+      // Zone values
+      final postZone = SensoryPalette.zoneFromHex(emotionColourHex);
+      final preZone = prefs.containsKey(_sessionPreZoneKey)
+          ? prefs.getInt(_sessionPreZoneKey)
+          : null;
+
+      // Regulation delta: pre - post (positive = calming)
+      final delta = SensoryPalette.regulationDelta(
+        preZone: preZone,
+        postZone: postZone,
+      );
+
+      // Sensory mismatch: emotion word zone vs color zone
+      // Map valence to approximate zone for mismatch check
+      final emotionZone = _valenceToZone(emotionValence);
+      final mismatch = (postZone != null && emotionZone != null)
+          ? SensoryPalette.isSensoryMismatch(
+              emotionZone: emotionZone,
+              colorZone: postZone,
+            )
+          : false;
 
       final client = Supabase.instance.client;
-      await client.from('child_sessions').update({
-        'post_emotion_name': emotionName,
-        'post_emotion_valence': emotionValence,
-        'post_emotion_colour': emotionColourHex,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', sessionId);
+      await client.rpc('upsert_child_session', params: {
+        'p_session_id': sessionId,
+        'p_profile_id': await getChildProfileId(),
+        'p_post_emotion_name': emotionName,
+        'p_post_emotion_colour': emotionColourHex,
+        'p_post_emotion_valence': emotionValence,
+        'p_post_zone_value': postZone,
+        'p_regulation_delta': delta,
+        'p_sensory_mismatch': mismatch,
+      });
 
-      // Clear the pending session
+      debugPrint('recordPostEmotion updated sessionId: $sessionId');
+
+      // Clear pending session and pre zone
       await prefs.remove(_pendingSessionKey);
+      await prefs.remove(_sessionPreZoneKey);
     } catch (e) {
       debugPrint('ChildSessionService.recordPostEmotion: $e');
+    }
+  }
+
+  /// Map emotion valence string to approximate zone value for mismatch check.
+  static int? _valenceToZone(String valence) {
+    switch (valence.toLowerCase()) {
+      case 'positive':
+        return 0; // Baseline — happy, calm, loved
+      case 'negative_high': // angry, scared, excited (high arousal)
+        return 3;
+      case 'negative_low': // sad, tired, disgusted (low arousal)
+        return -1;
+      case 'neutral':
+        return 0;
+      default:
+        return null;
     }
   }
 
@@ -131,12 +196,10 @@ class ChildSessionService {
       if (profileId == null) return [];
 
       final client = Supabase.instance.client;
-      final rows = await client
-          .from('child_sessions')
-          .select()
-          .eq('child_profile_id', profileId)
-          .order('session_date', ascending: false)
-          .limit(limit);
+      final rows = await client.rpc('get_child_sessions', params: {
+        'p_profile_id': profileId,
+        'p_limit': limit,
+      });
 
       return List<Map<String, dynamic>>.from(rows as List);
     } catch (e) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/star_service.dart';
+import '../../../features/caregiver/services/goal_notification_service.dart';
 import '../models/activity_save_state.dart';
 import '../models/completion_record.dart';
 import '../services/activity_progress_service.dart';
@@ -71,6 +72,11 @@ class ActivityExitHandler {
     // Accumulate session stars to persistent total before saving.
     if (starGameKey != null && sessionStars > 0) {
       await StarService.addStars(starGameKey, sessionStars);
+      if (context.mounted) {
+        await GoalNotificationService.instance.checkAllActiveStarGoals(
+          context: context,
+        );
+      }
     }
 
     // Save a CompletionRecord so the caregiver dashboard can track activity

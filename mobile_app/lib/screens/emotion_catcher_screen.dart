@@ -102,6 +102,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
   Timer? _gameTicker;
   Timer? _spawnTimer;
 
+  final Stopwatch _stopwatch = Stopwatch();
   double _basketX = 0.5; // fraction of screen width
   int _sessionStars = 0;
   int _lives = 3;
@@ -131,6 +132,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
     _targetEmotion = _emotions[_targetOrder[0]];
     _gameTicker =
         Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -143,8 +145,10 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
       final savedIndex = data['targetIndex'];
       final savedLives = data['lives'];
       if (savedOrder is List && savedIndex is int && savedLives is int) {
-        final order = savedOrder.whereType<num>().map((n) => n.toInt()).toList();
-        if (order.isNotEmpty && order.every((i) => i >= 0 && i < _emotions.length)) {
+        final order =
+            savedOrder.whereType<num>().map((n) => n.toInt()).toList();
+        if (order.isNotEmpty &&
+            order.every((i) => i >= 0 && i < _emotions.length)) {
           _targetOrder = order;
           _targetIndex = savedIndex.clamp(0, order.length);
           _lives = savedLives.clamp(1, 3);
@@ -373,7 +377,8 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
       activityEmoji: '🧺',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionCatcher,
-      sessionStars: _sessionStars,
+      sessionStars: 0,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
     if (mounted && !_gameEnded) {
       _gameTicker =
@@ -443,7 +448,8 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                       .where((e) => !e.missed && e.catchScale > 0)
                       .map((e) {
                     // Adaptive hint: glow around target emojis on 2+ errors
-                    final showHint = !e.caught && e.isTarget && _levelErrors >= 2;
+                    final showHint =
+                        !e.caught && e.isTarget && _levelErrors >= 2;
                     return Positioned(
                       left: e.x - 36,
                       top: e.y - 36,
@@ -536,26 +542,6 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                     ),
                   ),
 
-                  // Lives (hearts) — bottom right
-                  Positioned(
-                    bottom: 24,
-                    right: 20,
-                    child: Row(
-                      children: List.generate(3, (i) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            i < _lives ? Icons.favorite : Icons.favorite_border,
-                            color: i < _lives
-                                ? const Color(0xFFFF6B6B)
-                                : Colors.white38,
-                            size: 45,
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-
                   // Hint + Star — top right
                   Positioned(
                     top: 14,
@@ -575,7 +561,8 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
                             color: const Color(0xFF6B21A8),
                             borderRadius: BorderRadius.circular(26),
                           ),
-                          child: Text('⭐ $_sessionStars', style: _cute(size: 26)),
+                          child:
+                              Text('⭐ $_sessionStars', style: _cute(size: 26)),
                         ),
                       ],
                     ),

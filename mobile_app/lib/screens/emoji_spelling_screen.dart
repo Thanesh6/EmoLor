@@ -21,18 +21,29 @@ class EmojiSpellingScreen extends StatefulWidget {
 
 class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     with TickerProviderStateMixin {
-  static final List<Map<String, String>> _allEmojis =
-      GameEmojis.all.map((e) => {'emoji': e.emoji, 'word': e.word, 'name': e.name, 'category': e.category}).toList();
+  static final List<Map<String, String>> _allEmojis = GameEmojis.all
+      .map((e) => {
+            'emoji': e.emoji,
+            'word': e.word,
+            'name': e.name,
+            'category': e.category
+          })
+      .toList();
 
   static const String _activityId = 'game_emoji_spell';
   final ActivityProgressService _progressService = ActivityProgressService();
+  final Stopwatch _stopwatch = Stopwatch();
 
   final Random _rng = Random();
 
   /// Returns emojis ordered: feelings first (shuffled), then rest (shuffled).
   List<Map<String, String>> _buildFeelingsFirst() {
-    final feelings = _allEmojis.where((e) => e['category'] == 'feelings').toList()..shuffle(_rng);
-    final rest = _allEmojis.where((e) => e['category'] != 'feelings').toList()..shuffle(_rng);
+    final feelings = _allEmojis
+        .where((e) => e['category'] == 'feelings')
+        .toList()
+      ..shuffle(_rng);
+    final rest = _allEmojis.where((e) => e['category'] != 'feelings').toList()
+      ..shuffle(_rng);
     return [...feelings, ...rest];
   }
 
@@ -64,6 +75,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
     );
     _shuffledEmojis = _buildFeelingsFirst();
     _loadWord();
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -109,6 +121,7 @@ class _EmojiSpellingScreenState extends State<EmojiSpellingScreen>
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emojiSpell,
       sessionStars: _sessionStars,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
   }
 

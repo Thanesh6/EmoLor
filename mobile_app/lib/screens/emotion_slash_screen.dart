@@ -117,6 +117,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
   bool _betweenRounds = false;
   bool _gameEnded = false;
 
+  final Stopwatch _stopwatch = Stopwatch();
   late AnimationController _flashController;
   late AnimationController _roundTransitionController;
 
@@ -140,6 +141,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     _targetEmotion = _emotions[_targetOrder[0]];
     _gameTicker =
         Timer.periodic(const Duration(milliseconds: 30), (_) => _tick());
+    _stopwatch.start();
     _restoreProgress();
   }
 
@@ -158,7 +160,8 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     final savedLives = data['lives'];
     if (savedOrder is List && savedIndex is int && savedLives is int) {
       final order = savedOrder.whereType<num>().map((n) => n.toInt()).toList();
-      if (order.isNotEmpty && order.every((i) => i >= 0 && i < _emotions.length)) {
+      if (order.isNotEmpty &&
+          order.every((i) => i >= 0 && i < _emotions.length)) {
         _targetOrder = order;
         _targetIndex = savedIndex.clamp(0, order.length);
         _lives = savedLives.clamp(1, 3);
@@ -259,7 +262,8 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
     final startX = 80 + _rng.nextDouble() * (_screenW - 160);
     final startY = _screenH + 40;
     final vx = (_rng.nextDouble() - 0.5) * 3.0;
-    final speedReduction = _levelErrors >= 2 ? 3.0 : (_levelErrors == 1 ? 1.5 : 0.0);
+    final speedReduction =
+        _levelErrors >= 2 ? 3.0 : (_levelErrors == 1 ? 1.5 : 0.0);
     final vy = -(11.0 + _rng.nextDouble() * 5.0 - speedReduction);
 
     _emojis.add(_FlyingEmoji(
@@ -433,7 +437,8 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
       activityEmoji: '⚔️',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionSlash,
-      sessionStars: _sessionStars,
+      sessionStars: 0,
+      elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
     if (mounted && !_gameEnded) {
       _gameTicker =
@@ -500,7 +505,8 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                       .where((e) => !e.slashed || e.slashOpacity > 0)
                       .map((e) {
                     // Adaptive hint: glow around target emojis on 2+ errors
-                    final showHint = !e.slashed && e.isTarget && _levelErrors >= 2;
+                    final showHint =
+                        !e.slashed && e.isTarget && _levelErrors >= 2;
                     return Positioned(
                       left: e.x - 36,
                       top: e.y - 36,
@@ -580,26 +586,6 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                     ),
                   ),
 
-                  // Lives (hearts) — bottom right
-                  Positioned(
-                    bottom: 24,
-                    right: 20,
-                    child: Row(
-                      children: List.generate(3, (i) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            i < _lives ? Icons.favorite : Icons.favorite_border,
-                            color: i < _lives
-                                ? const Color(0xFFFF6B6B)
-                                : Colors.black26,
-                            size: 45,
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-
                   // Hint + Star — top right
                   Positioned(
                     top: 14,
@@ -619,7 +605,8 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
                             color: const Color(0xFF6B21A8),
                             borderRadius: BorderRadius.circular(26),
                           ),
-                          child: Text('⭐ $_sessionStars', style: _cute(size: 26)),
+                          child:
+                              Text('⭐ $_sessionStars', style: _cute(size: 26)),
                         ),
                       ],
                     ),
