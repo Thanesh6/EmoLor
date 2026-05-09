@@ -28,7 +28,6 @@ class AppConstants {
   static const String routeChildHome = '/child/home';
   static const String routeChildCreate = '/child/create';
   static const String routeCaregiver = '/caregiver';
-  static const String routeConversationView = '/conversation-view';
   static const String routeSessionResponse = '/session-response';
   static const String routeScheduleSession = '/schedule-session';
   static const String routeModerationQueue = '/moderation-queue';

@@ -22,9 +22,6 @@ import '../../features/child/presentation/browse_activities_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/edit_profile_screen.dart';
 import '../../features/profile/presentation/link_account_screen.dart';
-import '../../features/caregiver/presentation/screens/request_session_screen.dart';
-import '../../features/caregiver/presentation/screens/conversation_view_screen.dart';
-import '../../features/caregiver/models/chat_message.dart';
 
 /// A ChangeNotifier that listens to Supabase auth state changes.
 /// Used as GoRouter's refreshListenable so redirect is re-evaluated
@@ -324,22 +321,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/link-account',
         builder: (context, state) => const LinkAccountScreen(),
-      ),
-      GoRoute(
-        path: '/request-session',
-        builder: (context, state) => const RequestSessionScreen(),
-      ),
-      // UCD031 – View Message / Feedback
-      GoRoute(
-        path: '/conversation-view',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>;
-          return ConversationViewScreen(
-            conversation: extra['conversation'] as Conversation,
-            contactName: extra['contactName'] as String,
-            contactRole: extra['contactRole'] as String,
-          );
-        },
       ),
     ],
     // DEBUG: Print errors

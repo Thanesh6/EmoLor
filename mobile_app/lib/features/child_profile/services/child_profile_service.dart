@@ -120,29 +120,4 @@ class ChildProfileService {
       throw Exception('No profile was deleted — link not found');
     }
   }
-
-  /// Get child profiles linked to a therapist via therapist_client_link
-  Future<List<ChildProfile>> getTherapistChildProfiles() async {
-    final userId = SupabaseService.currentUserId;
-    if (userId == null) throw Exception('User not authenticated');
-
-    final links = await _client
-        .from('therapist_client_link')
-        .select('client_id')
-        .eq('therapist_id', userId);
-
-    final clientIds =
-        (links as List).map((l) => l['client_id'] as String).toList();
-    if (clientIds.isEmpty) return [];
-
-    final profiles = await _client
-        .from('profiles')
-        .select()
-        .inFilter('user_id', clientIds)
-        .order('full_name');
-
-    return (profiles as List)
-        .map((json) => ChildProfile.fromJson(json))
-        .toList();
-  }
 }
