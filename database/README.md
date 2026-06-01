@@ -9,6 +9,7 @@ database/
 ├── final_schema/   # Final reference schema for the current EMOLOR app
 ├── archive/        # Historical migrations and removed-scope features
 └── README.md       # Database documentation guide
+```
 
 ## Final Schema vs Historical Migrations
 

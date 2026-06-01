@@ -38,3 +38,50 @@ Login/Register
 - SharedPreferences
 - Anthropic Claude API for AI summary generation
 - PDF generation and sharing packages
+
+## Getting Started
+
+**Target platform:** Android tablet only (the app is not built for web, iOS, or desktop).
+
+**Prerequisites:**
+
+- Flutter SDK with Dart `>=3.0.0 <4.0.0` (Flutter 3.x channel)
+- An Android tablet or emulator (Android 14 / API 34 used for testing)
+
+**Install dependencies:**
+
+```bash
+cd mobile_app
+flutter pub get
+```
+
+**Run on a connected Android device:**
+
+Secrets are never committed — they are supplied at run time via `--dart-define`:
+
+```bash
+flutter run -d <android-device-id> \
+  --dart-define=SUPABASE_URL=https://<project>.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=<supabase-anon-key> \
+  --dart-define=ANTHROPIC_API_KEY=<anthropic-api-key>
+```
+
+- `SUPABASE_URL` / `SUPABASE_ANON_KEY` — required for backend, auth, and data.
+- `ANTHROPIC_API_KEY` — required only for the AI weekly insight summary.
+
+**Build a release APK** (pass the same `--dart-define` values):
+
+```bash
+flutter build apk --release \
+  --dart-define=SUPABASE_URL=... \
+  --dart-define=SUPABASE_ANON_KEY=... \
+  --dart-define=ANTHROPIC_API_KEY=...
+```
+
+## Architecture Overview
+
+- **Frontend:** Flutter / Dart, Riverpod (state management), GoRouter (navigation).
+- **Backend:** Supabase — PostgreSQL, Auth, and RPC functions with Row-Level Security.
+- **AI:** Anthropic Claude API, called for the weekly caregiver insight summary.
+- **Reports:** On-device PDF generation and sharing.
+- **Storage:** Local-first via SharedPreferences, synced to Supabase.
