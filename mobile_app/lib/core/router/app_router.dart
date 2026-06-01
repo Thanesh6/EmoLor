@@ -279,13 +279,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = state.extra as Map<String, dynamic>?;
           final profileId = extra?['profileId'] as String?;
           final childName = extra?['childName'] as String?;
-          if (profileId != null) {
-            // Scope all offline-first services to this child profile.
-            ChildSessionService.saveChildProfileId(profileId);
-          }
+          // Pass profileId into the widget so it can await the write before
+          // loading data (fixes the race condition where fire-and-forget
+          // saveChildProfileId could lose the race to _loadRealData).
           return AnalyticsDashboard(
             childName: childName,
             caregiverShortcut: true,
+            profileId: profileId,
           );
         },
       ),
@@ -316,7 +316,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/edit-profile',
-        builder: (context, state) => const EditProfileScreen(),
+        builder: (context, state) => EditProfileScreen(
+          // ProfileScreen passes its already-loaded profile map as extra so
+          // the edit screen doesn't need an extra DB round-trip.
+          initialProfile: state.extra as Map<String, dynamic>?,
+        ),
       ),
       GoRoute(
         path: '/link-account',

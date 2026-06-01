@@ -75,6 +75,7 @@ class ActivityExitHandler {
       if (context.mounted) {
         await GoalNotificationService.instance.checkAllActiveStarGoals(
           context: context,
+          deltaStars: sessionStars,
         );
       }
     }

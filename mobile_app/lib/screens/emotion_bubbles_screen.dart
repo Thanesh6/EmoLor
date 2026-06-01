@@ -87,7 +87,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
 
   // Difficulty (adaptive)
   int _numBubbles = 4; // how many on screen at once
-  double _baseSpeed = 0.003;
+  double _baseSpeed = 0.0042;
   int _levelErrors = 0; // errors for current target emoji
 
   @override
@@ -124,7 +124,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
       _targetOrder = order;
       _targetIndex = savedIndex.clamp(0, order.length);
       _numBubbles = savedNumBubbles.clamp(3, 6);
-      _baseSpeed = savedBaseSpeed.clamp(0.001, 0.006);
+      _baseSpeed = savedBaseSpeed.clamp(0.0014, 0.0084);
       _sessionStars = 0; // always start at 0
       _round = _targetIndex; // approximate for difficulty
     });
@@ -230,7 +230,7 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
         if (_levelErrors >= 2) {
           _numBubbles = max(2, _numBubbles - 1);
         }
-        _baseSpeed = max(0.001, _baseSpeed - 0.0005); // slow them down
+        _baseSpeed = max(0.0014, _baseSpeed - 0.0005); // slow them down
         _adaptDifficulty();
         _spawnBubbles();
       }
@@ -299,14 +299,14 @@ class _EmotionBubblesScreenState extends State<EmotionBubblesScreen> {
     if (_engine.isFrustrated) {
       // Make easier
       _numBubbles = max(3, _numBubbles - 1);
-      _baseSpeed = max(0.001, _baseSpeed - 0.0005);
+      _baseSpeed = max(0.0014, _baseSpeed - 0.0005);
     } else if (_sessionStars > _round * 0.7) {
       // Doing great → harder
       _numBubbles = min(6, _numBubbles + 1);
-      _baseSpeed = min(0.006, _baseSpeed + 0.0005);
+      _baseSpeed = min(0.0084, _baseSpeed + 0.0005);
     }
     if (_engine.isOverloaded) {
-      _baseSpeed = max(0.001, _baseSpeed - 0.001);
+      _baseSpeed = max(0.0014, _baseSpeed - 0.001);
     }
   }
 

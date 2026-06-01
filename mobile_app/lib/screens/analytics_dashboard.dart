@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/services/ai_insight_service.dart';
+import '../core/services/auth_service.dart';
 import '../core/services/emotion_colour_mapping.dart';
 import '../core/constants/sensory_palette.dart';
 import '../core/services/emotion_journal_service.dart';
@@ -28,11 +29,20 @@ class AnalyticsDashboard extends StatefulWidget {
   /// caregiver to "Who's Playing Today?" instead of the child dashboard.
   final bool caregiverShortcut;
 
+  /// When provided, [profileId] is written to SharedPreferences BEFORE the
+  /// first [_loadRealData] call so that [CompletionService] reads the correct
+  /// child's bucket.  Without this, there is a race condition: the router
+  /// builder fires [saveChildProfileId] as a fire-and-forget Future, but
+  /// [initState] → [_loadRealData] can run before that write completes,
+  /// causing the service to fall back to `completion_records_no_profile`.
+  final String? profileId;
+
   const AnalyticsDashboard({
     super.key,
     this.childName,
     this.showSwitchAccount = false,
     this.caregiverShortcut = false,
+    this.profileId,
   });
 
   @override
@@ -128,8 +138,17 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     WidgetsBinding.instance.addObserver(this);
     _loadCaregiverProfile();
     _loadChildProfile();
-    _loadRealData();
     _loadPersistedAiInsights();
+
+    // If a profileId was passed in (caregiver shortcut), write it to
+    // SharedPreferences first so CompletionService, StarService, etc. all
+    // scope to the correct child bucket.  Only then load the dashboard data.
+    if (widget.profileId != null) {
+      ChildSessionService.saveChildProfileId(widget.profileId!)
+          .then((_) => _loadRealData());
+    } else {
+      _loadRealData();
+    }
   }
 
   @override
@@ -354,7 +373,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       int uniqueActiveDays = activeDaysSet.length;
 
       // 3. Most Played Activity
-      // 7 games from the Play screen + 1 Draw activity.
+      // 7 games from the Play screen + Color Memory + Draw activity.
       const validActivities = [
         'EMOZZLE',
         'EMOPOP',
@@ -363,6 +382,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         'EMOSLASH',
         'EMOCATCH',
         'ANIMATCH',
+        'Color Memory Tiles',
         'Draw',
       ];
 
@@ -485,62 +505,126 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
 
-      // Try family_links first
-      final link = await Supabase.instance.client
-          .from('family_links')
-          .select('child_id')
-          .eq('caregiver_id', userId)
-          .maybeSingle();
+      // Resolve target user_id to load profile for, in priority order:
+      String? targetUserId;
 
-      if (link != null) {
-        final childId = link['child_id'] as String;
-        final childProfile = await Supabase.instance.client
+      // 1. Caregiver shortcut explicitly passes profileId
+      if (widget.profileId != null && widget.profileId!.isNotEmpty) {
+        targetUserId = widget.profileId;
+      }
+
+      // 2. Active child session (PIN-gated kid using parent's account)
+      if (targetUserId == null) {
+        try {
+          final sessionId = await ChildSessionService.getChildProfileId();
+          if (sessionId != null && sessionId.isNotEmpty) {
+            targetUserId = sessionId;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Match family_links by name when childName was provided
+      if (targetUserId == null) {
+        final childName = widget.childName ?? _childName;
+        if (childName.isNotEmpty && childName != 'Child') {
+          try {
+            final rows = await Supabase.instance.client
+                .from('family_links')
+                .select(
+                    'child_id, profiles!family_links_child_id_fkey(user_id, full_name, avatar_url, date_of_birth)')
+                .eq('caregiver_id', userId);
+            if (rows is List) {
+              for (final r in rows) {
+                final p = r['profiles'] as Map<String, dynamic>?;
+                if (p != null && (p['full_name'] as String?) == childName) {
+                  targetUserId = p['user_id'] as String?;
+                  break;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 4. First linked child via family_links (single-child caregivers)
+      if (targetUserId == null) {
+        try {
+          final links = await Supabase.instance.client
+              .from('family_links')
+              .select('child_id')
+              .eq('caregiver_id', userId)
+              .limit(1);
+          if (links is List && links.isNotEmpty) {
+            targetUserId = links.first['child_id'] as String?;
+          }
+        } catch (_) {}
+      }
+
+      // 5. RPC fallback by name
+      if (targetUserId == null) {
+        final childName = widget.childName ?? _childName;
+        if (childName.isNotEmpty && childName != 'Child') {
+          try {
+            final profiles = await Supabase.instance.client.rpc(
+                'get_child_profile_by_name',
+                params: {'p_name': childName});
+            if (profiles is List && profiles.isNotEmpty) {
+              final profile = profiles.first as Map<String, dynamic>;
+              targetUserId = profile['user_id']?.toString();
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 6. Final fallback: the currently signed-in user
+      targetUserId ??= userId;
+      debugPrint('LOADCHILD targetUserId=$targetUserId');
+
+      Map<String, dynamic>? profile;
+      try {
+        final rows = await Supabase.instance.client
             .from('profiles')
-            .select('full_name, avatar_url, date_of_birth')
-            .eq('user_id', childId)
-            .maybeSingle();
-        if (mounted && childProfile != null) {
-          setState(() {
-            _childUserId = childId;
-            final name = childProfile['full_name'] as String?;
-            if (name != null && name.isNotEmpty) _childName = name;
-            final av = childProfile['avatar_url'] as String?;
-            if (av != null && av.isNotEmpty) _childAvatar = av;
-            _computeAge(childProfile['date_of_birth'] as String?);
-          });
-        }
-        return;
+            .select('user_id, full_name, avatar_url, date_of_birth')
+            .or('user_id.eq.$targetUserId,profile_id.eq.$targetUserId')
+            .limit(1);
+        debugPrint('LOADCHILD direct rows=${(rows as List).length}');
+        if (rows.isNotEmpty) profile = rows.first as Map<String, dynamic>;
+      } catch (e) {
+        debugPrint('LOADCHILD direct read error: $e');
       }
 
-      // Fallback: search by child name via SECURITY DEFINER RPC
-      final childName = widget.childName ?? _childName;
-      if (childName.isNotEmpty && childName != 'Child') {
-        final profiles = await Supabase.instance.client
-            .rpc('get_child_profile_by_name', params: {'p_name': childName});
-        if (mounted && profiles is List && profiles.isNotEmpty) {
-          final profile = profiles.first as Map<String, dynamic>;
-          setState(() {
-            _childUserId = profile['user_id']?.toString();
-            _computeAge(profile['date_of_birth'] as String?);
-          });
-          return;
-        }
-      }
-
-      // RPC fallback for name only
-      if (_childName == 'Child') {
-        final rpcResult = await Supabase.instance.client
-            .rpc('get_user_role', params: {'p_user_id': userId});
-        if (mounted && rpcResult is List && rpcResult.isNotEmpty) {
-          final row = rpcResult.first as Map<String, dynamic>;
-          final name = row['full_name'] as String?;
-          if (name != null && name.isNotEmpty) {
-            setState(() => _childName = name);
+// RLS fallback: direct read blocked/empty → resolve via the SECURITY
+// DEFINER RPC that bypasses RLS (same pattern as get_child_profile_by_name).
+      if (profile == null) {
+        final childName = widget.childName ?? _childName;
+        if (childName.isNotEmpty && childName != 'Child') {
+          try {
+            final res = await Supabase.instance.client.rpc(
+                'get_child_profile_by_name',
+                params: {'p_name': childName});
+            debugPrint('LOADCHILD rpc result=$res');
+            if (res is List && res.isNotEmpty) {
+              profile = res.first as Map<String, dynamic>;
+            }
+          } catch (e) {
+            debugPrint('LOADCHILD rpc error: $e');
           }
         }
       }
+
+      if (mounted && profile != null) {
+        setState(() {
+          _childUserId = profile!['user_id'] as String?;
+          final name = profile!['full_name'] as String?;
+          if (name != null && name.isNotEmpty) _childName = name;
+          final av = profile!['avatar_url'] as String?;
+          if (av != null && av.isNotEmpty) _childAvatar = av;
+          _computeAge(profile!['date_of_birth'] as String?);
+        });
+      }
+      debugPrint('LOADCHILD final _childUserId=$_childUserId');
     } catch (e) {
-      debugPrint('_loadChildProfile error: $e');
+      debugPrint('Error loading child profile: $e');
     }
   }
 
@@ -623,6 +707,8 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
         return 'Emocatch';
       case 'ANIMATCH':
         return 'Animatch';
+      case 'Color Memory Tiles':
+        return 'Color Memory';
       case 'Draw':
         return 'Draw';
       default:
@@ -1430,6 +1516,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       'EMOSLASH',
       'EMOCATCH',
       'ANIMATCH',
+      'Color Memory Tiles',
       'Draw',
     ];
     final Map<String, int> gameSecs = {};
@@ -1592,6 +1679,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       negativePerDay: negativePerDay,
       sessionsPerDay: sessionsPerDay,
       gameMinutes: gameMinutes,
+      gameSeconds: Map.from(gameSecs),
       preEmotionFreq: preFreq,
       postEmotionFreq: postFreq,
       prePerDay: prePerDay,
@@ -1685,6 +1773,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       sessionsPerDay:
           List.generate(7, (i) => i <= dowMon ? m.sessionsPerDay[i] : 0),
       gameMinutes: m.gameMinutes,
+      gameSeconds: m.gameSeconds,
       // Pre/post frequency maps only contain days already logged — safe as-is.
       preEmotionFreq: m.preEmotionFreq,
       postEmotionFreq: m.postEmotionFreq,
@@ -1700,6 +1789,15 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
           List.generate(7, (i) => i <= dowSun ? m.postNegativePerDay[i] : 0),
       colorByEmotion: m.colorByEmotion,
       goals: m.goals,
+      starsEarned: m.starsEarned,
+      totalSessions: m.totalSessions,
+      regulationDeltas: m.regulationDeltas,
+      mismatchCount: m.mismatchCount,
+      // Trim zone arrays the same way — keep days up to today, NaN beyond.
+      preZonePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.preZonePerDay[i] : double.nan),
+      postZonePerDay: List.generate(
+          7, (i) => i <= dowSun ? m.postZonePerDay[i] : double.nan),
     );
   }
 
@@ -1811,15 +1909,16 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
 
     // ── Flashcard 6: Top Activity ─────────────────────────────────────
     String topActivityName = '—';
-    int topActivityMins = 0;
-    m.gameMinutes.forEach((name, mins) {
-      if (mins > topActivityMins) {
-        topActivityMins = mins;
+    int topActivitySecs = 0;
+    m.gameSeconds.forEach((name, secs) {
+      if (secs > topActivitySecs) {
+        topActivitySecs = secs;
         topActivityName = name;
       }
     });
+    final int topActivityMins = (topActivitySecs / 60).round();
     final topActivityStr =
-        topActivityMins > 0 ? '$topActivityName ($topActivityMins min)' : '—';
+        topActivitySecs > 0 ? '$topActivityName ($topActivityMins min)' : '—';
 
     // ── Regulation Trend per day (for Progress chart context) ─────────
     final zoneTrendLines = <String>[];
@@ -1917,15 +2016,17 @@ STRICT RULES:
 
 Focus on:
 1. Overall emotion trend (positive or negative)
-2. Most engaged activity
-3. Notable colour-emotion pattern
-4. One practical caregiver recommendation
+2. Regulation trend — whether the child's sensory zone improved (lower score) or worsened (higher score) from pre to post session each day. Use plain language like "your child tended to feel more settled/calm after sessions" or "sessions left them more activated/overwhelmed". If zone data is available, always mention this.
+3. Most engaged activity
+4. Notable colour-emotion pattern
+5. One practical caregiver recommendation
 
 Output using EXACTLY this format (no extra headings, no bullets):
 
 EMOLOR Weekly Insight Summary
 ${fmt(start)} - ${fmt(end)}
 [1 short paragraph about overall emotion trend and sessions]
+[1 short paragraph about regulation trend — how the child's sensory zone shifted before vs after sessions]
 [1 short paragraph about top activity and colour-emotion pattern]
 Caregiver Note:
 [1 short practical recommendation sentence]
@@ -1961,7 +2062,7 @@ Caregiver Note:
       // Empty-data short-circuit — never burn an API call on a blank week.
       final hasAny = metrics.preEmotionFreq.values.any((v) => v > 0) ||
           metrics.postEmotionFreq.values.any((v) => v > 0) ||
-          metrics.gameMinutes.values.any((v) => v > 0) ||
+          metrics.gameSeconds.values.any((v) => v > 0) ||
           metrics.sessionsPerDay.any((v) => v > 0);
       if (!hasAny) {
         if (!mounted) return;
@@ -2137,6 +2238,84 @@ Caregiver Note:
     setState(() => _pdfGenerating = true);
 
     try {
+      // Safety net: if age is missing, brute-force resolve it before
+      // building the payload so the report never shows "-".
+      if (_childAge == null) {
+        try {
+          String? dob;
+
+          // 1. Try the resolved child user_id first.
+          if (_childUserId != null) {
+            final p = await Supabase.instance.client
+                .from('profiles')
+                .select('date_of_birth')
+                .eq('user_id', _childUserId!)
+                .maybeSingle();
+            final d = p?['date_of_birth'] as String?;
+            if (d != null && d.isNotEmpty) dob = d;
+          }
+
+          // 2. If still nothing, try the currently signed-in user's profile
+          //    (works when a child is signed in directly).
+          if (dob == null) {
+            final uid = Supabase.instance.client.auth.currentUser?.id;
+            if (uid != null) {
+              final p = await Supabase.instance.client
+                  .from('profiles')
+                  .select('date_of_birth, role')
+                  .eq('user_id', uid)
+                  .maybeSingle();
+              final d = p?['date_of_birth'] as String?;
+              if (d != null && d.isNotEmpty) dob = d;
+            }
+          }
+
+          // 3. Last resort: find any linked child of the current caregiver
+          //    with a valid date_of_birth — prefers one matching _childName.
+          if (dob == null) {
+            final uid = Supabase.instance.client.auth.currentUser?.id;
+            if (uid != null) {
+              try {
+                final rows = await Supabase.instance.client
+                    .from('family_links')
+                    .select(
+                        'profiles!family_links_child_id_fkey(full_name, date_of_birth)')
+                    .eq('caregiver_id', uid);
+                if (rows is List) {
+                  // Prefer the linked child whose name matches _childName.
+                  for (final r in rows) {
+                    final p = r['profiles'] as Map<String, dynamic>?;
+                    if (p == null) continue;
+                    final name = p['full_name'] as String?;
+                    final d = p['date_of_birth'] as String?;
+                    if (name == _childName && d != null && d.isNotEmpty) {
+                      dob = d;
+                      break;
+                    }
+                  }
+                  // Otherwise take the first child with a DOB.
+                  if (dob == null) {
+                    for (final r in rows) {
+                      final p = r['profiles'] as Map<String, dynamic>?;
+                      final d = p?['date_of_birth'] as String?;
+                      if (d != null && d.isNotEmpty) {
+                        dob = d;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+
+          if (dob != null) _computeAge(dob);
+          debugPrint('PDF age resolution: dob=$dob, _childAge=$_childAge');
+        } catch (e) {
+          debugPrint('PDF age resolution error: $e');
+        }
+      }
+
       // Single source of truth — same metrics object the on-screen
       // charts consume for the selected week. Real data for offset 0,
       // static fake snapshot for past weeks. Real and fake never mix,
@@ -2212,15 +2391,17 @@ Caregiver Note:
         });
       });
 
-      // Flashcard 6: Top activity
+      // Flashcard 6: Top activity — compare by raw seconds to avoid
+      // rounding short sessions to 0 min.
       String pdfTopActivity = '—';
-      int pdfTopActivityMins = 0;
-      metrics.gameMinutes.forEach((name, mins) {
-        if (mins > pdfTopActivityMins) {
-          pdfTopActivityMins = mins;
+      int pdfTopActivitySecs = 0;
+      metrics.gameSeconds.forEach((name, secs) {
+        if (secs > pdfTopActivitySecs) {
+          pdfTopActivitySecs = secs;
           pdfTopActivity = name;
         }
       });
+      final int pdfTopActivityMins = (pdfTopActivitySecs / 60).round();
 
       // ── Chart 3: Dominant colour per emotion ───────────────────
       const pdfEmotionOrder = [
@@ -2495,9 +2676,9 @@ Caregiver Note:
     String trendSub;
     if (totalSessionCombinations == 0) {
       trendEmoji = '🌤️';
-      trendValue = 'Not Enough Data';
+      trendValue = '—';
       trendColour = const Color(0xFF9CA3AF);
-      trendSub = 'Log a few more sessions to see this';
+      trendSub = 'No sessions this week';
     } else {
       if (positiveSessionCount >= negativeSessionCount) {
         trendEmoji = '🌈';
@@ -2514,24 +2695,25 @@ Caregiver Note:
 
     // ── Card 6 — Top Activity ────────────────────────────────────
     // Activity (game / Draw) with the largest total time-spent in the
-    // selected week. metrics.gameMinutes is profile-scoped via
-    // _allCompletions which CompletionService loads per child profile.
+    // selected week. Uses raw seconds (gameSeconds) so short sessions
+    // (< 30 s) are never rounded to 0 and silently dropped.
     String topActivityName = '—';
-    int topActivityMinutes = 0;
-    metrics.gameMinutes.forEach((name, mins) {
-      if (mins > topActivityMinutes) {
-        topActivityMinutes = mins;
+    int topActivitySecs = 0;
+    metrics.gameSeconds.forEach((name, secs) {
+      if (secs > topActivitySecs) {
+        topActivitySecs = secs;
         topActivityName = name;
       }
     });
-    // Render a friendly Title-case label for the games (the raw ids are
-    // ALL CAPS in the completion records — _brandedGameName already
-    // handles this everywhere else in the dashboard).
+
+    final int topActivityMinutes = (topActivitySecs / 60).round();
     final String topActivityValue =
-        topActivityMinutes > 0 ? _brandedGameName(topActivityName) : '—';
-    final String topActivitySub = topActivityMinutes > 0
-        ? '$topActivityMinutes min this week'
-        : 'No activity time logged';
+        topActivitySecs > 0 ? _brandedGameName(topActivityName) : '—';
+    final String topActivitySub = topActivitySecs > 0
+        ? topActivitySecs < 60
+            ? '< 1 min this week'
+            : '$topActivityMinutes min this week'
+        : 'No activity yet';
 
     final card1 = _buildHomeCard('🎯', 'Total Sessions', sessionsValue,
         const Color(0xFF6366F1), sessionsSub);
@@ -5160,11 +5342,6 @@ Caregiver Note:
 
   // ── Settings Tab ─────────────────────────────────────────────────
 
-  // ── Notification toggle states ──
-  bool _messageAlerts = true;
-  bool _rewardAlerts = true;
-  bool _sessionReminders = false;
-
   Widget _buildSettingsTab() {
     return Padding(
       padding: const EdgeInsets.all(28),
@@ -5175,110 +5352,71 @@ Caregiver Note:
             '⚙️',
             const Color(0xFF3B82F6),
             'Settings',
-            'Manage your account, security and preferences',
+            'Manage your account and preferences',
           ),
           const SizedBox(height: 20),
           Expanded(
-            child: SingleChildScrollView(
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withValues(alpha: 0.1),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withValues(alpha: 0.1),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Row 1
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                            child: _buildSettingsTile(Icons.edit,
+                                'Edit Profile', 'Update your name and avatar',
+                                onTap: () => _showEditProfileDialog())),
+                        VerticalDivider(
+                            color: Colors.grey[200], thickness: 1, width: 1),
+                        Expanded(
+                            child: _buildSettingsTile(
+                                Icons.lock_outline,
+                                'Change Email & Password',
+                                'Update your login credentials',
+                                onTap: () => _showChangePasswordDialog())),
+                      ],
                     ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionHeader(Icons.person_outline, 'Account'),
-                    _buildSettingsRow(
-                      Icons.edit,
-                      'Edit Profile',
-                      'Update your name and avatar',
-                      onTap: () => _showEditProfileDialog(),
+                  ),
+                  Divider(color: Colors.grey[200], thickness: 1, height: 1),
+                  // Row 2
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                            child: _buildSettingsTile(
+                                Icons.refresh_rounded,
+                                'Reset Game Data',
+                                'Reset stars, rewards & analytics',
+                                iconColor: Colors.orange,
+                                onTap: () => _showResetGameDialog())),
+                        VerticalDivider(
+                            color: Colors.grey[200], thickness: 1, width: 1),
+                        Expanded(
+                            child: _buildSettingsTile(
+                                Icons.delete_forever,
+                                'Deactivate Account',
+                                'Permanently deactivate your account',
+                                iconColor: Colors.red,
+                                onTap: () => _showDeactivateConfirmDialog())),
+                      ],
                     ),
-                    _buildSettingsRow(
-                      Icons.lock_outline,
-                      'Change Password',
-                      'Update your login password',
-                      onTap: () => _showChangePasswordDialog(),
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(color: Colors.grey[200], thickness: 1),
-                    const SizedBox(height: 8),
-                    _buildSectionHeader(
-                      Icons.notifications_outlined,
-                      'Notifications',
-                    ),
-                    _buildToggleRow(
-                      Icons.flag_outlined,
-                      'Goal Alerts',
-                      'Time & star goal notifications',
-                      _messageAlerts,
-                      (v) {
-                        setState(() => _messageAlerts = v);
-                      },
-                    ),
-                    _buildToggleRow(
-                      Icons.emoji_events_outlined,
-                      'Reward Alerts',
-                      'When child earns a reward',
-                      _rewardAlerts,
-                      (v) {
-                        setState(() => _rewardAlerts = v);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(color: Colors.grey[200], thickness: 1),
-                    const SizedBox(height: 8),
-                    _buildSectionHeader(Icons.shield_outlined, 'Security'),
-                    _buildSettingsRow(
-                      Icons.fingerprint,
-                      'Biometric Lock',
-                      'Use fingerprint to access caregiver settings',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Biometric lock coming soon!'),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Divider(color: Colors.grey[200], thickness: 1),
-                    const SizedBox(height: 8),
-                    _buildSectionHeader(
-                      Icons.manage_accounts_rounded,
-                      'Account Management',
-                    ),
-                    _buildSettingsRow(
-                      Icons.logout,
-                      'Log Out',
-                      'Sign out of your account',
-                      onTap: () => _showLogoutConfirmDialog(),
-                    ),
-                    _buildSettingsRow(
-                      Icons.refresh_rounded,
-                      'Reset Game Data',
-                      'Reset stars, rewards & analytics to zero',
-                      iconColor: Colors.orange,
-                      onTap: () => _showResetGameDialog(),
-                    ),
-                    _buildSettingsRow(
-                      Icons.delete_forever,
-                      'Deactivate Account',
-                      'Permanently deactivate your account',
-                      iconColor: Colors.red,
-                      onTap: () => _showDeactivateConfirmDialog(),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -5287,24 +5425,72 @@ Caregiver Note:
     );
   }
 
+  Widget _buildSettingsTile(
+    IconData icon,
+    String title,
+    String subtitle, {
+    VoidCallback? onTap,
+    Color? iconColor,
+  }) {
+    final color = iconColor ?? const Color(0xFF6B21A8);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 48),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: _textStyle(fontSize: 26, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: _textStyle(
+                  fontSize: 18,
+                  color: Colors.grey[500]!,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(IconData icon, String title) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: const Color(0xFFF3E8FF),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: const Color(0xFF6B21A8), size: 22),
+            child: Icon(icon, color: const Color(0xFF6B21A8), size: 28),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Text(
             title,
             style: _textStyle(
-              fontSize: 22,
+              fontSize: 26,
               fontWeight: FontWeight.w800,
               color: const Color(0xFF6B21A8),
             ),
@@ -5318,29 +5504,29 @@ Caregiver Note:
       {VoidCallback? onTap, Color? iconColor}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
         child: Row(
           children: [
-            Icon(icon, color: iconColor ?? const Color(0xFF6B21A8), size: 26),
-            const SizedBox(width: 14),
+            Icon(icon, color: iconColor ?? const Color(0xFF6B21A8), size: 32),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
                       style: _textStyle(
-                          fontSize: 19, fontWeight: FontWeight.w600)),
+                          fontSize: 22, fontWeight: FontWeight.w600)),
                   Text(subtitle,
                       style: _textStyle(
-                          fontSize: 15,
+                          fontSize: 17,
                           color: Colors.grey[500]!,
                           fontWeight: FontWeight.w400)),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right, color: Colors.grey[400], size: 24),
+            Icon(Icons.chevron_right, color: Colors.grey[400], size: 30),
           ],
         ),
       ),
@@ -5350,21 +5536,21 @@ Caregiver Note:
   Widget _buildToggleRow(IconData icon, String title, String subtitle,
       bool value, ValueChanged<bool> onChanged) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF6B21A8), size: 26),
-          const SizedBox(width: 14),
+          Icon(icon, color: const Color(0xFF6B21A8), size: 32),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
                     style:
-                        _textStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+                        _textStyle(fontSize: 22, fontWeight: FontWeight.w600)),
                 Text(subtitle,
                     style: _textStyle(
-                        fontSize: 15,
+                        fontSize: 17,
                         color: Colors.grey[500]!,
                         fontWeight: FontWeight.w400)),
               ],
@@ -5382,12 +5568,45 @@ Caregiver Note:
 
   // ── Settings Dialogs ──────────────────────────────────────────────
 
-  void _showEditProfileDialog() {
+  /// Standardised status banner used across the Settings actions.
+  /// Green for success, red for errors — consistent rounded floating style.
+  void _showStatusSnack(String message, {bool success = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(success ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: Colors.white, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(message,
+                    style: _textStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          backgroundColor:
+              success ? const Color(0xFF16A34A) : const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
+  void _showEditProfileDialog() async {
+    if (!mounted) return;
+
     final nameCtrl = TextEditingController(text: _childName);
     final ageCtrl =
         TextEditingController(text: _childAge != null ? '$_childAge' : '');
-    final emailCtrl = TextEditingController(
-        text: Supabase.instance.client.auth.currentUser?.email ?? '');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -5400,19 +5619,6 @@ Caregiver Note:
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Center(
-                      child: Text(_childAvatar,
-                          style: const TextStyle(fontSize: 40))),
-                ),
-                const SizedBox(height: 16),
                 TextField(
                   controller: nameCtrl,
                   decoration: InputDecoration(
@@ -5431,15 +5637,6 @@ Caregiver Note:
                         borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: emailCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
               ],
             ),
           ),
@@ -5451,41 +5648,63 @@ Caregiver Note:
                   style: _textStyle(fontSize: 16, color: Colors.grey))),
           ElevatedButton(
             onPressed: () async {
+              debugPrint('SETTINGS childUserId = $_childUserId');
               final newName = nameCtrl.text.trim();
-              if (newName.isNotEmpty) setState(() => _childName = newName);
+              final newAge = int.tryParse(ageCtrl.text.trim());
 
-              if (_childUserId != null) {
+              // Build the DB diff BEFORE mutating local state, otherwise the
+              // "changed?" comparison always fails and nothing is written.
+              final updates = <String, dynamic>{};
+              if (newName.isNotEmpty && newName != _childName) {
+                updates['full_name'] = newName;
+              }
+              if (newAge != null && newAge != _childAge) {
+                final now = DateTime.now();
+                final dob = DateTime(now.year - newAge, now.month, now.day);
+                updates['date_of_birth'] = dob.toIso8601String().split('T')[0];
+              }
+
+              bool saved = false;
+              final caregiverId = Supabase.instance.client.auth.currentUser?.id;
+              if (caregiverId != null &&
+                  _childUserId != null &&
+                  updates.isNotEmpty) {
                 try {
-                  final updates = <String, dynamic>{};
-
-                  if (newName.isNotEmpty && newName != _childName) {
-                    updates['full_name'] = newName;
-                  }
-
-                  final newAge = int.tryParse(ageCtrl.text.trim());
-                  if (newAge != null && newAge != _childAge) {
-                    final now = DateTime.now();
-                    final dob = DateTime(now.year - newAge, now.month, now.day);
-                    updates['date_of_birth'] =
-                        dob.toIso8601String().split('T')[0];
-                    setState(() => _childAge = newAge);
-                  }
-
-                  if (updates.isNotEmpty) {
-                    await Supabase.instance.client
-                        .from('profiles')
-                        .update(updates)
-                        .eq('user_id', _childUserId!);
-                  }
+                  final count = await Supabase.instance.client.rpc(
+                    'update_child_profile',
+                    params: {
+                      'p_caregiver_id': caregiverId,
+                      'p_child_user_id': _childUserId,
+                      'p_full_name':
+                          updates['full_name'], // null when name unchanged
+                      'p_date_of_birth':
+                          updates['date_of_birth'], // null when age unchanged
+                    },
+                  );
+                  final rows =
+                      (count is int) ? count : int.tryParse('$count') ?? 0;
+                  debugPrint('EDIT rpc rows=$rows');
+                  saved = rows > 0;
                 } catch (e) {
-                  debugPrint('Profile update error: $e');
+                  debugPrint('Profile update RPC error: $e');
                 }
               }
 
+              // Reflect the change locally so this dashboard updates instantly.
+              if (mounted) {
+                setState(() {
+                  if (newName.isNotEmpty) _childName = newName;
+                  if (newAge != null) _childAge = newAge;
+                });
+              }
+
               if (context.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Profile updated!')));
+              if (updates.isEmpty) {
+                _showStatusSnack('No changes to save.', success: true);
+              } else if (saved) {
+                _showStatusSnack('Profile updated!');
+              } else {
+                _showStatusSnack('Could not save changes.', success: false);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -5504,12 +5723,17 @@ Caregiver Note:
   }
 
   void _showChangePasswordDialog() {
+    final emailCtrl = TextEditingController(
+        text: Supabase.instance.client.auth.currentUser?.email ?? '');
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Change Password',
-            style: _textStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        title: Text('Change Email & Password',
+            style: _textStyle(fontSize: 22, fontWeight: FontWeight.w700)),
         content: SizedBox(
           width: 380,
           child: SingleChildScrollView(
@@ -5517,16 +5741,17 @@ Caregiver Note:
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  controller: TextEditingController(text: '12345678'),
-                  readOnly: true,
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
-                    labelText: 'Current Password',
+                    labelText: 'Email',
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: newPassCtrl,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'New Password',
@@ -5536,6 +5761,7 @@ Caregiver Note:
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: confirmPassCtrl,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Confirm New Password',
@@ -5553,10 +5779,66 @@ Caregiver Note:
               child: Text('Cancel',
                   style: _textStyle(fontSize: 16, color: Colors.grey))),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Password updated!')));
+            onPressed: () async {
+              final newEmail = emailCtrl.text.trim();
+              final newPass = newPassCtrl.text.trim();
+              final confirmPass = confirmPassCtrl.text.trim();
+
+              if (newPass.isNotEmpty && newPass != confirmPass) {
+                _showStatusSnack('Passwords do not match.', success: false);
+                return;
+              }
+
+              try {
+                final currentEmail =
+                    Supabase.instance.client.auth.currentUser?.email ?? '';
+                final emailChanged =
+                    newEmail.isNotEmpty && newEmail != currentEmail;
+                final passwordChanged = newPass.isNotEmpty;
+
+                if (!emailChanged && !passwordChanged) {
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _showStatusSnack('No changes to save.');
+                  return;
+                }
+
+                // Suppress the global auth listener for the userUpdated event
+                // this local call fires (otherwise it would treat it as an
+                // email-change confirmation deep link).
+                AuthService.ignoreNextUserUpdated = true;
+                await Supabase.instance.client.auth.updateUser(
+                  UserAttributes(
+                    email: emailChanged ? newEmail : null,
+                    password: passwordChanged ? newPass : null,
+                  ),
+                  // Same deep link registration uses, so the confirmation
+                  // link opens EMOLOR and returns the user to the login page.
+                  emailRedirectTo:
+                      emailChanged ? 'emolor://login-callback/' : null,
+                );
+
+                if (ctx.mounted) Navigator.pop(ctx);
+                _showStatusSnack(emailChanged
+                    ? 'Updated! Check your new email to confirm, then log in.'
+                    : 'Password updated! Please log in.');
+
+                // Sign out and return to login (mirrors the registration /
+                // verification flow). Brief delay lets the green banner show,
+                // then we explicitly clear it before navigating — otherwise a
+                // floating SnackBar gets orphaned by the route swap and stays
+                // stuck on the login page.
+                await Supabase.instance.client.auth.signOut();
+                if (mounted) {
+                  await Future.delayed(const Duration(milliseconds: 1600));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).clearSnackBars();
+                    context.go('/login');
+                  }
+                }
+              } catch (e) {
+                AuthService.ignoreNextUserUpdated = false;
+                _showStatusSnack('Error: ${e.toString()}', success: false);
+              }
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6B21A8),
@@ -5611,10 +5893,7 @@ Caregiver Note:
               } catch (_) {}
               if (mounted) {
                 _loadRealData();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Game data has been reset to zero.')),
-                );
+                _showStatusSnack('Game data has been reset to zero.');
               }
             },
             style: ElevatedButton.styleFrom(
@@ -5773,7 +6052,7 @@ Caregiver Note:
           ],
         ),
         content: Text(
-            'This will permanently deactivate your account and erase your data. This action cannot be undone.\n\nAre you sure you want to proceed?',
+            "This will permanently remove ${_childName.isNotEmpty && _childName != 'Child' ? '$_childName\'s' : "this child's"} profile and all related access. This action cannot be undone.\n\nAre you sure you want to proceed?",
             style: _textStyle(fontSize: 17, color: Colors.grey[700]!)),
         actions: [
           TextButton(
@@ -5782,19 +6061,49 @@ Caregiver Note:
                   style: _textStyle(fontSize: 16, color: Colors.grey))),
           ElevatedButton(
             onPressed: () async {
+              debugPrint('SETTINGS childUserId = $_childUserId');
               Navigator.pop(ctx);
-              // Delete user profile from Supabase
+              // Remove THIS child's profile link from the current caregiver,
+              // then return to the "Who's Playing Today?" selection page.
+              // (Do NOT sign the caregiver out.)
+              bool deleted = false;
               try {
-                final userId = Supabase.instance.client.auth.currentUser?.id;
-                if (userId != null) {
-                  await Supabase.instance.client
-                      .from('profiles')
-                      .delete()
-                      .eq('id', userId);
+                final caregiverId =
+                    Supabase.instance.client.auth.currentUser?.id;
+                if (caregiverId != null &&
+                    _childUserId != null &&
+                    _childUserId!.isNotEmpty) {
+                  final result = await Supabase.instance.client
+                      .rpc('delete_child_profile', params: {
+                    'p_caregiver_id': caregiverId,
+                    'p_child_user_id': _childUserId,
+                  });
+                  final count = (result is int)
+                      ? result
+                      : int.tryParse(result.toString()) ?? 0;
+                  deleted = count > 0;
+
+                  // Clear the locally-selected profile so the next screen
+                  // doesn't keep pointing at the deleted child.
+                  final selected =
+                      await ChildSessionService.getChildProfileId();
+                  if (selected == _childUserId) {
+                    await ChildSessionService.saveChildProfileId('');
+                  }
                 }
-                await Supabase.instance.client.auth.signOut();
-              } catch (_) {}
-              if (mounted) context.go('/login');
+              } catch (e) {
+                debugPrint('Deactivate (delete child) error: $e');
+              }
+              if (mounted) {
+                _showStatusSnack(
+                    deleted ? 'Profile removed.' : 'Could not remove profile.',
+                    success: deleted);
+                await Future.delayed(const Duration(milliseconds: 1200));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  context.go('/orgz-child-dashboard');
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
@@ -6010,6 +6319,10 @@ class _WeekMetrics {
   final List<int> negativePerDay;
   final List<int> sessionsPerDay;
   final Map<String, int> gameMinutes;
+  // Raw activity time in seconds — used for Top Activity comparison so that
+  // short sessions (< 30 s) are not rounded down to 0 min and hidden.
+  // Keyed by activityName, same validActivities filter as gameMinutes.
+  final Map<String, int> gameSeconds;
 
   // ── New fields for the corrected analytics ──────────────────────────
   final Map<String, int> preEmotionFreq;
@@ -6044,6 +6357,7 @@ class _WeekMetrics {
     this.negativePerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.sessionsPerDay = const [0, 0, 0, 0, 0, 0, 0],
     this.gameMinutes = const {},
+    this.gameSeconds = const {},
     this.preEmotionFreq = const {},
     this.postEmotionFreq = const {},
     this.prePerDay = const [0, 0, 0, 0, 0, 0, 0],

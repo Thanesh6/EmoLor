@@ -1,36 +1,40 @@
-# EmoLor - Gamified Learning for Autistic Children
+# EMOLOR
 
-EmoLor is a cross-platform application designed to help autistic children understand and express emotions through colors and gamification.
+EMOLOR is a Flutter-based Android tablet application designed to support emotional learning for children through emotion selection, colour association, gamified activities, caregiver analytics, AI-generated weekly insights, and PDF reporting.
 
-## Project Structure
+## Final Project Scope
 
-This repository is organized into the following modules:
+The final EMOLOR application focuses on:
 
-- **`/mobile_app`**: The main tablet-first application for children, built with **Flutter**.
-- **`/web_portal`**: The web dashboard for caregivers, therapists, and admins, built with **React**.
-- **`/database`**: Database schemas and migration scripts for **Supabase**.
-- **`/docs`**: Project documentation, architecture diagrams, and guides.
+- Organisation or centre account registration and login
+- Child profile creation and selection
+- Session goal setup before each child session
+- Pre-session emotion and colour selection
+- Child-friendly games and activities
+- Post-session emotion and colour selection
+- Weekly analytics dashboard
+- AI-generated caregiver insight summary
+- Weekly PDF report generation
 
-## Getting Started
+The final version does not include admin, therapist, chat, messaging, or web portal modules.
 
-### Mobile App (Flutter)
-Navigate to the `mobile_app` directory to work on the Android/Tablet application.
-```bash
-cd mobile_app
-flutter pub get
-flutter run
-```
+## Main Application Flow
 
-### Web Portal (React)
-Navigate to the `web_portal` directory to work on the web dashboard.
-```bash
-cd web_portal
-npm install
-npm run dev
-```
+Login/Register
+→ Child Profile Selection
+→ Set Goals
+→ Pre-Session Emotion + Colour
+→ Child Dashboard
+→ Games / Activities
+→ Post-Session Emotion + Colour
+→ Analytics Dashboard
+→ AI Summary / PDF Report
 
-## Documentation
-Please refer to the `docs/` folder for detailed guides:
-- [Architecture](docs/ARCHITECTURE_REFINEMENT.md)
-- [Development Guide](docs/DEVELOPMENT_GUIDE.md)
-- [Database Guide](docs/DATABASE_MIGRATION_GUIDE.md)
+## Technology Stack
+
+- Flutter / Dart
+- Supabase
+- GoRouter
+- SharedPreferences
+- Anthropic Claude API for AI summary generation
+- PDF generation and sharing packages

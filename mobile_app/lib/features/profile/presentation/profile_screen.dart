@@ -210,8 +210,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 icon: Icons.edit,
                                 color: const Color(0xFF3B82F6),
                                 onTap: () {
-                                  _checkParentGate(context, () {
-                                    context.push('/edit-profile');
+                                  _checkParentGate(context, () async {
+                                    // Pass the already-loaded profile so the
+                                    // edit screen shows the correct avatar
+                                    // immediately without a second DB fetch.
+                                    await context.push(
+                                      '/edit-profile',
+                                      extra: _profileData,
+                                    );
+                                    // Refresh after returning so any changes
+                                    // (name, avatar) are reflected here too.
+                                    if (mounted) _loadProfile();
                                   });
                                 },
                               ),

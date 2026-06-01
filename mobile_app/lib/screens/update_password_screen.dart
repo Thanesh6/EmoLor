@@ -47,10 +47,10 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       setState(() {
         _isSuccess = false;
-        _message = '⚠️ Password must be at least 6 characters.';
+        _message = '⚠️ Password must be at least 8 characters.';
       });
       return;
     }
@@ -90,8 +90,12 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           _isLoading = false;
         });
 
-        // Show success using Banner similar to Register
-        ScaffoldMessenger.of(context).showMaterialBanner(
+        // Show success using Banner similar to Register. Capture the
+        // messenger so we can reliably clear the banner later even after
+        // navigation (a MaterialBanner never auto-dismisses on its own).
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearMaterialBanners(); // avoid stacking on repeat resets
+        messenger.showMaterialBanner(
           MaterialBanner(
             content: Text(
               'Password updated! Please log in with your new password.',
@@ -107,14 +111,15 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           ),
         );
 
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            ScaffoldMessenger.of(context).clearMaterialBanners();
-            // UCD011 Step 11 — redirect to Login Page.
-            // Session is already cleared above, so the GoRouter
-            // redirect will let the user stay on /login.
-            context.go('/login');
-          }
+        // Auto-dismiss after 3s, THEN navigate. We clear the banner first and
+        // defer the route swap by a frame, otherwise the banner gets orphaned
+        // by the navigation and stays stuck on the login page.
+        Future.delayed(const Duration(seconds: 3), () async {
+          messenger.clearMaterialBanners();
+          await Future.delayed(const Duration(milliseconds: 80));
+          // UCD011 Step 11 — redirect to Login Page. Session already cleared
+          // above, so the GoRouter redirect lets the user stay on /login.
+          if (mounted) context.go('/login');
         });
       }
     } on AuthException catch (e) {

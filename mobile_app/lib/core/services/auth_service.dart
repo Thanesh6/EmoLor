@@ -6,6 +6,13 @@ import 'supabase_service.dart';
 class AuthService {
   final SupabaseClient _client = SupabaseService.client;
 
+  /// Set to `true` right before an IN-APP `updateUser` call (e.g. the
+  /// Settings → Change Email & Password dialog). The global auth listener in
+  /// `main.dart` checks this so it doesn't mistake the local update for an
+  /// email-change confirmation deep link and force a redirect to /login.
+  /// Reset to `false` after the listener consumes one `userUpdated` event.
+  static bool ignoreNextUserUpdated = false;
+
   /// Sign in with email and password
   Future<AuthResponse> signIn({
     required String email,
@@ -42,19 +49,23 @@ class AuthService {
         (response.user!.identities == null ||
             response.user!.identities!.isEmpty)) {
       throw const AuthException(
-          'This email is already registered. Please log in instead.');
+        'This email is already registered. Please log in instead.',
+      );
     }
 
     if (response.user != null) {
-      await _client.rpc('create_profile', params: {
-        'p_user_id': response.user!.id,
-        'p_email': email,
-        'p_full_name': name,
-        'p_role': role,
-        'p_phone_number': phone,
-        'p_account_type': accountType,
-        'p_parent_pin_hash': pinHash,
-      });
+      await _client.rpc(
+        'create_profile',
+        params: {
+          'p_user_id': response.user!.id,
+          'p_email': email,
+          'p_full_name': name,
+          'p_role': role,
+          'p_phone_number': phone,
+          'p_account_type': accountType,
+          'p_parent_pin_hash': pinHash,
+        },
+      );
     }
 
     return response;
@@ -90,11 +101,13 @@ class AuthService {
     if (user == null) return null;
 
     try {
+      // maybeSingle() returns null (not throw) when 0 rows match — safe for
+      // accounts whose profile row was not yet created.
       final response = await _client
           .from('profiles')
           .select()
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
       return response;
     } catch (e) {
       debugPrint('Error fetching profile: $e');
@@ -120,29 +133,38 @@ class AuthService {
   }
 
   // Update User Profile
-  Future<void> updateProfile(
-      {String? name, String? phone, String? avatar}) async {
+  Future<void> updateProfile({
+    String? name,
+    String? phone,
+    String? avatar,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('User not logged in');
 
     final updates = <String, dynamic>{};
+
     if (name != null) updates['full_name'] = name;
     if (phone != null) updates['phone_number'] = phone;
     if (avatar != null) updates['avatar_url'] = avatar;
 
     if (updates.isEmpty) return;
 
-    await _client.from('profiles').update(updates).eq('user_id', user.id);
-  }
+    // .select() forces the affected rows to be returned. Without it, a write
+    // blocked by RLS completes "successfully" while changing 0 rows — the
+    // silent failure that made Edit Profile appear to do nothing.
+    final result = await _client
+        .from('profiles')
+        .update(updates)
+        .eq('user_id', user.id)
+        .select();
 
-  /// Update (or set) the caregiver's parent PIN hash
-  Future<void> updatePinHash(String pinHash) async {
-    final user = _client.auth.currentUser;
-    if (user == null) throw const AuthException('User not logged in');
-
-    await _client.from('profiles').update({
-      'parent_pin_hash': pinHash,
-    }).eq('user_id', user.id);
+    if (result.isEmpty) {
+      throw const AuthException(
+        'Profile update affected no rows. This usually means the UPDATE '
+        'row-level security policy on "profiles" is missing or is blocking '
+        'the write.',
+      );
+    }
   }
 
   // Soft Delete User (Deactivate)
@@ -151,9 +173,21 @@ class AuthService {
     final user = _client.auth.currentUser;
     if (user == null) throw const AuthException('User not logged in');
 
-    await _client.from('profiles').update({
-      'is_active': false,
-    }).eq('user_id', user.id);
+    // Same .select() guard as updateProfile — surfaces an RLS block or a
+    // missing "is_active" column instead of failing silently.
+    final result = await _client
+        .from('profiles')
+        .update({'is_active': false})
+        .eq('user_id', user.id)
+        .select();
+
+    if (result.isEmpty) {
+      throw const AuthException(
+        'Deactivation affected no rows. Check that the "is_active" column '
+        'exists and that the UPDATE RLS policy on "profiles" allows this '
+        'write.',
+      );
+    }
 
     await signOut();
   }

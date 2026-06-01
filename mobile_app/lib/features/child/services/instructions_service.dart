@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -17,6 +19,15 @@ class InstructionsService {
   /// during TTS playback. Both reset to -1 when speech stops.
   final ValueNotifier<int> wordStart = ValueNotifier<int>(-1);
   final ValueNotifier<int> wordEnd = ValueNotifier<int>(-1);
+
+  // ── Karaoke highlight fallback ────────────────────────────────────────
+  // Some Android TTS engines/voices never emit word-boundary
+  // (`setProgressHandler`) callbacks, so the karaoke highlight would never
+  // advance. We run a timer-based fallback that steps through words at an
+  // estimated pace; if the native handler DOES fire, it cancels the
+  // fallback and takes over (more accurate).
+  Timer? _fallbackTimer;
+  bool _nativeProgressSeen = false;
 
   // ── Instruction catalogue ─────────────────────────────────────────────
 
@@ -87,21 +98,91 @@ class InstructionsService {
     await _tts.setPitch(1.2); // slightly higher pitch for a female feel
     await _setFemaleVoice();
 
-    // Wire word-boundary callbacks for karaoke highlighting.
+    // Wire word-boundary callbacks for karaoke highlighting. When the
+    // native engine emits boundaries, it is authoritative — stop the
+    // timer-based fallback so the two don't fight.
     _tts.setProgressHandler((text, start, end, word) {
+      _nativeProgressSeen = true;
+      _cancelFallback();
       wordStart.value = start;
       wordEnd.value = end;
     });
     _tts.setCompletionHandler(() {
+      _cancelFallback();
       wordStart.value = -1;
       wordEnd.value = -1;
     });
     _tts.setCancelHandler(() {
+      _cancelFallback();
       wordStart.value = -1;
       wordEnd.value = -1;
     });
 
     _ttsInitialised = true;
+  }
+
+  // ── Fallback word-by-word highlighter ─────────────────────────────────
+
+  /// Compute [start, end) character offsets for each whitespace-separated
+  /// word in [text] (punctuation stays attached to its word).
+  List<List<int>> _computeWordBounds(String text) {
+    bool isWs(String c) => c == ' ' || c == '\n' || c == '\t' || c == '\r';
+    final bounds = <List<int>>[];
+    int i = 0;
+    final n = text.length;
+    while (i < n) {
+      while (i < n && isWs(text[i])) {
+        i++;
+      }
+      if (i >= n) break;
+      final start = i;
+      while (i < n && !isWs(text[i])) {
+        i++;
+      }
+      bounds.add([start, i]);
+    }
+    return bounds;
+  }
+
+  /// Step the highlight through each word on a timer. Cancels itself the
+  /// moment the native progress handler fires.
+  void _startFallbackHighlight(String text) {
+    _cancelFallback();
+    final bounds = _computeWordBounds(text);
+    if (bounds.isEmpty) return;
+
+    int idx = 0;
+    void scheduleNext() {
+      if (idx >= bounds.length) {
+        _cancelFallback();
+        return;
+      }
+      final b = bounds[idx];
+      final len = b[1] - b[0];
+      // Slow children's pace: longer words linger a little longer.
+      final ms = (240 + 60 * len).clamp(260, 1100);
+      _fallbackTimer = Timer(Duration(milliseconds: ms), () {
+        if (_nativeProgressSeen) return; // native took over
+        wordStart.value = b[0];
+        wordEnd.value = b[1];
+        idx++;
+        scheduleNext();
+      });
+    }
+
+    // Give the native engine a brief head start before we begin guessing.
+    _fallbackTimer = Timer(const Duration(milliseconds: 350), () {
+      if (_nativeProgressSeen) return;
+      wordStart.value = bounds[0][0];
+      wordEnd.value = bounds[0][1];
+      idx = 1;
+      scheduleNext();
+    });
+  }
+
+  void _cancelFallback() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = null;
   }
 
   /// Attempt to select a female English voice.
@@ -174,18 +255,27 @@ class InstructionsService {
   Future<void> speak(String text) async {
     try {
       await _ensureInit();
+      // Reset native-detection and start the fallback highlighter. If the
+      // device emits real word boundaries, the progress handler cancels
+      // this almost immediately and takes over.
+      _nativeProgressSeen = false;
+      _startFallbackHighlight(text);
       await _tts.speak(text);
     } catch (_) {
       // TTS unavailable on this device — degrade gracefully.
+      _cancelFallback();
     }
   }
 
   /// Stop any ongoing speech.
   Future<void> stop() async {
+    _cancelFallback();
     try {
       await _tts.stop();
     } catch (_) {
       // ignore
     }
+    wordStart.value = -1;
+    wordEnd.value = -1;
   }
 }

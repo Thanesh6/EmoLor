@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../presentation/widgets/goal_alert_overlay.dart';
 import 'goal_service.dart';
-import '../../../core/services/star_service.dart';
+// StarService import removed — checkAllActiveStarGoals now uses session-scoped
+// goal.currentProgress instead of cumulative getTotalStars().
 
 /// Singleton service that manages in-app goal notifications.
 ///
@@ -175,14 +176,18 @@ class GoalNotificationService {
 
   Future<void> checkAllActiveStarGoals({
     required BuildContext context,
+    int deltaStars = 0,
   }) async {
-    final currentStars = await StarService.getTotalStars();
     final activeStarGoals = await getActiveStarGoals();
 
     for (final goal in activeStarGoals) {
+      // Use session-scoped progress (currentProgress + stars just earned)
+      // rather than the cumulative lifetime total, so that milestones only
+      // fire when the child actually reaches them within THIS session.
+      final sessionProgress = goal.currentProgress + deltaStars;
       await checkStarGoal(
         context: context,
-        currentStars: currentStars,
+        currentStars: sessionProgress,
         targetStars: goal.target,
         goalId: goal.id,
       );

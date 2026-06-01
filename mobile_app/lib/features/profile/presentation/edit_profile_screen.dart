@@ -7,7 +7,11 @@ import 'dart:convert';
 import '../../../features/auth/presentation/providers/auth_provider.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
-  const EditProfileScreen({super.key});
+  /// Pre-loaded profile map from ProfileScreen (avoids a second DB round-trip
+  /// and prevents the avatar defaulting to 🐱 when the fetch is slow/fails).
+  final Map<String, dynamic>? initialProfile;
+
+  const EditProfileScreen({super.key, this.initialProfile});
 
   @override
   ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -21,8 +25,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   bool _isLoadingProfile = true;
   String? _userRole;
 
-  // Avatars — same list as registration
-  final List<String> _avatars = [
+  // Avatars — same list as registration (non-final so saved avatar can be
+  // prepended if it isn't already in the list).
+  List<String> _avatars = [
     '🐱',
     '🐶',
     '🐰',
@@ -49,7 +54,30 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfileData();
+    // If the caller already has the profile data (passed via GoRouter extra),
+    // populate immediately — no DB round-trip needed.
+    if (widget.initialProfile != null) {
+      _applyProfile(widget.initialProfile!);
+      _isLoadingProfile = false;
+    } else {
+      _loadProfileData();
+    }
+  }
+
+  /// Populate form fields from a profile map.
+  void _applyProfile(Map<String, dynamic> profile) {
+    _nameController.text = profile['full_name'] as String? ?? '';
+    _phoneController.text = profile['phone_number'] as String? ?? '';
+    _userRole = profile['role'] as String?;
+    final av = profile['avatar_url'] as String?;
+    if (av != null && av.isNotEmpty) {
+      _selectedAvatar = av;
+      // If the saved avatar is not already in the picker list, add it so it
+      // appears highlighted and is not silently replaced on save.
+      if (!_avatars.contains(av)) {
+        _avatars.insert(0, av);
+      }
+    }
   }
 
   Future<void> _loadProfileData() async {
@@ -57,21 +85,18 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       final profile = await ref.read(authProvider.notifier).getUserProfile();
       if (mounted && profile != null) {
         setState(() {
-          _nameController.text = profile['full_name'] ?? '';
-          _phoneController.text = profile['phone_number'] ?? '';
-          _userRole = profile['role'] as String?;
-          final av = profile['avatar_url'] as String?;
-          if (av != null && av.isNotEmpty) _selectedAvatar = av;
+          _applyProfile(profile);
           _isLoadingProfile = false;
         });
       } else {
-        // Fallback to auth metadata
+        // Fallback to auth metadata for name only; avatar stays at default.
         final user = ref.read(authProvider).value;
         if (mounted) {
           setState(() {
-            _nameController.text = user?.userMetadata?['full_name'] ??
-                user?.userMetadata?['name'] ??
-                '';
+            _nameController.text =
+                user?.userMetadata?['full_name'] as String? ??
+                    user?.userMetadata?['name'] as String? ??
+                    '';
             _isLoadingProfile = false;
           });
         }
@@ -137,155 +162,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  /// Shows a dialog to change the caregiver's 4-digit PIN
-  void _showChangePinDialog() {
-    final newPinController = TextEditingController();
-    final confirmPinController = TextEditingController();
-    String? dialogError;
-    bool isSaving = false;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.lock_outline,
-                  color: Color(0xFF6B21A8), size: 24),
-              const SizedBox(width: 8),
-              Text('Change PIN',
-                  style: GoogleFonts.fredoka(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: newPinController,
-                obscureText: true,
-                maxLength: 4,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.fredoka(fontSize: 20, letterSpacing: 8),
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  hintText: '• • • •',
-                  labelText: 'New 4-digit PIN',
-                  labelStyle: GoogleFonts.fredoka(fontSize: 14),
-                  counterText: '',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: confirmPinController,
-                obscureText: true,
-                maxLength: 4,
-                keyboardType: TextInputType.number,
-                style: GoogleFonts.fredoka(fontSize: 20, letterSpacing: 8),
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  hintText: '• • • •',
-                  labelText: 'Confirm PIN',
-                  labelStyle: GoogleFonts.fredoka(fontSize: 14),
-                  counterText: '',
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-              ),
-              if (dialogError != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  dialogError!,
-                  style: GoogleFonts.fredoka(fontSize: 14, color: Colors.red),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
-              child: Text('Cancel',
-                  style: GoogleFonts.fredoka(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6B21A8)),
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      final newPin = newPinController.text;
-                      final confirmPin = confirmPinController.text;
-
-                      if (newPin.length != 4 ||
-                          !RegExp(r'^\d{4}$').hasMatch(newPin)) {
-                        setDialogState(() {
-                          dialogError = 'PIN must be exactly 4 digits.';
-                        });
-                        return;
-                      }
-                      if (newPin != confirmPin) {
-                        setDialogState(() {
-                          dialogError = 'PINs do not match.';
-                        });
-                        return;
-                      }
-
-                      setDialogState(() {
-                        isSaving = true;
-                        dialogError = null;
-                      });
-
-                      try {
-                        final bytes = utf8.encode(newPin);
-                        final digest = sha256.convert(bytes);
-                        final pinHash = digest.toString();
-
-                        await ref
-                            .read(authProvider.notifier)
-                            .updatePinHash(pinHash);
-
-                        if (dialogContext.mounted) {
-                          Navigator.pop(dialogContext);
-                        }
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('PIN updated successfully',
-                                  style: GoogleFonts.fredoka()),
-                              backgroundColor: const Color(0xFF059669),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        setDialogState(() {
-                          isSaving = false;
-                          dialogError = 'Failed to update PIN. Try again.';
-                        });
-                      }
-                    },
-              child: isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2),
-                    )
-                  : Text('Save',
-                      style: GoogleFonts.fredoka(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -402,38 +278,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     ),
 
                     const SizedBox(height: 24),
-
-                    // Change PIN section (caregivers only)
-                    if (_userRole == 'caregiver') ...[
-                      const Divider(height: 40),
-                      Text('Change Parent PIN',
-                          style: GoogleFonts.fredoka(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Your PIN is used to access restricted areas from Child Mode.',
-                        style: GoogleFonts.fredoka(
-                            fontSize: 14, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isLoading ? null : () => _showChangePinDialog(),
-                          icon: const Icon(Icons.lock_outline),
-                          label: Text('Change PIN',
-                              style: GoogleFonts.fredoka(fontSize: 16)),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF6B21A8),
-                            side: const BorderSide(color: Color(0xFF6B21A8)),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15)),
-                          ),
-                        ),
-                      ),
-                    ],
 
                     const SizedBox(height: 40),
                     SizedBox(

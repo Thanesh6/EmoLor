@@ -14,8 +14,8 @@ import 'emotion_slash_screen.dart';
 import 'emotion_catcher_screen.dart';
 import 'animal_sound_screen.dart';
 import '../core/services/bg_music_player.dart';
-import '../core/services/star_service.dart';
 import '../features/child/services/child_rewards_service.dart';
+import '../core/services/star_service.dart';
 import '../features/caregiver/services/goal_notification_service.dart';
 import '../features/caregiver/services/goal_service.dart';
 
@@ -42,11 +42,18 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
   late final AnimationController _pulseController;
   late final Animation<double> _scaleAnim;
   late final Animation<Color?> _colorAnim;
+  int _totalStars = 0;
+
+  Future<void> _refreshStars() async {
+    final stars = await StarService.getTotalStars();
+    if (mounted) setState(() => _totalStars = stars);
+  }
 
   @override
   void initState() {
     super.initState();
     _resolvedChildName = widget.childName;
+    _refreshStars();
     // Use avatar passed from profile selection directly
     if (widget.avatarUrl.isNotEmpty) {
       _avatarEmoji = widget.avatarUrl;
@@ -88,12 +95,13 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
   Future<void> _checkStarGoals() async {
     final starGoals = await GoalNotificationService.getActiveStarGoals();
     if (starGoals.isEmpty || !mounted) return;
-    final currentStars = await StarService.getTotalStars();
     for (final goal in starGoals) {
       if (!mounted) return;
+      // Use session-scoped currentProgress (not cumulative lifetime stars)
+      // so milestones only fire when the child earns them this session.
       await GoalNotificationService.instance.checkStarGoal(
         context: context,
-        currentStars: currentStars,
+        currentStars: goal.currentProgress,
         targetStars: goal.target,
         goalId: goal.id,
       );
@@ -145,10 +153,12 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
       context,
       MaterialPageRoute(builder: (_) => screen),
     );
+    await _refreshStars();
     if (checkStars && mounted) {
       await _checkStarGoals();
     }
   }
+
 
   @override
   void dispose() {
@@ -334,8 +344,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
                     const Color(0xFF7C3AED)
                   ],
                   shadowColor: Colors.purple,
-                  onTap: () =>
-                      _openScreenAndRefresh(const EmotionBubblesScreen()),
+                  onTap: () => _openScreenAndRefresh(const EmotionBubblesScreen()),
                 ),
                 _buildGameBox(
                   emoji: '🔤',
@@ -345,8 +354,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
                     const Color.fromARGB(255, 252, 76, 222)
                   ],
                   shadowColor: Colors.pink,
-                  onTap: () =>
-                      _openScreenAndRefresh(const EmojiSpellingScreen()),
+                  onTap: () => _openScreenAndRefresh(const EmojiSpellingScreen()),
                 ),
                 _buildGameBox(
                   emoji: '🌟',
@@ -366,8 +374,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
                     const Color.fromARGB(255, 81, 201, 107)
                   ],
                   shadowColor: Colors.green,
-                  onTap: () =>
-                      _openScreenAndRefresh(const EmotionSlashScreen()),
+                  onTap: () => _openScreenAndRefresh(const EmotionSlashScreen()),
                 ),
                 _buildGameBox(
                   emoji: '🧺',
@@ -377,8 +384,7 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
                     const Color(0xFF2563EB)
                   ],
                   shadowColor: Colors.blue,
-                  onTap: () =>
-                      _openScreenAndRefresh(const EmotionCatcherScreen()),
+                  onTap: () => _openScreenAndRefresh(const EmotionCatcherScreen()),
                 ),
                 _buildGameBox(
                   emoji: '🐾',
@@ -414,45 +420,89 @@ class _ChildDashboardState extends ConsumerState<ChildDashboard>
                 future: ChildRewardsService.getAllRewards(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const SizedBox.shrink();
-                  final unlocked = snapshot.data!
+                  final rewards = snapshot.data!;
+                  final totalStars = _totalStars;
+                  final unlocked = rewards
                       .where((r) => r.isUnlocked)
                       .toList()
                     ..sort((a, b) => b.unlockedAt!.compareTo(a.unlockedAt!));
-                  if (unlocked.isEmpty) return const SizedBox.shrink();
-                  final latest = unlocked.first;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
-                          width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.purple.withValues(alpha: 0.15),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // ── Star count ──
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFFFBBF24).withValues(alpha: 0.8),
+                              width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withValues(alpha: 0.2),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(latest.emoji,
-                            style: const TextStyle(fontSize: 28)),
-                        const SizedBox(width: 8),
-                        Text(
-                          latest.title,
-                          style: GoogleFonts.fredoka(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF6B21A8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('⭐', style: TextStyle(fontSize: 26)),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$totalStars',
+                              style: GoogleFonts.fredoka(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFD97706),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // ── Latest reward (only if unlocked) ──
+                      if (unlocked.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                                width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purple.withValues(alpha: 0.15),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(unlocked.first.emoji,
+                                  style: const TextStyle(fontSize: 26)),
+                              const SizedBox(width: 8),
+                              Text(
+                                unlocked.first.title,
+                                style: GoogleFonts.fredoka(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF6B21A8),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ),
+                    ],
                   );
                 },
               ),

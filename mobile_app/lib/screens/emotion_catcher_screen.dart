@@ -239,10 +239,10 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
             ? 0.5
             : 0.65; // 2+ errors: 65% target
     final fallSpeed = _levelErrors >= 2
-        ? 1.5
+        ? 2.2
         : _levelErrors == 1
-            ? 2.0
-            : 2.5;
+            ? 2.8
+            : 3.5;
     final isTarget = _rng.nextDouble() < targetChance;
     final emotion = isTarget
         ? _targetEmotion
@@ -377,7 +377,7 @@ class _EmotionCatcherScreenState extends State<EmotionCatcherScreen>
       activityEmoji: '🧺',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionCatcher,
-      sessionStars: 0,
+      sessionStars: _sessionStars,
       elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
     if (mounted && !_gameEnded) {

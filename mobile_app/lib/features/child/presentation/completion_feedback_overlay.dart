@@ -56,6 +56,7 @@ class CompletionFeedbackOverlay {
     if (context.mounted) {
       await GoalNotificationService.instance.checkAllActiveStarGoals(
         context: context,
+        deltaStars: starsEarned,
       );
     }
 

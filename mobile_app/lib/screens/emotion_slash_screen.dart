@@ -437,7 +437,7 @@ class _EmotionSlashScreenState extends State<EmotionSlashScreen>
       activityEmoji: '⚔️',
       buildProgressData: _buildProgressData,
       starGameKey: StarService.emotionSlash,
-      sessionStars: 0,
+      sessionStars: _sessionStars,
       elapsedSeconds: _stopwatch.elapsed.inSeconds,
     );
     if (mounted && !_gameEnded) {

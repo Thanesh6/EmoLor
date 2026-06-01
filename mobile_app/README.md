@@ -1,75 +1,32 @@
-# EmoLor Flutter App
+# EMOLOR Mobile App
 
-Flutter application for EmoLor - Emotional Learning Platform
+This folder contains the Flutter Android application for EMOLOR.
 
-## Setup Instructions
+## Target Platform
 
-### 1. Prerequisites
-- Flutter SDK (3.35.6+)
-- Dart SDK (3.9.2+)
-- Supabase account with database configured
+The final project targets Android tablet devices.
 
-### 2. Environment Setup
+## Key Features
 
-Copy the `.env.example` file to `.env` and add your Supabase credentials:
+- Organisation or centre registration and login
+- Child profile creation and selection
+- Goal setup before child session
+- Pre-session emotion and colour selection
+- Child dashboard with games and activities
+- Post-session emotion and colour selection
+- Rewards and star progress
+- Weekly analytics dashboard
+- AI-generated weekly insight summary
+- PDF weekly report generation
 
-```bash
-cp .env.example .env
-```
+## Main Folders
 
-Then update the values in `.env`:
-```
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### 3. Install Dependencies
-
-```bash
-flutter pub get
-```
-
-### 4. Run the App
-
-For web:
-```bash
-flutter run -d chrome
-```
-
-For Android:
-```bash
-flutter run -d android
-```
-
-For iOS:
-```bash
-flutter run -d ios
-```
-
-## Project Structure
-
-```
-lib/
-├── main.dart                 # App entry point
-├── core/
-│   ├── constants/           # App constants
-│   ├── theme/              # Theme configuration
-│   └── services/           # Core services (Supabase, Auth)
-├── features/
-│   ├── auth/               # Authentication screens
-│   ├── child/              # Child dashboard
-│   ├── caregiver/          # Caregiver dashboard
-│
-├── shared/
-│   ├── widgets/            # Reusable widgets
-│   └── models/             # Data models
-└── l10n/                   # Localization files
-```
-
-## Features
-
-- ✅ Multi-language support (EN, MS, TA, ZH)
-- ✅ Role-based authentication (Child, Caregiver, Therapist, Admin)
-- ✅ Responsive design for tablet and web
-- ✅ Real-time data sync with Supabase
-- ✅ Offline support
+mobile_app/
+├── android/               # Android build files, permissions, icons, and deep links
+├── assets/                # Audio and image assets
+├── lib/                   # Flutter source code
+├── test/                  # Flutter tests
+├── analysis_options.yaml  # Dart analysis configuration
+├── pubspec.yaml           # Dependencies and asset declarations
+├── pubspec.lock           # Locked dependency versions
+└── README.md              # Mobile app setup guide

@@ -12,6 +12,15 @@ database/
 
 ## Final Schema vs Historical Migrations
 
+final_schema/
+├── 01_profiles_family_links_and_auth_rpcs.sql
+├── 02_emotion_colors.sql
+├── 03_child_sessions_and_emotions.sql
+├── 04_sensory_zones_and_regulation.sql
+├── 05_profile_fields.sql
+├── 06_signup_trigger_fix.sql
+└── 07_account_status_and_audit_log.sql
+
 The `final_schema/` folder documents the database objects required by the final EMOLOR application.
 
 The `archive/` folder contains historical SQL migrations and removed-scope features from earlier development phases, including admin, therapist, chat, messaging, and older analytics modules. These files are retained for project history and traceability but are not required for the final Android tablet application.

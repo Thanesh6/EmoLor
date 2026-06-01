@@ -253,6 +253,7 @@ class _ColorMemoryTilesScreenState extends State<ColorMemoryTilesScreen>
         if (mounted) {
           await GoalNotificationService.instance.checkAllActiveStarGoals(
             context: context,
+            deltaStars: stars,
           );
         }
         StarRewardWidget.show(context);
@@ -470,6 +471,7 @@ class _ColorMemoryTilesScreenState extends State<ColorMemoryTilesScreen>
         onTap: () => ActivityExitHandler.handleExitActivity(
           context: context,
           activityId: 'game_color_memory',
+          activityName: 'Color Memory Tiles',
           activityEmoji: '🧠',
         ),
         child: Container(

@@ -247,7 +247,6 @@ class WeeklyPdfReportService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               _metaCol('Child', safe(p.childName)),
-              _metaCol('Age', p.childAge == null ? '-' : '${p.childAge} yrs'),
               _metaCol('Week', safe(p.weekRangeLabel)),
               _metaCol('Generated', generatedAt),
             ],
