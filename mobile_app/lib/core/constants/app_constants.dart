@@ -4,18 +4,14 @@ class AppConstants {
   static const String appName = 'EmoLor';
   static const String appVersion = '1.0.0';
 
-  // Supabase Configuration
-  // TODO: Move these to environment variables for production
-  static const String supabaseUrl = String.fromEnvironment(
-    'SUPABASE_URL',
-    defaultValue: 'https://chcevgwoyfffiqeqwbde.supabase.co',
-  );
+  // Supabase Configuration.
+  // Supplied at build/run time via --dart-define (never committed):
+  //   --dart-define=SUPABASE_URL=https://<project>.supabase.co
+  //   --dart-define=SUPABASE_ANON_KEY=<anon-key>
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoY2V2Z3dveWZmZmlxZXF3YmRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEzODMxMjQsImV4cCI6MjA3Njk1OTEyNH0.XfOGBCWNujNpmlZDsqz6je7sQEIbaVliUmcKHb4R1oQ',
-  );
+  static const String supabaseAnonKey =
+      String.fromEnvironment('SUPABASE_ANON_KEY');
 
   // User Roles (Children don't have auth accounts, only profiles)
   static const String roleCaregiver = 'caregiver';
