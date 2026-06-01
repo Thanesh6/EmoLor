@@ -57,25 +57,25 @@ flutter pub get
 
 **Run on a connected Android device:**
 
-Secrets are never committed — they are supplied at run time via `--dart-define`:
+The Supabase connection is preconfigured (the anon key is a publishable,
+Row-Level-Security-protected key), so the app runs out of the box:
+
+```bash
+flutter run -d <android-device-id>
+```
+
+The AI weekly insight summary additionally needs an Anthropic API key, passed
+at run time (never committed):
 
 ```bash
 flutter run -d <android-device-id> \
-  --dart-define=SUPABASE_URL=https://<project>.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=<supabase-anon-key> \
   --dart-define=ANTHROPIC_API_KEY=<anthropic-api-key>
 ```
 
-- `SUPABASE_URL` / `SUPABASE_ANON_KEY` — required for backend, auth, and data.
-- `ANTHROPIC_API_KEY` — required only for the AI weekly insight summary.
-
-**Build a release APK** (pass the same `--dart-define` values):
+**Build a release APK:**
 
 ```bash
-flutter build apk --release \
-  --dart-define=SUPABASE_URL=... \
-  --dart-define=SUPABASE_ANON_KEY=... \
-  --dart-define=ANTHROPIC_API_KEY=...
+flutter build apk --release --dart-define=ANTHROPIC_API_KEY=<anthropic-api-key>
 ```
 
 ## Architecture Overview
