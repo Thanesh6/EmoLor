@@ -36,10 +36,6 @@ class AiInsightService {
     }
 
     try {
-      debugPrint('Claude API key present: ${_apiKey.isNotEmpty}');
-      debugPrint(
-          'Claude API key prefix: ${_apiKey.length > 10 ? _apiKey.substring(0, 10) : _apiKey}');
-      debugPrint('Calling Claude API...');
       final response = await _dio.post(
         _endpoint,
         data: {
