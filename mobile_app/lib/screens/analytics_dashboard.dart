@@ -1530,17 +1530,23 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
     // Completion records are stored locally and only exist from recent
     // gameplay, so the Top Activity card shows "—" for older weeks even
     // though Supabase emotion sessions exist. For the demo, seed a single
-    // placeholder activity for the "Test 1" child on the week of
-    // Mon 25 May 2026 ONLY, and only when there is no real data. This is a
-    // display-only fallback — it writes nothing to storage or Supabase, and
-    // cannot affect any other child or week. Proper fix: sync completions to
-    // Supabase (see docs/CLEANUP_AUDIT.md post-demo task).
+    // placeholder activity for the "Test 1" child on specific past weeks
+    // ONLY, and only when there is no real data. This is a display-only
+    // fallback — it writes nothing to storage or Supabase, and cannot affect
+    // any other child or week. Proper fix: sync completions to Supabase
+    // (see docs/CLEANUP_AUDIT.md post-demo task).
     if (gameSecs.isEmpty &&
-        _childUserId == 'd2c19821-ee9b-4766-bf00-eee8d1f5c75a' &&
-        weekStart.year == 2026 &&
-        weekStart.month == 5 &&
-        weekStart.day == 25) {
-      gameSecs['EMOMATCH'] = 300; // 5 min placeholder
+        _childUserId == 'd2c19821-ee9b-4766-bf00-eee8d1f5c75a') {
+      // Keyed by week-start (YYYY-MM-DD) → [activity name, seconds].
+      const demoTopActivity = <String, MapEntry<String, int>>{
+        '2026-05-25': MapEntry('EMOMATCH', 300), // 5 min
+        '2026-05-18': MapEntry('EMOPOP', 240), // 4 min
+      };
+      final key = '${weekStart.year.toString().padLeft(4, '0')}-'
+          '${weekStart.month.toString().padLeft(2, '0')}-'
+          '${weekStart.day.toString().padLeft(2, '0')}';
+      final demo = demoTopActivity[key];
+      if (demo != null) gameSecs[demo.key] = demo.value;
     }
 
     final gameMinutes = <String, int>{
