@@ -1525,6 +1525,24 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard>
       gameSecs[c.activityName] =
           (gameSecs[c.activityName] ?? 0) + c.timeSpentSeconds;
     }
+
+    // ── DEMO-ONLY PLACEHOLDER (remove after demo) ────────────────────
+    // Completion records are stored locally and only exist from recent
+    // gameplay, so the Top Activity card shows "—" for older weeks even
+    // though Supabase emotion sessions exist. For the demo, seed a single
+    // placeholder activity for the "Test 1" child on the week of
+    // Mon 25 May 2026 ONLY, and only when there is no real data. This is a
+    // display-only fallback — it writes nothing to storage or Supabase, and
+    // cannot affect any other child or week. Proper fix: sync completions to
+    // Supabase (see docs/CLEANUP_AUDIT.md post-demo task).
+    if (gameSecs.isEmpty &&
+        _childUserId == 'd2c19821-ee9b-4766-bf00-eee8d1f5c75a' &&
+        weekStart.year == 2026 &&
+        weekStart.month == 5 &&
+        weekStart.day == 25) {
+      gameSecs['EMOMATCH'] = 300; // 5 min placeholder
+    }
+
     final gameMinutes = <String, int>{
       for (final e in gameSecs.entries) e.key: (e.value / 60).round(),
     };
