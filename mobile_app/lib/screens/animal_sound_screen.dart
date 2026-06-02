@@ -340,7 +340,12 @@ class _AnimalSoundScreenState extends State<AnimalSoundScreen>
 
   void _loadVoiceQuestion({bool autoPlay = false}) {
     final correct = _currentAnimal;
-    final pool = _animals.where((a) => a['name'] != correct['name']).toList()
+    // Exclude animals that share the correct one's sound word (e.g. Lion and
+    // Tiger both "Roar") so two correct-sounding answers never appear together.
+    final pool = _animals
+        .where((a) =>
+            a['name'] != correct['name'] && a['sound'] != correct['sound'])
+        .toList()
       ..shuffle(_rng);
     _animalChoices = [correct, ...pool.take(3)]..shuffle(_rng);
     _voiceCorrectIdx =
