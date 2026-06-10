@@ -1,0 +1,42 @@
+EmoLor — White-box Coverage Summary (flutter test --coverage)
+Generated from coverage/lcov.info   |   Tests: 67 passed (48 black-box + 19 white-box)
+genhtml/lcov not installed on this Windows host — values parsed directly from lcov.info.
+
+PER-FILE LINE COVERAGE (files exercised by the test suite)
+--------------------------------------------------------------------------------
+File                                                       Lines hit/found   %
+--------------------------------------------------------------------------------
+lib/core/constants/sensory_palette.dart                          8/16     50.0%
+lib/features/child/services/child_session_service.dart           8/64     12.5%
+lib/features/caregiver/services/goal_service.dart                3/149     2.0%
+lib/features/child/models/completion_record.dart                 0/32      0.0%
+--------------------------------------------------------------------------------
+OVERALL (files touched by tests)                                19/261     7.3%
+--------------------------------------------------------------------------------
+
+THE THREE WHITE-BOX TARGET FILES — NOT PRESENT IN lcov.info
+  lib/screens/register_screen.dart .................... 0% (not executed)
+  lib/screens/login_screen.dart ....................... 0% (not executed)
+  lib/features/child_profile/presentation/create_child_profile_screen.dart .. 0% (not executed)
+
+WHY 0%: the password / login-outcome / child-name validators are implemented
+INLINE inside widget methods. Two of those screens call Supabase on
+build/initState, so they cannot be driven by a plain unit test without a mocked
+Supabase singleton. Per the "do not change app logic" constraint, the structural
+coverage (statement/branch/path) is demonstrated on functions extracted VERBATIM
+from the cited source lines (test/white_box_test.dart). Those replicas exercise
+every statement, branch, and independent path (19/19 green).
+
+REAL app-file coverage achieved by this suite:
+  - sensory_palette.dart 50%  : zoneFromHex, isSensoryMismatch fully hit;
+                                fromHex catch / regulationDelta / interpretDelta uncovered.
+  - child_session_service.dart 12.5% : valenceToZone fully branch-covered (6 branches);
+                                recordPre/PostEmotion + queries need Supabase (uncovered).
+  - goal_service.dart 2%      : PerformanceGoal.isComplete + progressFraction covered;
+                                createGoal/save/load/update (SharedPreferences) uncovered.
+  - completion_record.dart 0% : toJson/fromJson not exercised by these tests.
+
+NOTE ON "OVERALL": lcov.info lists only files imported during the test run, so the
+7.3% denominator covers just those 4 files. The project has ~80 lib files (mostly
+UI screens) that this logic-focused unit suite does not import; a project-wide
+percentage would be far lower and is not the target of this white-box section.
