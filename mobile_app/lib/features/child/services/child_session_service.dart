@@ -136,7 +136,7 @@ class ChildSessionService {
 
       // Sensory mismatch: emotion word zone vs color zone
       // Map valence to approximate zone for mismatch check
-      final emotionZone = _valenceToZone(emotionValence);
+      final emotionZone = valenceToZone(emotionValence);
       final mismatch = (postZone != null && emotionZone != null)
           ? SensoryPalette.isSensoryMismatch(
               emotionZone: emotionZone,
@@ -167,10 +167,16 @@ class ChildSessionService {
   }
 
   /// Map emotion valence string to approximate zone value for mismatch check.
-  static int? _valenceToZone(String valence) {
+  @visibleForTesting
+  static int? valenceToZone(String valence) {
     switch (valence.toLowerCase()) {
       case 'positive':
         return 0; // Baseline — happy, calm, loved
+      case 'negative': // the emotion model stores plain 'negative' (sad,
+        // scared, tired, angry). Map to the elevated/distress zone so a
+        // negative feeling paired with a calm/balanced colour is flagged as a
+        // mismatch. (Granular high/low arousal would need per-emotion data.)
+        return 3;
       case 'negative_high': // angry, scared, excited (high arousal)
         return 3;
       case 'negative_low': // sad, tired, disgusted (low arousal)

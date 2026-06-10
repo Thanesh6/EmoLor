@@ -329,6 +329,9 @@ class _CreateChildProfileScreenState extends State<CreateChildProfileScreen>
                             if (v.trim().length < 2) {
                               return 'Name must be at least 2 characters';
                             }
+                            if (v.trim().length > 30) {
+                              return 'Name is too long (max 30 characters)';
+                            }
                             if (_existingNames
                                 .contains(v.trim().toLowerCase())) {
                               return 'That name is already used';

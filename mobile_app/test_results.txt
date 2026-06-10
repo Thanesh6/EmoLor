@@ -1,0 +1,50 @@
+00:00 +0: loading C:/Users/User/EMOLOR/mobile_app/test/black_box_test.dart
+00:00 +0: EP — Email (Register) EP-E1 valid a@b.com -> valid
+00:00 +1: EP — Email (Register) EP-E2 missing @ (ab.com) -> invalid
+00:00 +2: EP — Email (Register) EP-E3 missing domain (a@) -> invalid
+00:00 +3: EP — Email (Register) EP-E4 empty -> invalid
+00:00 +4: EP — Password (Register) EP-P1 8 chars -> valid
+00:00 +5: EP — Password (Register) EP-P2 < 8 chars -> invalid
+00:00 +6: EP — Password (Register) EP-P3 > 72 chars -> invalid (F1 fix: max 72 now enforced)
+00:00 +7: EP — Password (Register) EP-P4 empty -> invalid
+00:00 +8: EP — Star goal EP-S1 positive int (5) -> valid
+00:00 +9: EP — Star goal EP-S2 0 -> invalid (below min)
+00:00 +10: EP — Star goal EP-S3 negative (-1) -> invalid
+00:00 +11: EP — Star goal EP-S4 non-numeric -> invalid (cannot be selected)
+00:00 +12: EP — Child name EP-N1 valid (Sam) -> accepted
+00:00 +13: EP — Child name EP-N2 empty -> rejected
+00:00 +14: EP — Child name EP-N3 60 chars -> rejected (F3 fix: max 30 now enforced)
+00:00 +15: EP — Child name EP-N4 duplicate name -> rejected
+00:00 +16: BVA — Password length (range 8..72) BVA-P-7 -> invalid
+00:00 +17: BVA — Password length (range 8..72) BVA-P-8 -> valid
+00:00 +18: BVA — Password length (range 8..72) BVA-P-9 -> valid
+00:00 +19: BVA — Password length (range 8..72) BVA-P-71 -> valid
+00:00 +20: BVA — Password length (range 8..72) BVA-P-72 -> valid (upper boundary)
+00:00 +21: BVA — Password length (range 8..72) BVA-P-73 -> invalid (F1 fix: > 72)
+00:00 +22: BVA — Star goal (real range 1..100) BVA-S-0 -> invalid (lower boundary)
+00:00 +23: BVA — Star goal (real range 1..100) BVA-S-1 -> valid (lower boundary)
+00:00 +24: BVA — Star goal (real range 1..100) BVA-S-2 -> valid
+00:00 +25: BVA — Star goal (real range 1..100) BVA-S-99 -> valid
+00:00 +26: BVA — Star goal (real range 1..100) BVA-S-100 -> valid (upper boundary)
+00:00 +27: BVA — Star goal (real range 1..100) BVA-S-101 -> invalid (> max 100)
+00:00 +28: BVA — Session minutes (real range 1..1439) BVA-T-0 -> invalid (lower boundary)
+00:00 +29: BVA — Session minutes (real range 1..1439) BVA-T-1 -> valid (lower boundary)
+00:00 +30: BVA — Session minutes (real range 1..1439) BVA-T-2 -> valid
+00:00 +31: BVA — Session minutes (real range 1..1439) BVA-T-1438 -> valid
+00:00 +32: BVA — Session minutes (real range 1..1439) BVA-T-1439 -> valid (upper boundary)
+00:00 +33: BVA — Session minutes (real range 1..1439) BVA-T-1440 -> invalid (> max 1439)
+00:00 +34: BVA — Child name length (min 2, max 30) BVA-N-1 -> invalid (below min)
+00:00 +35: BVA — Child name length (min 2, max 30) BVA-N-2 -> valid (lower boundary)
+00:00 +36: BVA — Child name length (min 2, max 30) BVA-N-30 -> valid (upper boundary)
+00:00 +37: BVA — Child name length (min 2, max 30) BVA-N-31 -> invalid (F3 fix: > 30)
+00:00 +38: DT — Login DT-L1 unregistered + any pw -> "Invalid email or password!"
+00:00 +39: DT — Login DT-L2 registered + wrong pw -> "Invalid email or password!"
+00:00 +40: DT — Login DT-L3 correct creds + unverified -> "Please verify your email!"
+00:00 +41: DT — Login DT-L4 correct creds + verified -> SUCCESS
+00:00 +42: DT — Goal enforcement (real PerformanceGoal.isComplete) DT-G1 time NOT reached + star NOT reached -> both incomplete
+00:00 +43: DT — Goal enforcement (real PerformanceGoal.isComplete) DT-G2 time NOT reached + star reached -> time incomplete, star complete
+00:00 +44: DT — Goal enforcement (real PerformanceGoal.isComplete) DT-G3 time reached + star NOT reached -> time complete, star incomplete
+00:00 +45: DT — Goal enforcement (real PerformanceGoal.isComplete) DT-G4 time reached + star reached -> both complete
+00:00 +46: F5 — Sensory mismatch (correct behaviour) F5-1 negative emotion + balanced green (#81C784) -> mismatch
+00:00 +47: F5 — Sensory mismatch (correct behaviour) F5-2 negative valence must map to a non-null zone
+00:00 +48: All tests passed!

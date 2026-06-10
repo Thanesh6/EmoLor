@@ -14,6 +14,17 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:emolor_flutter/features/caregiver/services/goal_service.dart';
+import 'package:emolor_flutter/features/child/services/child_session_service.dart';
+import 'package:emolor_flutter/core/constants/sensory_palette.dart';
+
+/// Composes the REAL app functions exactly as recordPostEmotion does
+/// (child_session_service.dart:139-145): emotion-valence zone vs colour zone.
+bool computeSensoryMismatch(String valence, String colourHex) {
+  final ez = ChildSessionService.valenceToZone(valence);
+  final cz = SensoryPalette.zoneFromHex(colourHex);
+  if (ez == null || cz == null) return false;
+  return SensoryPalette.isSensoryMismatch(emotionZone: ez, colorZone: cz);
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Mirrored validation rules (cited to source)
@@ -24,12 +35,13 @@ final RegExp _registerEmailRegex = RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w]{2,}$');
 bool isValidRegisterEmail(String email) =>
     _registerEmailRegex.hasMatch(email.trim());
 
-/// Mirrors register_screen.dart:48 (empty) + :64 (length < 8).
-/// NOTE: the app enforces NO maximum length (Supabase enforces 72 server-side).
+/// Mirrors register_screen.dart:48 (empty) + :64-65 (length < 8 OR > 72).
+/// F1 corrective action: a maximum of 72 is now enforced client-side.
 bool isValidRegisterPassword(String pw) {
   if (pw.isEmpty) return false; // register_screen.dart:48
   if (pw.length < 8) return false; // register_screen.dart:64
-  return true; // no upper bound in app
+  if (pw.length > 72) return false; // register_screen.dart:65 (F1 fix)
+  return true;
 }
 
 /// Mirrors set_goals_screen.dart:35-36 / new_goal_dialog.dart:44-45.
@@ -50,15 +62,16 @@ const int kSessionMaxMinutes = 23 * 60 + 59; // 1439
 bool isValidSessionMinutes(int totalMinutes) =>
     totalMinutes >= kSessionMinMinutes && totalMinutes <= kSessionMaxMinutes;
 
-/// Mirrors create_child_profile_screen.dart:325-336.
-/// empty -> rejected; length < 2 -> rejected; duplicate -> rejected.
-/// NOTE: the app enforces NO maximum length.
+/// Mirrors create_child_profile_screen.dart:325-339.
+/// empty -> rejected; length < 2 -> rejected; length > 30 -> rejected (F3 fix);
+/// duplicate -> rejected.
 String? validateChildName(String raw, {Set<String> existingLower = const {}}) {
   final n = raw.trim();
   if (n.isEmpty) return 'Please enter a name';
   if (n.length < 2) return 'Name must be at least 2 characters';
+  if (n.length > 30) return 'Name is too long (max 30 characters)'; // F3 fix
   if (existingLower.contains(n.toLowerCase())) return 'That name is already used';
-  return null; // valid (no max length)
+  return null;
 }
 
 /// Mirrors login_screen.dart:54-90 outcome mapping given Supabase responses.
@@ -114,8 +127,8 @@ void main() {
     test('EP-P2 < 8 chars -> invalid', () {
       expect(isValidRegisterPassword('abc'), isFalse);
     });
-    test('EP-P3 > 72 chars -> VALID (app has no max; gap vs 72 assumption)', () {
-      expect(isValidRegisterPassword('a' * 73), isTrue);
+    test('EP-P3 > 72 chars -> invalid (F1 fix: max 72 now enforced)', () {
+      expect(isValidRegisterPassword('a' * 73), isFalse);
     });
     test('EP-P4 empty -> invalid', () {
       expect(isValidRegisterPassword(''), isFalse);
@@ -144,43 +157,50 @@ void main() {
     test('EP-N2 empty -> rejected', () {
       expect(validateChildName('   '), 'Please enter a name');
     });
-    test('EP-N3 60 chars -> ACCEPTED (app has no max; gap vs max assumption)',
-        () {
-      expect(validateChildName('a' * 60), isNull);
+    test('EP-N3 60 chars -> rejected (F3 fix: max 30 now enforced)', () {
+      expect(validateChildName('a' * 60), 'Name is too long (max 30 characters)');
+    });
+    test('EP-N4 duplicate name -> rejected', () {
+      expect(validateChildName('Sam', existingLower: {'sam'}),
+          'That name is already used');
     });
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // BOUNDARY VALUE ANALYSIS
   // ═══════════════════════════════════════════════════════════════════════
-  group('BVA — Password length (min 8, no max)', () {
+  group('BVA — Password length (range 8..72)', () {
     test('BVA-P-7 -> invalid', () => expect(isValidRegisterPassword('a' * 7), isFalse));
     test('BVA-P-8 -> valid', () => expect(isValidRegisterPassword('a' * 8), isTrue));
     test('BVA-P-9 -> valid', () => expect(isValidRegisterPassword('a' * 9), isTrue));
     test('BVA-P-71 -> valid', () => expect(isValidRegisterPassword('a' * 71), isTrue));
-    test('BVA-P-72 -> valid', () => expect(isValidRegisterPassword('a' * 72), isTrue));
-    test('BVA-P-73 -> VALID (no max enforced; gap vs 72 assumption)',
-        () => expect(isValidRegisterPassword('a' * 73), isTrue));
+    test('BVA-P-72 -> valid (upper boundary)', () => expect(isValidRegisterPassword('a' * 72), isTrue));
+    test('BVA-P-73 -> invalid (F1 fix: > 72)', () => expect(isValidRegisterPassword('a' * 73), isFalse));
   });
 
-  group('BVA — Star goal (range 1..100)', () {
-    test('BVA-S-0 -> invalid', () => expect(isSelectableStarTarget(0), isFalse));
-    test('BVA-S-1 -> valid', () => expect(isSelectableStarTarget(1), isTrue));
+  group('BVA — Star goal (real range 1..100)', () {
+    test('BVA-S-0 -> invalid (lower boundary)', () => expect(isSelectableStarTarget(0), isFalse));
+    test('BVA-S-1 -> valid (lower boundary)', () => expect(isSelectableStarTarget(1), isTrue));
     test('BVA-S-2 -> valid', () => expect(isSelectableStarTarget(2), isTrue));
-    test('BVA-S-9 -> valid', () => expect(isSelectableStarTarget(9), isTrue));
-    test('BVA-S-10 -> valid', () => expect(isSelectableStarTarget(10), isTrue));
-    test('BVA-S-11 -> VALID (max is 100, not 10; gap vs 1..10 assumption)',
-        () => expect(isSelectableStarTarget(11), isTrue));
+    test('BVA-S-99 -> valid', () => expect(isSelectableStarTarget(99), isTrue));
+    test('BVA-S-100 -> valid (upper boundary)', () => expect(isSelectableStarTarget(100), isTrue));
+    test('BVA-S-101 -> invalid (> max 100)', () => expect(isSelectableStarTarget(101), isFalse));
   });
 
-  group('BVA — Session minutes (range 1..1439)', () {
-    test('BVA-T-0 -> invalid', () => expect(isValidSessionMinutes(0), isFalse));
-    test('BVA-T-1 -> valid', () => expect(isValidSessionMinutes(1), isTrue));
+  group('BVA — Session minutes (real range 1..1439)', () {
+    test('BVA-T-0 -> invalid (lower boundary)', () => expect(isValidSessionMinutes(0), isFalse));
+    test('BVA-T-1 -> valid (lower boundary)', () => expect(isValidSessionMinutes(1), isTrue));
     test('BVA-T-2 -> valid', () => expect(isValidSessionMinutes(2), isTrue));
-    test('BVA-T-59 -> valid', () => expect(isValidSessionMinutes(59), isTrue));
-    test('BVA-T-60 -> valid', () => expect(isValidSessionMinutes(60), isTrue));
-    test('BVA-T-61 -> VALID (max is 1439, not 60; gap vs 1..60 assumption)',
-        () => expect(isValidSessionMinutes(61), isTrue));
+    test('BVA-T-1438 -> valid', () => expect(isValidSessionMinutes(1438), isTrue));
+    test('BVA-T-1439 -> valid (upper boundary)', () => expect(isValidSessionMinutes(1439), isTrue));
+    test('BVA-T-1440 -> invalid (> max 1439)', () => expect(isValidSessionMinutes(1440), isFalse));
+  });
+
+  group('BVA — Child name length (min 2, max 30)', () {
+    test('BVA-N-1 -> invalid (below min)', () => expect(validateChildName('a'), isNotNull));
+    test('BVA-N-2 -> valid (lower boundary)', () => expect(validateChildName('ab'), isNull));
+    test('BVA-N-30 -> valid (upper boundary)', () => expect(validateChildName('a' * 30), isNull));
+    test('BVA-N-31 -> invalid (F3 fix: > 30)', () => expect(validateChildName('a' * 31), isNotNull));
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -233,6 +253,20 @@ void main() {
       final star = _goal(GoalCategory.starCollection, 10, 10);
       expect(time.isComplete, isTrue);
       expect(star.isComplete, isTrue);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // DEFECT F5 — Sensory-mismatch flag (child_session_service.dart:170-183)
+  // Correct behaviour: a negative emotion paired with a balanced/calm colour
+  // should be flagged as a sensory mismatch.
+  // ═══════════════════════════════════════════════════════════════════════
+  group('F5 — Sensory mismatch (correct behaviour)', () {
+    test('F5-1 negative emotion + balanced green (#81C784) -> mismatch', () {
+      expect(computeSensoryMismatch('negative', '#81C784'), isTrue);
+    });
+    test('F5-2 negative valence must map to a non-null zone', () {
+      expect(ChildSessionService.valenceToZone('negative'), isNotNull);
     });
   });
 }

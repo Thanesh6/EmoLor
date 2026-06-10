@@ -61,9 +61,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    if (_passwordController.text.length < 8) {
+    if (_passwordController.text.length < 8 ||
+        _passwordController.text.length > 72) {
       setState(() {
-        _errorMessage = '⚠️ Password must be 8+ characters!';
+        _errorMessage = '⚠️ Password must be 8–72 characters!';
       });
       return;
     }
