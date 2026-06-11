@@ -22,43 +22,51 @@ import 'package:emolor_flutter/features/child/services/child_session_service.dar
 /// Returns the error string the app would set, or null if the password passes.
 String? validatePassword(String pw) {
   if (pw.isEmpty) {
-    return '⚠️ Please fill in all required fields!'; // :45-49 (combined check)
+    // S1
+    return '⚠️ Please fill in all required fields!'; // S2
   }
   if (pw.length < 8 || pw.length > 72) {
-    return '⚠️ Password must be 8–72 characters!'; // :64-67
+    // S3
+    return '⚠️ Password must be 8–72 characters!'; // S4
   }
-  return null; // valid
+  return null; // valid                             // S5
 }
 
 /// login_screen.dart:76-85 (error-message mapping within _login catch).
 String mapLoginError(String raw) {
   if (raw.contains('Invalid login credentials')) {
-    return 'Invalid email or password!'; // :76-77
+    // D1
+    return 'Invalid email or password!';
   } else if (raw.contains('Email not confirmed')) {
-    return 'Please verify your email!'; // :78-79
+    //D2
+    return 'Please verify your email!';
   } else {
     return raw
         .replaceAll('Exception:', '')
         .replaceAll('AuthException:', '')
-        .trim(); // :80-85
+        .trim();
   }
 }
 
 /// create_child_profile_screen.dart:325-339 (name FormField validator).
 String? validateChildName(String? v, {Set<String> existing = const {}}) {
   if (v == null || v.trim().isEmpty) {
-    return 'Please enter a name'; // :326-327
+    // D1 (compound)
+    return 'Please enter a name';
   }
   if (v.trim().length < 2) {
-    return 'Name must be at least 2 characters'; // :329-330
+    // D2
+    return 'Name must be at least 2 characters';
   }
   if (v.trim().length > 30) {
-    return 'Name is too long (max 30 characters)'; // :332-333
+    // D3
+    return 'Name is too long (max 30 characters)';
   }
   if (existing.contains(v.trim().toLowerCase())) {
-    return 'That name is already used'; // :335-337
+    // D4
+    return 'That name is already used'; //
   }
-  return null; // :339 valid
+  return null; // valid
 }
 
 void main() {
@@ -76,7 +84,8 @@ void main() {
       expect(validatePassword('abcd1234'), isNull);
     });
     test('WB-PW-S4 > 72 -> length error', () {
-      expect(validatePassword('a' * 73), '⚠️ Password must be 8–72 characters!');
+      expect(
+          validatePassword('a' * 73), '⚠️ Password must be 8–72 characters!');
     });
   });
 
@@ -111,7 +120,8 @@ void main() {
       expect(validateChildName('a'), 'Name must be at least 2 characters');
     });
     test('WB-CN-P4 length > 30 -> max error', () {
-      expect(validateChildName('a' * 31), 'Name is too long (max 30 characters)');
+      expect(
+          validateChildName('a' * 31), 'Name is too long (max 30 characters)');
     });
     test('WB-CN-P5 duplicate -> already used', () {
       expect(validateChildName('Sam', existing: {'sam'}),
@@ -126,11 +136,17 @@ void main() {
   // REAL app code — ChildSessionService.valenceToZone (full branch coverage)
   // ═══════════════════════════════════════════════════════════════════════
   group('Real-code branch coverage — valenceToZone', () {
-    test('WB-VZ-1 positive -> 0', () => expect(ChildSessionService.valenceToZone('positive'), 0));
-    test('WB-VZ-2 negative -> 3 (F5 fix)', () => expect(ChildSessionService.valenceToZone('negative'), 3));
-    test('WB-VZ-3 negative_high -> 3', () => expect(ChildSessionService.valenceToZone('negative_high'), 3));
-    test('WB-VZ-4 negative_low -> -1', () => expect(ChildSessionService.valenceToZone('negative_low'), -1));
-    test('WB-VZ-5 neutral -> 0', () => expect(ChildSessionService.valenceToZone('neutral'), 0));
-    test('WB-VZ-6 unknown -> null (default branch)', () => expect(ChildSessionService.valenceToZone('xyz'), isNull));
+    test('WB-VZ-1 positive -> 0',
+        () => expect(ChildSessionService.valenceToZone('positive'), 0));
+    test('WB-VZ-2 negative -> 3 (F5 fix)',
+        () => expect(ChildSessionService.valenceToZone('negative'), 3));
+    test('WB-VZ-3 negative_high -> 3',
+        () => expect(ChildSessionService.valenceToZone('negative_high'), 3));
+    test('WB-VZ-4 negative_low -> -1',
+        () => expect(ChildSessionService.valenceToZone('negative_low'), -1));
+    test('WB-VZ-5 neutral -> 0',
+        () => expect(ChildSessionService.valenceToZone('neutral'), 0));
+    test('WB-VZ-6 unknown -> null (default branch)',
+        () => expect(ChildSessionService.valenceToZone('xyz'), isNull));
   });
 }
