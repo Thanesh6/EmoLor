@@ -67,7 +67,9 @@ Depending on your jurisdiction, you may have rights to:
 - restrict or object to certain processing activities
 - request information about how your data is used
 
-To exercise these rights, contact the app administrator or support contact for your organisation.
+To request account or data deletion, use the [EmoLor account and data deletion page](https://thanesh6.github.io/EmoLor/data-deletion.html). You can also contact the app administrator or support contact for your organisation if you cannot access the app.
+
+The deletion page explains the in-app steps, the data removed or made inaccessible, and the limited records that may be retained for up to 90 days or longer where required by law or a documented safety obligation.
 
 ## 8. Changes to This Policy
 
