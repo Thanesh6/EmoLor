@@ -9,6 +9,8 @@ build/
 # Environment / secrets
 .env
 *.env
+mobile_app/android/key.properties
+mobile_app/android/app/*-keystore.jks
 
 # Claude Code
 .claude

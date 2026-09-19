@@ -14,25 +14,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:emolor_flutter/features/child/services/child_session_service.dart';
 
-// ─────────────────────────────────────────────────────────────────────────
-// Extracted-verbatim logic (cited)
-// ─────────────────────────────────────────────────────────────────────────
-
-/// register_screen.dart:45-70 (password-relevant guards within _register).
-/// Returns the error string the app would set, or null if the password passes.
 String? validatePassword(String pw) {
   if (pw.isEmpty) {
-    // S1
-    return '⚠️ Please fill in all required fields!'; // S2
+    return '⚠️ Please fill in all required fields!';
   }
   if (pw.length < 8 || pw.length > 72) {
-    // S3
-    return '⚠️ Password must be 8–72 characters!'; // S4
+    return '⚠️ Password must be 8–72 characters!';
   }
-  return null; // valid                             // S5
+  return null;
 }
 
-/// login_screen.dart:76-85 (error-message mapping within _login catch).
 String mapLoginError(String raw) {
   if (raw.contains('Invalid login credentials')) {
     // D1
@@ -48,31 +39,24 @@ String mapLoginError(String raw) {
   }
 }
 
-/// create_child_profile_screen.dart:325-339 (name FormField validator).
 String? validateChildName(String? v, {Set<String> existing = const {}}) {
   if (v == null || v.trim().isEmpty) {
-    // D1 (compound)
     return 'Please enter a name';
   }
   if (v.trim().length < 2) {
-    // D2
     return 'Name must be at least 2 characters';
   }
   if (v.trim().length > 30) {
-    // D3
     return 'Name is too long (max 30 characters)';
   }
   if (existing.contains(v.trim().toLowerCase())) {
     // D4
-    return 'That name is already used'; //
+    return 'That name is already used';
   }
-  return null; // valid
+  return null;
 }
 
 void main() {
-  // ═══════════════════════════════════════════════════════════════════════
-  // STATEMENT COVERAGE — password validator (one input per return path)
-  // ═══════════════════════════════════════════════════════════════════════
   group('Statement coverage — validatePassword', () {
     test('WB-PW-S1 empty -> all-fields error', () {
       expect(validatePassword(''), '⚠️ Please fill in all required fields!');
@@ -89,9 +73,6 @@ void main() {
     });
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // BRANCH COVERAGE — login outcome (each condition true AND false)
-  // ═══════════════════════════════════════════════════════════════════════
   group('Branch coverage — mapLoginError', () {
     test('WB-LG-B1 D1 true (Invalid login credentials)', () {
       expect(mapLoginError('AuthException: Invalid login credentials'),

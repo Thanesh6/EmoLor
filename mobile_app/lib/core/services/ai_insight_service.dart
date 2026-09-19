@@ -16,16 +16,12 @@ class AiInsightService {
 
   static const String _endpoint = 'https://api.anthropic.com/v1/messages';
 
-  // Easiest setup: paste your Anthropic API key as the defaultValue below so a
-  // plain `flutter run` enables the AI summary. You can still override it with
-  // --dart-define=ANTHROPIC_API_KEY=... at build time.
-  //
-  // ⚠ SECURITY: this is a REAL billing secret (unlike the Supabase anon key).
-  // It is compiled into the APK and, if committed, stored in git history.
-  // Rotate/remove it after the demo and do NOT push it to a public repo.
+  // The key must be supplied at build/run time via --dart-define instead of
+  // being committed to source control. This avoids exposing live credentials
+  // in the repository or in any generated APK.
   static const String _apiKey = String.fromEnvironment(
     'ANTHROPIC_API_KEY',
-    defaultValue: 'PASTE_YOUR_ANTHROPIC_API_KEY_HERE',
+    defaultValue: '',
   );
   static const String _model = 'claude-haiku-4-5-20251001';
   static const String _anthropicVersion = '2023-06-01';

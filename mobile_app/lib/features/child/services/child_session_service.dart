@@ -166,20 +166,16 @@ class ChildSessionService {
     }
   }
 
-  /// Map emotion valence string to approximate zone value for mismatch check.
   @visibleForTesting
   static int? valenceToZone(String valence) {
     switch (valence.toLowerCase()) {
       case 'positive':
-        return 0; // Baseline — happy, calm, loved
-      case 'negative': // the emotion model stores plain 'negative' (sad,
-        // scared, tired, angry). Map to the elevated/distress zone so a
-        // negative feeling paired with a calm/balanced colour is flagged as a
-        // mismatch. (Granular high/low arousal would need per-emotion data.)
+        return 0;
+      case 'negative':
         return 3;
-      case 'negative_high': // angry, scared, excited (high arousal)
+      case 'negative_high':
         return 3;
-      case 'negative_low': // sad, tired, disgusted (low arousal)
+      case 'negative_low':
         return -1;
       case 'neutral':
         return 0;
