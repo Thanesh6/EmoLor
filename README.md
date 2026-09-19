@@ -18,6 +18,10 @@ The final EMOLOR application focuses on:
 
 The final version does not include admin, therapist, chat, messaging, or web portal modules.
 
+## Legal
+
+- Privacy Policy: [docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)
+
 ## Main Application Flow
 
 Login/Register

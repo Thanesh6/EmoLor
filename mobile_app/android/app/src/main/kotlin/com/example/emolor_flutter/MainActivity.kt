@@ -1,4 +1,4 @@
-package com.example.emolor_flutter
+package com.thanesh.emolor
 
 import io.flutter.embedding.android.FlutterActivity
 
